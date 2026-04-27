@@ -8,6 +8,7 @@ import pytest
 from aurex_trade.domain.enums import (
     OrderSide,
     OrderStatus,
+    OrderType,
     RiskAction,
     SignalType,
     TradingMode,
@@ -92,10 +93,12 @@ class TestRiskDecision:
 
 
 class TestOrder:
-    def test_defaults(self) -> None:
+    def test_defaults_to_market_order(self) -> None:
         order = Order()
         assert order.status == OrderStatus.PENDING
         assert order.side == OrderSide.BUY
+        assert order.order_type == OrderType.MARKET
+        assert order.limit_price is None
         assert order.quantity == 0.0
 
     def test_sell_order(self) -> None:
@@ -106,6 +109,17 @@ class TestOrder:
         )
         assert order.side == OrderSide.SELL
         assert order.quantity == 5.0
+
+    def test_limit_order(self) -> None:
+        order = Order(
+            symbol="GLD",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=10.0,
+            limit_price=180.0,
+        )
+        assert order.order_type == OrderType.LIMIT
+        assert order.limit_price == 180.0
 
 
 class TestTrade:
@@ -152,6 +166,10 @@ class TestEnums:
         assert SignalType.LONG in SignalType
         assert SignalType.SHORT in SignalType
         assert SignalType.FLAT in SignalType
+
+    def test_order_type_values(self) -> None:
+        assert OrderType.MARKET == "market"
+        assert OrderType.LIMIT == "limit"
 
     def test_risk_action_values(self) -> None:
         assert RiskAction.APPROVED == "approved"

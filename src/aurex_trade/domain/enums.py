@@ -26,6 +26,13 @@ class SignalType(StrEnum):
     FLAT = auto()      # No position / exit all
 
 
+class OrderType(StrEnum):
+    """Type of order execution."""
+
+    MARKET = "market"    # Execute immediately at current market price
+    LIMIT = "limit"      # Execute only at specified price or better
+
+
 class OrderStatus(StrEnum):
     """Lifecycle status of an order."""
 

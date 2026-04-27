@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from aurex_trade.domain.enums import OrderSide, OrderStatus, RiskAction, SignalType
+from aurex_trade.domain.enums import OrderSide, OrderStatus, OrderType, RiskAction, SignalType
 
 
 def _utc_now() -> datetime:
@@ -59,20 +59,36 @@ class RiskDecision:
 
 @dataclass(frozen=True)
 class Order:
-    """A trade order to be placed with a broker."""
+    """A trade order to be placed with a broker.
+
+    MVP uses MARKET orders (immediate fill at current price). LIMIT orders are
+    supported in the model for future use — they require a limit_price and
+    additional management logic (unfilled order handling, timeouts, price
+    adjustments) that is not yet implemented.
+    """
 
     id: UUID = field(default_factory=_new_id)
     signal_id: UUID = field(default_factory=_new_id)
     symbol: str = ""
     side: OrderSide = OrderSide.BUY
+    order_type: OrderType = OrderType.MARKET
     quantity: float = 0.0
+    limit_price: float | None = None  # Required for LIMIT orders, None for MARKET
     status: OrderStatus = OrderStatus.PENDING
     timestamp: datetime = field(default_factory=_utc_now)
 
 
 @dataclass(frozen=True)
 class Trade:
-    """A completed (filled) trade."""
+    """A completed (filled) trade.
+
+    One Trade per Order. The price is the average fill price reported by the
+    broker. If the broker fills in multiple chunks (e.g. 6 @ $180.00 +
+    4 @ $180.05), price is the weighted average ($180.02).
+
+    Future consideration: for detailed fill tracking, introduce a separate Fill
+    model with one record per partial fill, linked to the Trade via trade_id.
+    """
 
     id: UUID = field(default_factory=_new_id)
     order_id: UUID = field(default_factory=_new_id)
