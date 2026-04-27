@@ -40,12 +40,12 @@ def main() -> None:
 
     # Select adapters based on trading mode
     if config.trading_mode == TradingMode.LOCAL:
-        from aurex_trade.adapters.memory.repository import InMemoryRepository
         from aurex_trade.adapters.paper.broker import PaperBrokerAdapter
+        from aurex_trade.adapters.sqlite.repository import SQLiteRepository
 
         broker = PaperBrokerAdapter()
         market_data = broker  # Paper adapter implements both ports
-        repository = InMemoryRepository()
+        repository = SQLiteRepository(db_path=config.db_path)
 
     elif config.trading_mode in (TradingMode.PAPER, TradingMode.LIVE):
         log.error(
