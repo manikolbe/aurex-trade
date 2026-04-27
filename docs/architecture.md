@@ -148,9 +148,18 @@ class RepositoryPort(Protocol):
 ## Adapter Implementations
 
 ### Paper Adapter (`adapters/paper/`)
+- Implements BrokerPort + MarketDataPort
 - Simulates order fills at current market price
+- Generates random-walk price data (seeded for deterministic testing)
 - Tracks positions in memory
 - Used for `TRADING_MODE=local`
+
+### In-Memory Repository (`adapters/memory/`)
+- Implements RepositoryPort
+- Stores signals, decisions, trades, and positions in plain dicts/lists
+- No external dependencies, no disk I/O
+- Used for `TRADING_MODE=local` and fast integration tests
+- Replaced by SQLite adapter when persistence across restarts is needed
 
 ### IBKR Adapter (`adapters/ibkr/`)
 - Uses `ib_async` library (maintained fork of `ib_insync`)

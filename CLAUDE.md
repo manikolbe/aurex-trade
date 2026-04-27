@@ -48,11 +48,13 @@ src/aurex_trade/
 │   └── repository.py   # RepositoryPort Protocol — persistence
 ├── adapters/
 │   ├── ibkr/           # IBKR adapter (ib_async)
+│   ├── memory/         # In-memory repository (local mode + tests)
 │   ├── paper/          # Paper trading simulator
 │   └── sqlite/         # SQLite persistence
 ├── engine/
 │   └── trading_engine.py  # Main trading loop — depends ONLY on ports
-└── logging.py          # structlog configuration
+├── logging.py          # structlog configuration
+└── __main__.py         # Entry point for `python -m aurex_trade`
 ```
 
 ## Conventions
