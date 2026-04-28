@@ -115,6 +115,36 @@ class TestMaxDailyLoss:
         result = engine.evaluate(_signal(), None, [])
         assert result.action == RiskAction.APPROVED
 
+    def test_opening_buy_does_not_trigger_loss_limit(self) -> None:
+        """Regression: buying expensive assets must not count purchase cost as a loss."""
+        engine = _engine(max_daily_loss=500.0)
+        # Position opened at $4572 with tiny unrealized loss (spread)
+        pos = Position(
+            symbol="XAU_USD",
+            quantity=1.0,
+            average_cost=4572.36,
+            market_value=4572.36,
+            unrealized_pnl=-0.50,
+            realized_pnl=0.0,
+        )
+        # The trade that opened this position
+        trades = [_trade(side=OrderSide.BUY, quantity=1.0, price=4572.36)]
+        result = engine.evaluate(_signal(), pos, trades)
+        assert result.action == RiskAction.APPROVED
+
+    def test_uses_realized_plus_unrealized_pnl(self) -> None:
+        """Daily P&L combines realized (closed trades) and unrealized (open position)."""
+        engine = _engine(max_daily_loss=500.0)
+        pos = Position(
+            symbol="GLD",
+            quantity=1.0,
+            unrealized_pnl=-200.0,
+            realized_pnl=-350.0,
+        )
+        result = engine.evaluate(_signal(), pos, [])
+        assert result.action == RiskAction.REJECTED
+        assert "Daily P&L -550.00" in result.reason
+
 
 class TestTradeFrequency:
     def test_rejected_when_at_max_trades(self) -> None:

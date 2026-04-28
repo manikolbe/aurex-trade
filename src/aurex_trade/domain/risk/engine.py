@@ -65,9 +65,12 @@ class RiskEngine:
             )
 
         # Rule 3: Max daily loss
-        realized = sum(self._trade_pnl(t) for t in trades_today)
-        unrealized = position.unrealized_pnl if position else 0.0
-        daily_pnl = realized + unrealized
+        # Use the position's broker-reported P&L fields:
+        # - realized_pnl: profit/loss from trades closed within the position
+        # - unrealized_pnl: mark-to-market of remaining open units
+        daily_pnl = 0.0
+        if position:
+            daily_pnl = position.realized_pnl + position.unrealized_pnl
         if daily_pnl <= -self._max_daily_loss:
             return RiskDecision(
                 signal_id=signal.id,
@@ -91,12 +94,3 @@ class RiskEngine:
             reason="All risk checks passed",
         )
 
-    @staticmethod
-    def _trade_pnl(trade: Trade) -> float:
-        """Estimate P&L contribution of a single trade.
-
-        Buys are negative cash flow, sells are positive.
-        Commission is always a cost.
-        """
-        sign = -1.0 if trade.side.value == "buy" else 1.0
-        return sign * trade.quantity * trade.price - trade.commission
