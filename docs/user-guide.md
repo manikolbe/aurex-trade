@@ -2,7 +2,7 @@
 
 ## Overview
 
-aurexTrade is an automated gold trading bot that connects to Interactive Brokers (IBKR).
+aurexTrade is an automated gold trading bot that connects to OANDA for forex/CFD trading.
 It uses rule-based strategies to generate trading signals, applies risk management checks,
 and executes trades on your behalf.
 
@@ -11,7 +11,7 @@ and executes trades on your behalf.
 - **Python 3.12+** — [python.org/downloads](https://www.python.org/downloads/)
 - **uv** — Python package manager — install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **just** — Task runner — install with `brew install just` (macOS) or see [github.com/casey/just](https://github.com/casey/just)
-- **IBKR Account** — For paper/live trading (not needed for local mode)
+- **OANDA Account** — For paper/live trading (not needed for local mode)
 
 ## Installation
 
@@ -37,7 +37,7 @@ Edit `.env` to configure the bot. All settings have safe defaults.
 | Mode | Description | Broker Required? |
 |---|---|---|
 | `local` | Simulated data, no broker connection. For development and testing. | No |
-| `paper` | IBKR paper trading account. Real market data, simulated money. | Yes |
+| `paper` | OANDA practice account. Real market data, simulated money. | Yes |
 | `live` | Real trading with real capital. **Use with extreme caution.** | Yes |
 
 ### Key Settings
@@ -45,36 +45,38 @@ Edit `.env` to configure the bot. All settings have safe defaults.
 | Variable | Default | Description |
 |---|---|---|
 | `TRADING_MODE` | `local` | Operating mode (`local`, `paper`, `live`) |
-| `SYMBOL` | `GLD` | Instrument to trade (SPDR Gold ETF) |
+| `SYMBOL` | `XAU_USD` | Instrument to trade (gold spot CFD) |
 | `INTERVAL_SECONDS` | `60` | How often the bot checks for signals (seconds) |
-| `RISK_MAX_POSITION_SIZE` | `10` | Maximum shares to hold |
+| `RISK_MAX_POSITION_SIZE` | `10` | Maximum units to hold |
 | `RISK_MAX_DAILY_LOSS` | `500.0` | Stop trading if daily loss exceeds this (USD) |
 | `RISK_KILL_SWITCH` | `false` | Emergency stop — halts ALL trading immediately |
 
-### IBKR Connection
-
-aurexTrade does **not** store your IBKR credentials. Authentication is handled
-entirely by TWS or IB Gateway — the bot only needs connection details:
+### OANDA Connection
 
 | Variable | Default | Description |
 |---|---|---|
-| `IBKR_HOST` | `127.0.0.1` | TWS/Gateway host (always localhost for local dev) |
-| `IBKR_PORT` | `7497` | `7497` = paper trading, `7496` = live |
-| `IBKR_CLIENT_ID` | `1` | Unique integer per concurrent connection |
+| `OANDA_ACCESS_TOKEN` | *(required)* | API access token from OANDA |
+| `OANDA_ACCOUNT_ID` | *(required)* | Your OANDA account ID (e.g., `101-001-12345678-001`) |
+| `OANDA_SERVER` | `practice` | `practice` = demo, `live` = real money |
 
-## Setting Up IBKR (Paper Trading)
+## Setting Up OANDA (Practice Trading)
 
-1. **Create an IBKR paper trading account** at [interactivebrokers.com](https://www.interactivebrokers.com/)
-2. **Download TWS** (Trader Workstation) or **IB Gateway**
-   - TWS: Full trading platform with GUI
-   - IB Gateway: Lightweight, headless — recommended for automated trading
-3. **Enable API access**:
-   - In TWS: Edit → Global Configuration → API → Settings
-   - Check "Enable ActiveX and Socket Clients"
-   - Set port to `7497` (paper) or `7496` (live)
-   - Check "Allow connections from localhost only"
-4. **Start TWS/Gateway** and log in with your paper trading credentials
-5. **Set `TRADING_MODE=paper`** in your `.env` file
+1. **Create an OANDA practice account** at [oanda.com](https://www.oanda.com/)
+2. **Generate an API access token**:
+   - Log into the OANDA Account Management Portal
+   - Navigate to "Manage API Access" (under "My Services")
+   - Click "Generate" to create a personal access token
+   - Copy the token — it is shown only once
+3. **Find your account ID**:
+   - In the Account Management Portal, your account ID is shown on the main page
+   - It looks like `101-001-12345678-001`
+4. **Set environment variables** in your `.env` file:
+   ```
+   TRADING_MODE=paper
+   OANDA_ACCESS_TOKEN=your-token-here
+   OANDA_ACCOUNT_ID=101-001-12345678-001
+   OANDA_SERVER=practice
+   ```
 
 ## Running the Bot
 
@@ -82,8 +84,8 @@ entirely by TWS or IB Gateway — the bot only needs connection details:
 # Local mode (no broker needed — great for development)
 just run
 
-# Paper trading mode (requires TWS/Gateway running)
-just run-paper
+# OANDA practice mode (requires OANDA credentials in .env)
+just run-oanda-practice
 
 # Or set mode in .env and run:
 just run
@@ -129,10 +131,10 @@ just clean      # Remove build artifacts
 
 ## Troubleshooting
 
-### "Connection refused" when running in paper mode
-- Ensure TWS or IB Gateway is running
-- Check that API is enabled (see IBKR setup above)
-- Verify `IBKR_PORT` matches the port in TWS/Gateway settings
+### "Connection failed" when running in paper mode
+- Verify your `OANDA_ACCESS_TOKEN` is valid and not expired
+- Verify your `OANDA_ACCOUNT_ID` is correct
+- Check that `OANDA_SERVER` matches your account type (`practice` or `live`)
 
 ### "Kill switch activated"
 - Set `RISK_KILL_SWITCH=false` in `.env` to resume trading

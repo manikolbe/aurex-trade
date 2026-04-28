@@ -1,0 +1,105 @@
+"""OANDA broker adapter — implements BrokerPort via v20 REST API."""
+
+from uuid import UUID
+
+import structlog
+
+from aurex_trade.adapters.oanda.connection import OANDAConnection
+from aurex_trade.domain.enums import OrderSide
+from aurex_trade.domain.models import Order, Position, Trade
+
+log = structlog.get_logger()
+
+
+class OANDABrokerAdapter:
+    """Place orders and query positions via the OANDA v20 REST API.
+
+    OANDA uses negative units for sell orders (no separate side field).
+    Market orders use Fill-or-Kill (FOK) time-in-force for immediate execution.
+    Commission is zero — OANDA charges via the bid/ask spread.
+    """
+
+    def __init__(self, connection: OANDAConnection, account_id: str) -> None:
+        self._connection = connection
+        self._account_id = account_id
+
+    def place_order(self, order: Order) -> Trade:
+        """Place a market order and return the resulting Trade."""
+        units = order.quantity if order.side == OrderSide.BUY else -order.quantity
+
+        body = {
+            "order": {
+                "type": "MARKET",
+                "instrument": order.symbol,
+                "units": str(units),
+                "timeInForce": "FOK",
+                "positionFill": "DEFAULT",
+            }
+        }
+
+        data = self._connection.post(
+            f"/v3/accounts/{self._account_id}/orders", json=body
+        )
+
+        fill = data["orderFillTransaction"]
+
+        trade = Trade(
+            order_id=order.id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            price=float(fill["price"]),
+            commission=0.0,
+        )
+
+        log.info(
+            "oanda_order_filled",
+            symbol=order.symbol,
+            side=order.side.value,
+            quantity=order.quantity,
+            price=trade.price,
+        )
+        return trade
+
+    def cancel_order(self, order_id: UUID) -> bool:
+        """Cancel an order. Market FOK orders fill immediately — always returns False."""
+        log.debug("oanda_cancel_noop", order_id=str(order_id))
+        return False
+
+    def get_positions(self, symbol: str) -> Position | None:
+        """Return the current net position for a symbol, or None if flat."""
+        data = self._connection.get(
+            f"/v3/accounts/{self._account_id}/positions/{symbol}"
+        )
+
+        pos = data["position"]
+        long_units = float(pos["long"]["units"])
+        short_units = float(pos["short"]["units"])
+        net_units = long_units + short_units  # short units are negative
+
+        if net_units == 0.0:
+            return None
+
+        # Use the side that has units for average price and P&L
+        side_data = pos["long"] if net_units > 0.0 else pos["short"]
+
+        avg_price = float(side_data.get("averagePrice", 0.0))
+        unrealized_pnl = float(side_data.get("unrealizedPL", 0.0))
+        realized_pnl = float(pos.get("pl", 0.0))
+
+        position = Position(
+            symbol=symbol,
+            quantity=net_units,
+            average_cost=avg_price,
+            market_value=abs(net_units) * avg_price,
+            unrealized_pnl=unrealized_pnl,
+            realized_pnl=realized_pnl,
+        )
+
+        log.debug(
+            "oanda_position_fetched",
+            symbol=symbol,
+            quantity=net_units,
+            unrealized_pnl=unrealized_pnl,
+        )
+        return position

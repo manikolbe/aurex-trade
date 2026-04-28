@@ -4,7 +4,7 @@
 
 aurexTrade uses hexagonal architecture to keep business logic independent of
 infrastructure concerns. This means the trading strategy and risk engine know
-nothing about IBKR, SQLite, or any other external system.
+nothing about OANDA, SQLite, or any other external system.
 
 ```
                     ┌─────────────────────────────────┐
@@ -21,7 +21,7 @@ nothing about IBKR, SQLite, or any other external system.
         └────┬─────┘    └──────┬───────┘     └─────┬──────┘
              │                 │                    │
     ┌────────┴────────┐  ┌────┴─────────┐   ┌─────┴──────┐
-    │ IBKRBroker      │  │ IBKRMarket   │   │  SQLite    │
+    │ OANDABroker     │  │ OANDAMarket  │   │  SQLite    │
     │ PaperBroker     │  │ DataAdapter  │   │ Repository │
     └─────────────────┘  └──────────────┘   └────────────┘
 
@@ -33,7 +33,7 @@ nothing about IBKR, SQLite, or any other external system.
 
 ### Why Hexagonal?
 
-1. **Broker swappability** — IBKR can be replaced without touching strategy or risk logic
+1. **Broker swappability** — OANDA can be replaced without touching strategy or risk logic
 2. **Testability** — domain logic tested in isolation, no mocks of external services needed
 3. **Safety** — financial logic can't accidentally depend on infrastructure details
 4. **Future-proofing** — adding REST API, new brokers, or PostgreSQL only requires new adapters
@@ -161,10 +161,12 @@ class RepositoryPort(Protocol):
 - Used for fast unit/integration tests
 - For runtime persistence, see SQLite adapter below
 
-### IBKR Adapter (`adapters/ibkr/`)
-- Uses `ib_async` library (maintained fork of `ib_insync`)
-- Connects to TWS/IB Gateway via TCP socket
-- Shared connection manager handles connect/reconnect/disconnect
+### OANDA Adapter (`adapters/oanda/`)
+- Uses `httpx` to call the OANDA v20 REST API directly
+- `OANDAConnection` wraps httpx.Client with auth headers and base URL
+- `OANDABrokerAdapter` implements BrokerPort (market orders, position queries)
+- `OANDAMarketDataAdapter` implements MarketDataPort (historical candles)
+- Validates credentials on connect by calling the accounts endpoint
 - Used for `TRADING_MODE=paper` and `TRADING_MODE=live`
 
 ### SQLite Adapter (`adapters/sqlite/`)
@@ -258,8 +260,8 @@ AppConfig
 ├── db_path: Path
 ├── log_level: str
 ├── live_trading_confirmed: bool
-├── ibkr: IBKRConfig
-│   ├── host, port, client_id
+├── oanda: OANDAConfig
+│   ├── access_token, account_id, server
 ├── risk: RiskConfig
 │   ├── max_position_size, max_daily_loss
 │   ├── max_trades_per_day, kill_switch
@@ -268,7 +270,7 @@ AppConfig
 ```
 
 Environment variable mapping uses prefixes:
-- `IBKR_HOST` → `config.ibkr.host`
+- `OANDA_ACCESS_TOKEN` → `config.oanda.access_token`
 - `RISK_MAX_DAILY_LOSS` → `config.risk.max_daily_loss`
 - `STRATEGY_SMA_SHORT_WINDOW` → `config.strategy.sma_short_window`
 
@@ -293,9 +295,9 @@ def main():
             broker = PaperBrokerAdapter()
             market_data = PaperMarketDataAdapter()
         case TradingMode.PAPER | TradingMode.LIVE:
-            connection = IBKRConnection(config.ibkr)
-            broker = IBKRBrokerAdapter(connection)
-            market_data = IBKRMarketDataAdapter(connection)
+            connection = OANDAConnection(config.oanda)
+            broker = OANDABrokerAdapter(connection)
+            market_data = OANDAMarketDataAdapter(connection)
 
     repository = SQLiteRepository(config.db_path)
     strategy = SMACrossover(config.strategy)

@@ -28,8 +28,8 @@ fmt:
 run *args='':
     uv run python -m aurex_trade {{args}}
 
-# Run in paper trading mode (requires TWS/Gateway)
-run-paper:
+# Run in OANDA practice mode (requires OANDA credentials in .env)
+run-oanda-practice:
     TRADING_MODE=paper uv run python -m aurex_trade
 
 # Install/sync dependencies

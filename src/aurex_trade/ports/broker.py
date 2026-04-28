@@ -9,7 +9,7 @@ from aurex_trade.domain.models import Order, Position, Trade
 class BrokerPort(Protocol):
     """Port for placing orders and querying positions.
 
-    Any broker adapter (paper, IBKR, etc.) must satisfy this interface.
+    Any broker adapter (paper, OANDA, etc.) must satisfy this interface.
     """
 
     def place_order(self, order: Order) -> Trade: ...

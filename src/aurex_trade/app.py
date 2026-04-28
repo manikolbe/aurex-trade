@@ -4,7 +4,10 @@ This is the ONLY module that knows about concrete adapter classes.
 Everything else depends only on port interfaces.
 """
 
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -14,6 +17,12 @@ from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 from aurex_trade.engine.trading_engine import TradingEngine
 from aurex_trade.logging import setup_logging
+
+if TYPE_CHECKING:
+    from aurex_trade.adapters.oanda.connection import OANDAConnection
+    from aurex_trade.ports.broker import BrokerPort
+    from aurex_trade.ports.market_data import MarketDataPort
+    from aurex_trade.ports.repository import RepositoryPort
 
 
 def main() -> None:
@@ -38,22 +47,55 @@ def main() -> None:
         interval=config.interval_seconds,
     )
 
+    oanda_conn: OANDAConnection | None = None
+    broker: BrokerPort
+    market_data: MarketDataPort
+    repository: RepositoryPort
+
     # Select adapters based on trading mode
     if config.trading_mode == TradingMode.LOCAL:
         from aurex_trade.adapters.paper.broker import PaperBrokerAdapter
         from aurex_trade.adapters.sqlite.repository import SQLiteRepository
 
-        broker = PaperBrokerAdapter()
-        market_data = broker  # Paper adapter implements both ports
+        paper = PaperBrokerAdapter()
+        broker = paper
+        market_data = paper  # Paper adapter implements both ports
         repository = SQLiteRepository(db_path=config.db_path)
 
     elif config.trading_mode in (TradingMode.PAPER, TradingMode.LIVE):
-        log.error(
-            "mode_not_implemented",
-            mode=config.trading_mode.value,
-            hint="IBKR adapters will be available in Phase 5",
+        from aurex_trade.adapters.oanda.broker import OANDABrokerAdapter
+        from aurex_trade.adapters.oanda.connection import (
+            OANDAConnection as _OANDAConnection,
         )
-        sys.exit(1)
+        from aurex_trade.adapters.oanda.connection import OANDAConnectionError
+        from aurex_trade.adapters.oanda.market_data import OANDAMarketDataAdapter
+        from aurex_trade.adapters.sqlite.repository import SQLiteRepository
+
+        if not config.oanda.access_token:
+            log.critical(
+                "oanda_config_error", reason="OANDA_ACCESS_TOKEN is required"
+            )
+            sys.exit(1)
+        if not config.oanda.account_id:
+            log.critical(
+                "oanda_config_error", reason="OANDA_ACCOUNT_ID is required"
+            )
+            sys.exit(1)
+
+        oanda_conn = _OANDAConnection(config.oanda)
+        try:
+            oanda_conn.connect()
+        except OANDAConnectionError as exc:
+            log.critical("oanda_connection_failed", error=str(exc))
+            sys.exit(1)
+
+        broker = OANDABrokerAdapter(
+            connection=oanda_conn, account_id=config.oanda.account_id
+        )
+        market_data = OANDAMarketDataAdapter(
+            connection=oanda_conn, account_id=config.oanda.account_id
+        )
+        repository = SQLiteRepository(db_path=config.db_path)
 
     # Domain components (no adapter knowledge)
     strategy = SMACrossover(
@@ -84,3 +126,6 @@ def main() -> None:
     except KeyboardInterrupt:
         log.info("keyboard_interrupt")
         engine.stop()
+    finally:
+        if oanda_conn is not None:
+            oanda_conn.disconnect()

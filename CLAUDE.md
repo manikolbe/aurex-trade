@@ -5,7 +5,7 @@ Read this fully before making any changes.
 
 ## What is aurexTrade?
 
-An automated gold trading bot that connects to Interactive Brokers (IBKR).
+An automated gold trading bot that connects to OANDA for forex/CFD trading.
 Single-user, single-process Python application. Currently targeting paper trading
 with a path to live trading.
 
@@ -47,7 +47,7 @@ src/aurex_trade/
 │   ├── market_data.py  # MarketDataPort Protocol — price feeds
 │   └── repository.py   # RepositoryPort Protocol — persistence
 ├── adapters/
-│   ├── ibkr/           # IBKR adapter (ib_async)
+│   ├── oanda/          # OANDA adapter (httpx → v20 REST API)
 │   ├── memory/         # In-memory repository (local mode + tests)
 │   ├── paper/          # Paper trading simulator
 │   └── sqlite/         # SQLite persistence
@@ -65,7 +65,7 @@ src/aurex_trade/
 - **Functions/methods**: `snake_case`
 - **Constants**: `UPPER_SNAKE_CASE`
 - **Protocols (ports)**: Suffix with `Port` (e.g., `BrokerPort`)
-- **Adapters**: Prefix with provider + suffix with role (e.g., `IBKRBrokerAdapter`)
+- **Adapters**: Prefix with provider + suffix with role (e.g., `OANDABrokerAdapter`)
 
 ### Patterns
 - **Domain models**: Frozen dataclasses (`@dataclass(frozen=True)`)
@@ -91,7 +91,7 @@ just lint       # Run ruff check
 just typecheck  # Run mypy (strict)
 just fmt        # Format with ruff
 just run        # Run bot (local mode)
-just run-paper  # Run bot (IBKR paper mode)
+just run-oanda-practice  # Run bot (OANDA practice mode)
 just sync       # Install/sync dependencies
 ```
 

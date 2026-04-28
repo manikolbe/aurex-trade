@@ -7,7 +7,7 @@ class TradingMode(StrEnum):
     """Operating mode for the trading engine."""
 
     LOCAL = "local"    # No broker connection — simulated data
-    PAPER = "paper"    # IBKR paper trading account
+    PAPER = "paper"    # OANDA practice trading account
     LIVE = "live"      # Real trading with real capital
 
 

@@ -8,14 +8,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from aurex_trade.domain.enums import TradingMode
 
 
-class IBKRConfig(BaseSettings):
-    """IBKR connection settings (NOT credentials — just host/port config)."""
+class OANDAConfig(BaseSettings):
+    """OANDA connection settings."""
 
-    model_config = SettingsConfigDict(env_prefix="IBKR_")
+    model_config = SettingsConfigDict(env_prefix="OANDA_")
 
-    host: str = "127.0.0.1"
-    port: int = 7497        # 7497 = paper, 7496 = live
-    client_id: int = 1
+    access_token: str = ""       # OANDA API access token (from env var OANDA_ACCESS_TOKEN)
+    account_id: str = ""         # OANDA account ID (from env var OANDA_ACCOUNT_ID)
+    server: str = "practice"     # "practice" or "live"
 
 
 class RiskConfig(BaseSettings):
@@ -42,7 +42,7 @@ class AppConfig(BaseSettings):
     """Root application configuration.
 
     Loaded from environment variables and .env file.
-    Nested configs use prefixed env vars (e.g., IBKR_HOST, RISK_MAX_DAILY_LOSS).
+    Nested configs use prefixed env vars (e.g., OANDA_ACCESS_TOKEN, RISK_MAX_DAILY_LOSS).
     """
 
     model_config = SettingsConfigDict(
@@ -51,7 +51,7 @@ class AppConfig(BaseSettings):
     )
 
     trading_mode: TradingMode = TradingMode.LOCAL
-    symbol: str = "GLD"
+    symbol: str = "XAU_USD"
     interval_seconds: int = 60
     db_path: Path = Path("data/aurex_trade.db")
     log_level: str = "INFO"
@@ -60,6 +60,6 @@ class AppConfig(BaseSettings):
     live_trading_confirmed: bool = False
 
     # Nested configs
-    ibkr: IBKRConfig = Field(default_factory=IBKRConfig)
+    oanda: OANDAConfig = Field(default_factory=OANDAConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
