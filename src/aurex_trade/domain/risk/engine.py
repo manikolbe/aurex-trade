@@ -4,8 +4,12 @@ Every signal must pass through evaluate(). No trade can bypass this check.
 Rules are evaluated in priority order; the first rejection wins.
 """
 
+import structlog
+
 from aurex_trade.domain.enums import RiskAction
 from aurex_trade.domain.models import Position, RiskDecision, Signal, Trade
+
+log = structlog.get_logger()
 
 
 class RiskEngine:
@@ -71,6 +75,15 @@ class RiskEngine:
         daily_pnl = 0.0
         if position:
             daily_pnl = position.realized_pnl + position.unrealized_pnl
+        log.debug(
+            "risk_pnl_breakdown",
+            realized_pnl=position.realized_pnl if position else 0.0,
+            unrealized_pnl=position.unrealized_pnl if position else 0.0,
+            daily_pnl=daily_pnl,
+            max_daily_loss=self._max_daily_loss,
+            position_qty=position.quantity if position else 0.0,
+            position_avg_cost=position.average_cost if position else 0.0,
+        )
         if daily_pnl <= -self._max_daily_loss:
             return RiskDecision(
                 signal_id=signal.id,
