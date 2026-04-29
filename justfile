@@ -32,6 +32,14 @@ run *args='':
 run-oanda-practice:
     TRADING_MODE=paper uv run python -m aurex_trade
 
+# Download historical data from OANDA
+download-data *args='':
+    uv run python -m aurex_trade.backtest download-data {{args}}
+
+# Run a backtest
+backtest *args='':
+    uv run python -m aurex_trade.backtest run {{args}}
+
 # Install/sync dependencies
 sync:
     uv sync

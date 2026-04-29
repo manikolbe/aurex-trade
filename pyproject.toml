@@ -57,6 +57,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
+"src/aurex_trade/backtest/cli.py" = ["T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["aurex_trade"]
