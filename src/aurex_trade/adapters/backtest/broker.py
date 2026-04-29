@@ -131,17 +131,45 @@ class SimulatedBrokerAdapter:
 
         if side == OrderSide.BUY:
             new_qty = current_qty + quantity
+            if current_qty < 0:
+                # Closing (or reducing) a short — realize P&L
+                close_qty = min(quantity, abs(current_qty))
+                pnl = close_qty * (current_cost - price)
+                realized_pnl += pnl
+                self._capital += pnl
             if new_qty != 0:
-                new_avg = (current_qty * current_cost + quantity * price) / new_qty
+                if current_qty >= 0:
+                    # Adding to long
+                    new_avg = (current_qty * current_cost + quantity * price) / new_qty
+                elif new_qty > 0:
+                    # Flipped from short to long — new cost is the buy price
+                    new_avg = price
+                else:
+                    # Reduced short but still short — keep original cost
+                    new_avg = current_cost
             else:
                 new_avg = 0.0
         else:
             new_qty = current_qty - quantity
-            # Realize P&L on the sold portion
-            pnl = quantity * (price - current_cost)
-            realized_pnl += pnl
-            self._capital += pnl
-            new_avg = current_cost if new_qty != 0 else 0.0
+            if current_qty > 0:
+                # Closing (or reducing) a long — realize P&L
+                close_qty = min(quantity, current_qty)
+                pnl = close_qty * (price - current_cost)
+                realized_pnl += pnl
+                self._capital += pnl
+            if new_qty != 0:
+                if current_qty <= 0:
+                    # Adding to short (or opening short)
+                    total_cost = abs(current_qty) * current_cost + quantity * price
+                    new_avg = total_cost / abs(new_qty)
+                elif new_qty < 0:
+                    # Flipped from long to short — new cost is the sell price
+                    new_avg = price
+                else:
+                    # Reduced long but still long — keep original cost
+                    new_avg = current_cost
+            else:
+                new_avg = 0.0
 
         market_value = new_qty * price if new_qty != 0 else 0.0
         unrealized = new_qty * (price - new_avg) if new_qty != 0 else 0.0

@@ -120,10 +120,11 @@ class TestBacktestRunner:
         )
         result = runner.run()
 
-        # Should have trades (limited by position size in risk engine)
-        assert result.metrics.trade_count > 0
+        # Should have executed orders (buy-only means no round trips completed)
         assert len(result.trades) > 0
         assert result.symbol == "TEST"
+        # Buy-only strategy has no realized P&L, so trade_count (round trips) is 0
+        assert result.metrics.trade_count == 0
 
     def test_deterministic_results(self) -> None:
         """Same seed and data should produce identical results."""

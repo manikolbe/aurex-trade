@@ -69,7 +69,13 @@ class OANDAHistoricalDownloader:
             if not bars:
                 break
 
+            # Filter out bars beyond the end time
+            bars = [b for b in bars if b.timestamp <= end]
             all_bars.extend(bars)
+
+            if not bars:
+                break
+
             current_from = bars[-1].timestamp
             log.info(
                 "download_chunk",
@@ -77,6 +83,10 @@ class OANDAHistoricalDownloader:
                 total=len(all_bars),
                 last_timestamp=current_from.isoformat(),
             )
+
+            # If we got fewer than max, we've reached the end of available data
+            if len(bars) < _MAX_CANDLES_PER_REQUEST:
+                break
 
         if all_bars:
             # OANDA instrument names use _ but the API path uses the same format
@@ -100,7 +110,6 @@ class OANDAHistoricalDownloader:
         params: dict[str, str] = {
             "granularity": granularity,
             "from": from_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "to": to_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "count": str(_MAX_CANDLES_PER_REQUEST),
             "price": "M",  # mid-price
         }

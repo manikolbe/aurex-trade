@@ -11,7 +11,7 @@ from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapte
 from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.results import BacktestResult, BacktestTradeRecord
 from aurex_trade.domain.enums import OrderSide, RiskAction, SignalType
-from aurex_trade.domain.models import Order, Trade
+from aurex_trade.domain.models import Order
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.metrics import calculate_metrics
@@ -53,13 +53,15 @@ class BacktestRunner:
             current_bar = self._market_data.current_bar
             self._broker.set_current_bar(current_bar)
 
-            # Run one trading step
+            # Run one trading step — track realized P&L delta
+            prev_realized = self._get_realized_pnl()
             record = self._run_step(bar_index)
             if record is not None:
                 trade_records.append(record)
-                # Track realized P&L from this trade's fill
-                pnl = self._get_trade_pnl(record.trade, trade_records)
-                trade_pnls.append(pnl)
+                new_realized = self._get_realized_pnl()
+                pnl = new_realized - prev_realized
+                if pnl != 0.0:
+                    trade_pnls.append(pnl)
 
             # Record equity after this step
             equity_curve.append(self._broker.equity)
@@ -140,18 +142,7 @@ class BacktestRunner:
             equity_after=self._broker.equity,
         )
 
-    def _get_trade_pnl(self, trade: Trade, records: list[BacktestTradeRecord]) -> float:
-        """Calculate P&L for a closing trade.
-
-        For a sell trade (closing a long), P&L = (sell_price - avg_cost) * qty.
-        For a buy that opens a position, P&L is 0 (unrealized until close).
-        """
-        if trade.side != OrderSide.SELL:
-            return 0.0
-
-        position = self._broker.get_positions(trade.symbol)
-        if position is None:
-            return 0.0
-
-        avg_cost = position.average_cost if position.average_cost != 0 else trade.price
-        return trade.quantity * (trade.price - avg_cost)
+    def _get_realized_pnl(self) -> float:
+        """Get the broker's current total realized P&L."""
+        position = self._broker.get_positions(self._config.symbol)
+        return position.realized_pnl if position else 0.0
