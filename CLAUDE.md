@@ -108,7 +108,7 @@ just sync       # Install/sync dependencies
 
 # Backtesting
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
-just backtest --short-window 10 --long-window 30 --capital 100000 --spread 1.5 --slippage 0.5
+just backtest --short-window 10 --long-window 30 --capital 100000 --spread 0.6 --slippage 0.2
 ```
 
 ## Backtesting
@@ -138,7 +138,7 @@ just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 20
 just backtest --short-window 10 --long-window 30 --capital 100000
 
 # 3. Try different parameters
-just backtest --short-window 20 --long-window 50 --spread 1.5 --slippage 0.5
+just backtest --short-window 20 --long-window 50 --spread 0.6 --slippage 0.2
 ```
 
 ### Key Properties
@@ -159,8 +159,8 @@ just backtest --short-window 20 --long-window 50 --spread 1.5 --slippage 0.5
 | `--position-size` | 1.0 | Units per trade |
 | `--short-window` | 10 | SMA short period |
 | `--long-window` | 30 | SMA long period |
-| `--spread` | 1.5 | Spread in price units |
-| `--slippage` | 0.5 | Max slippage in price units |
+| `--spread` | 1.5 | Spread in price units (OANDA XAU_USD actual: ~0.6) |
+| `--slippage` | 0.5 | Max slippage in price units (realistic: ~0.2) |
 | `--commission` | 0.0 | Commission per trade |
 | `--seed` | 42 | Random seed (determinism) |
 | `--max-position` | 10 | Risk: max position size |
