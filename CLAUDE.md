@@ -34,6 +34,7 @@ are isolated in adapters.
 src/aurex_trade/
 ├── app.py              # Composition root — wires adapters to ports, starts engine
 ├── config.py           # Pydantic Settings — AppConfig loaded from .env
+├── metrics.py          # SHARED: PerformanceMetrics + calculate_metrics() (backtest + live)
 ├── domain/
 │   ├── enums.py        # TradingMode, OrderSide, SignalType, OrderStatus, RiskAction
 │   ├── models.py       # Frozen dataclasses: BarData, Signal, Order, Trade, Position, RiskDecision
@@ -48,9 +49,20 @@ src/aurex_trade/
 │   └── repository.py   # RepositoryPort Protocol — persistence
 ├── adapters/
 │   ├── oanda/          # OANDA adapter (httpx → v20 REST API)
+│   │   └── downloader.py  # Historical candle downloader (paginated)
+│   ├── backtest/       # Backtesting adapters
+│   │   ├── broker.py       # SimulatedBrokerAdapter (spread, slippage, commission)
+│   │   ├── market_data.py  # HistoricalMarketDataAdapter (cursor-based replay)
+│   │   └── data_store.py   # CSV read/write for historical bars
 │   ├── memory/         # In-memory repository (local mode + tests)
 │   ├── paper/          # Paper trading simulator
 │   └── sqlite/         # SQLite persistence
+├── backtest/
+│   ├── __main__.py     # Entry point for `python -m aurex_trade.backtest`
+│   ├── cli.py          # CLI subcommands: download-data, run
+│   ├── config.py       # BacktestConfig (Pydantic Settings)
+│   ├── runner.py       # BacktestRunner — core orchestration loop
+│   └── results.py      # BacktestResult, BacktestTradeRecord
 ├── engine/
 │   └── trading_engine.py  # Main trading loop — depends ONLY on ports
 ├── logging.py          # structlog configuration
@@ -93,7 +105,84 @@ just fmt        # Format with ruff
 just run        # Run bot (local mode)
 just run-oanda-practice  # Run bot (OANDA practice mode)
 just sync       # Install/sync dependencies
+
+# Backtesting
+just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
+just backtest --short-window 10 --long-window 30 --capital 100000 --spread 1.5 --slippage 0.5
 ```
+
+## Backtesting
+
+The backtesting framework replays historical data through any `Strategy` Protocol
+implementation, simulating fills with realistic spread, slippage, and commission.
+
+### Architecture
+
+The backtest reuses the same hexagonal boundaries as the live system:
+- **Same**: Strategy Protocol, RiskEngine, domain models, InMemoryRepository
+- **Different**: `HistoricalMarketDataAdapter` (replays bars from CSV),
+  `SimulatedBrokerAdapter` (fills with spread/slippage), `BacktestRunner` (no sleep,
+  finite iteration, equity tracking)
+
+The runner (`backtest/runner.py`) depends only on ports and domain — never on
+concrete adapters. The CLI (`backtest/cli.py`) is the composition root that wires
+everything together.
+
+### Workflow
+
+```bash
+# 1. Download historical data from OANDA
+just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
+
+# 2. Run a backtest (data loads from data/historical/XAU_USD_M1.csv)
+just backtest --short-window 10 --long-window 30 --capital 100000
+
+# 3. Try different parameters
+just backtest --short-window 20 --long-window 50 --spread 1.5 --slippage 0.5
+```
+
+### Key Properties
+
+- **Deterministic**: Same seed + same data = identical results every time
+- **Strategy-agnostic**: Any class satisfying the `Strategy` Protocol works
+- **Realistic costs**: Configurable spread, slippage (randomized per fill), commission
+- **Full risk engine**: Same risk checks as live (position limits, daily loss, trade frequency)
+
+### CLI Options (run subcommand)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--symbol` | XAU_USD | Instrument |
+| `--granularity` | M1 | Bar size |
+| `--start` / `--end` | (all data) | Date filter (YYYY-MM-DD) |
+| `--capital` | 100000 | Initial capital |
+| `--position-size` | 1.0 | Units per trade |
+| `--short-window` | 10 | SMA short period |
+| `--long-window` | 30 | SMA long period |
+| `--spread` | 1.5 | Spread in price units |
+| `--slippage` | 0.5 | Max slippage in price units |
+| `--commission` | 0.0 | Commission per trade |
+| `--seed` | 42 | Random seed (determinism) |
+| `--max-position` | 10 | Risk: max position size |
+| `--max-daily-loss` | 500.0 | Risk: daily loss limit |
+| `--max-trades-per-day` | 100 | Risk: trade frequency limit |
+
+### Metrics Output
+
+| Metric | What it means |
+|--------|---------------|
+| Total P&L | Net profit/loss after all trades |
+| Win Rate | % of completed round trips that were profitable |
+| Expectancy | Average $ per completed trade |
+| Profit Factor | Gross profit / gross loss (>1 = profitable) |
+| Max Drawdown | Largest peak-to-trough equity drop |
+| Sharpe Ratio | Risk-adjusted return (annualized) |
+
+### Data Storage
+
+Historical bars are stored as CSV in `data/historical/{SYMBOL}_{GRANULARITY}.csv`.
+Format: `timestamp,open,high,low,close,volume,symbol`. Re-downloading overwrites
+the existing file for that symbol/granularity pair.
 
 ## How to Extend
 
@@ -106,6 +195,7 @@ just sync       # Install/sync dependencies
 3. Register it in `app.py` composition root
 4. Add tests in `tests/unit/domain/test_your_strategy.py`
 5. Add configuration params to `StrategyConfig` if needed
+6. Backtest it: add a strategy option in `backtest/cli.py` and run with historical data
 
 ### Adding a New Broker Adapter
 
