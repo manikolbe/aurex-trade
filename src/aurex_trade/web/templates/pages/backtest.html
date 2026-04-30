@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}aurexTrade - Backtest{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Backtest</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <!-- Backtest Form -->
+  <div class="card bg-base-100 shadow-md lg:col-span-1">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Parameters</h2>
+      <form hx-post="/api/backtest" hx-target="#backtest-result" hx-swap="innerHTML">
+        <div class="form-control mb-2">
+          <label class="label label-text">Symbol</label>
+          <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="form-control">
+            <label class="label label-text">Short Window</label>
+            <input type="number" name="short_window" value="10" class="input input-bordered input-sm">
+          </div>
+          <div class="form-control">
+            <label class="label label-text">Long Window</label>
+            <input type="number" name="long_window" value="30" class="input input-bordered input-sm">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="form-control">
+            <label class="label label-text">Capital</label>
+            <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
+          </div>
+          <div class="form-control">
+            <label class="label label-text">Spread</label>
+            <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="form-control">
+            <label class="label label-text">Slippage</label>
+            <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
+          </div>
+          <div class="form-control">
+            <label class="label label-text">Seed</label>
+            <input type="number" name="seed" value="42" class="input input-bordered input-sm">
+          </div>
+        </div>
+        <div class="form-control mt-4">
+          <button type="submit" class="btn btn-primary btn-sm">Run Backtest</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card bg-base-100 shadow-md lg:col-span-2">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Results</h2>
+      <div id="backtest-result">
+        <p class="text-base-content/50">Submit a backtest to see results here.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

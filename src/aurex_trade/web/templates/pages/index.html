@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}aurexTrade - Dashboard{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title">Backtest</h2>
+      <p>Run backtests, parameter sweeps, and walk-forward validation.</p>
+      <div class="card-actions justify-end">
+        <a href="/backtest" class="btn btn-primary btn-sm">Open</a>
+      </div>
+    </div>
+  </div>
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title">Trading Bot</h2>
+      <p>Start, stop, and monitor the live trading engine.</p>
+      <div class="card-actions justify-end">
+        <a href="/bot" class="btn btn-primary btn-sm">Open</a>
+      </div>
+    </div>
+  </div>
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title">Settings</h2>
+      <p>View and manage application configuration.</p>
+      <div class="card-actions justify-end">
+        <a href="/settings" class="btn btn-primary btn-sm">Open</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-6">
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title">System Health</h2>
+      <div id="health-status" hx-get="/api/health" hx-trigger="load, every 10s" hx-swap="innerHTML">
+        <span class="loading loading-spinner loading-sm"></span> Checking...
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

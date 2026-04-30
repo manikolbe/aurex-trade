@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}aurexTrade - Bot{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Trading Bot</h1>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Controls</h2>
+      <div class="flex gap-2">
+        <button class="btn btn-success btn-sm" hx-post="/api/bot/start" hx-target="#bot-status" hx-swap="innerHTML">
+          Start
+        </button>
+        <button class="btn btn-error btn-sm" hx-post="/api/bot/stop" hx-target="#bot-status" hx-swap="innerHTML">
+          Stop
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Status</h2>
+      <div id="bot-status" hx-get="/api/bot/status" hx-trigger="load, every 5s" hx-swap="innerHTML">
+        <span class="loading loading-spinner loading-sm"></span> Loading...
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

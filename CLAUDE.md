@@ -24,6 +24,7 @@ Market Data → Strategy → Risk Engine → Execution → Broker → Persistenc
 | `adapters/` | domain, ports | engine, other adapters |
 | `engine/` | domain, ports | adapters (injected via ports) |
 | `app.py` | everything | (composition root — wires it all) |
+| `web/` | everything | (composition root — web server) |
 
 **The domain NEVER depends on external libraries.** All external dependencies
 are isolated in adapters.
@@ -67,6 +68,16 @@ src/aurex_trade/
 │   └── results.py      # BacktestResult, SweepResult, WalkForwardResult
 ├── engine/
 │   └── trading_engine.py  # Main trading loop — depends ONLY on ports
+├── web/
+│   ├── __main__.py     # Entry point for `python -m aurex_trade.web`
+│   ├── app.py          # FastAPI app factory (composition root)
+│   ├── config.py       # WebConfig (Pydantic Settings)
+│   ├── schemas.py      # Pydantic request/response models
+│   ├── tasks.py        # Background task registry (ThreadPoolExecutor)
+│   ├── dependencies.py # FastAPI Depends callables
+│   ├── routers/        # API route handlers (health, backtest, bot, settings)
+│   ├── templates/      # Jinja2 + HTMX templates (DaisyUI via CDN)
+│   └── static/         # CSS assets
 ├── logging.py          # structlog configuration
 └── __main__.py         # Entry point for `python -m aurex_trade`
 ```
@@ -106,6 +117,8 @@ just typecheck  # Run mypy (strict)
 just fmt        # Format with ruff
 just run        # Run bot (local mode)
 just run-oanda-practice  # Run bot (OANDA practice mode)
+just web        # Run web server (http://127.0.0.1:8000)
+just web-dev    # Run web server with auto-reload
 just sync       # Install/sync dependencies
 
 # Backtesting
@@ -259,6 +272,45 @@ just walk-forward --strategy sma_crossover \
 Historical bars are stored as CSV in `data/historical/{SYMBOL}_{GRANULARITY}.csv`.
 Format: `timestamp,open,high,low,close,volume,symbol`. Re-downloading overwrites
 the existing file for that symbol/granularity pair.
+
+## Web Interface
+
+The web layer (`src/aurex_trade/web/`) is a FastAPI composition root serving both
+an API and HTMX-powered UI. It reuses the same domain, ports, and adapters as the
+CLI — no domain changes needed.
+
+### Architecture
+
+- **Composition root**: `web/app.py` creates the FastAPI app, wires adapters
+- **Background tasks**: `TaskRegistry` uses `ThreadPoolExecutor(max_workers=2)` for
+  CPU-bound backtest/sweep/walk-forward jobs
+- **API pattern**: POST submits job → returns `task_id` → GET polls status/result
+- **Templates**: Jinja2 + HTMX (polling via `hx-get` + `hx-trigger`)
+- **Styling**: DaisyUI + Tailwind via CDN (no bundler)
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Service health check |
+| POST | `/api/backtest` | Submit backtest |
+| GET | `/api/backtest/{task_id}` | Poll backtest result |
+| POST | `/api/sweep` | Submit parameter sweep |
+| GET | `/api/sweep/{task_id}` | Poll sweep result |
+| POST | `/api/walk-forward` | Submit walk-forward validation |
+| GET | `/api/walk-forward/{task_id}` | Poll walk-forward result |
+| POST | `/api/bot/start` | Start trading bot (stub) |
+| POST | `/api/bot/stop` | Stop trading bot (stub) |
+| GET | `/api/bot/status` | Bot running status |
+| GET | `/api/settings` | Current config (secrets redacted) |
+
+### Configuration
+
+Environment variables (prefix `WEB_`):
+- `WEB_HOST` — bind address (default: `127.0.0.1`)
+- `WEB_PORT` — port (default: `8000`)
+- `WEB_RELOAD` — auto-reload on file changes (default: `false`)
+- `WEB_LOG_LEVEL` — log level (default: `INFO`)
 
 ## How to Extend
 

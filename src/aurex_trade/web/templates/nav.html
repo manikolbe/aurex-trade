@@ -1,0 +1,16 @@
+<div class="navbar bg-base-100 shadow-lg mb-4">
+  <div class="navbar-start">
+    <a href="/" class="btn btn-ghost text-xl font-bold">aurexTrade</a>
+  </div>
+  <div class="navbar-center hidden lg:flex">
+    <ul class="menu menu-horizontal px-1 gap-1">
+      <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a></li>
+      <li><a href="/backtest" class="{% if request.url.path == '/backtest' %}active{% endif %}">Backtest</a></li>
+      <li><a href="/bot" class="{% if request.url.path == '/bot' %}active{% endif %}">Bot</a></li>
+      <li><a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}">Settings</a></li>
+    </ul>
+  </div>
+  <div class="navbar-end">
+    <div class="badge badge-outline badge-sm">v0.1.0</div>
+  </div>
+</div>

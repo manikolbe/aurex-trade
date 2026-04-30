@@ -48,6 +48,14 @@ sweep *args='':
 walk-forward *args='':
     uv run python -m aurex_trade.backtest walk-forward {{args}}
 
+# Run the web server
+web *args='':
+    uv run python -m aurex_trade.web {{args}}
+
+# Run the web server in development mode (auto-reload)
+web-dev:
+    WEB_RELOAD=true uv run python -m aurex_trade.web
+
 # Install/sync dependencies
 sync:
     uv sync
