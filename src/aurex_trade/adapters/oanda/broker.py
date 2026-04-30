@@ -23,6 +23,14 @@ class OANDABrokerAdapter:
         self._connection = connection
         self._account_id = account_id
 
+    @property
+    def equity(self) -> float:
+        """Return account NAV (balance + unrealized P&L) from OANDA."""
+        data = self._connection.get(
+            f"/v3/accounts/{self._account_id}/summary"
+        )
+        return float(data["account"]["NAV"])
+
     def place_order(self, order: Order) -> Trade:
         """Place a market order and return the resulting Trade."""
         units = order.quantity if order.side == OrderSide.BUY else -order.quantity

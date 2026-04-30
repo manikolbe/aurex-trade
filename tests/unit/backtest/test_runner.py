@@ -33,18 +33,20 @@ def _make_bars(count: int, base_price: float = 100.0) -> list[BarData]:
 
 
 class AlwaysBuyStrategy:
-    """Trivial strategy: always generates a LONG signal."""
+    """Trivial strategy: always generates a LONG signal with a stop-loss."""
 
     @property
     def name(self) -> str:
         return "always_buy"
 
     def generate(self, bars: list[BarData]) -> Signal | None:
+        entry = bars[-1].close
         return Signal(
             symbol=bars[-1].symbol,
             signal_type=SignalType.LONG,
             strategy_name=self.name,
             strength=1.0,
+            stop_loss=entry - 1.0,
         )
 
 

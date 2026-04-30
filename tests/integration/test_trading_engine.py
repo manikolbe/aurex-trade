@@ -17,7 +17,9 @@ def _build_engine(
     """Build a fully wired TradingEngine with paper adapters."""
     broker = PaperBrokerAdapter(base_price=180.0, seed=seed)
     repository = InMemoryRepository()
-    strategy = SMACrossover(short_window=short_window, long_window=long_window)
+    strategy = SMACrossover(
+        short_window=short_window, long_window=long_window, atr_period=3
+    )
     risk_engine = RiskEngine(
         max_position_size=max_position_size,
         max_daily_loss=500.0,

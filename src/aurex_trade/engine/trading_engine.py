@@ -8,7 +8,7 @@ import time
 import structlog
 
 from aurex_trade.domain.enums import OrderSide, RiskAction, SignalType
-from aurex_trade.domain.models import Order
+from aurex_trade.domain.models import AccountState, Order
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.ports.broker import BrokerPort
@@ -38,6 +38,7 @@ class TradingEngine:
         symbol: str,
         interval_seconds: int,
         bar_count: int = 50,
+        fallback_position_size: float = 1.0,
     ) -> None:
         self._strategy = strategy
         self._risk_engine = risk_engine
@@ -47,11 +48,15 @@ class TradingEngine:
         self._symbol = symbol
         self._interval_seconds = interval_seconds
         self._bar_count = bar_count
+        self._fallback_position_size = fallback_position_size
         self._running = False
         # Session stats for periodic summary
         self._session_signals = 0
         self._session_trades = 0
         self._session_rejections = 0
+        # Account state tracking for risk engine
+        self._peak_equity: float = 0.0
+        self._trade_pnls: list[float] = []
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -62,11 +67,16 @@ class TradingEngine:
         """
         self._running = True
         cycle = 0
+
+        # Initialize peak equity
+        self._peak_equity = self._broker.equity
+
         log.info(
             "engine_started",
             symbol=self._symbol,
             strategy=self._strategy.name,
             interval=self._interval_seconds,
+            initial_equity=self._peak_equity,
         )
 
         while self._running:
@@ -90,6 +100,8 @@ class TradingEngine:
                     signals=self._session_signals,
                     trades=self._session_trades,
                     rejections=self._session_rejections,
+                    equity=self._broker.equity,
+                    peak_equity=self._peak_equity,
                     position_qty=position.quantity if position else 0.0,
                     unrealized_pnl=position.unrealized_pnl if position else 0.0,
                     realized_pnl=position.realized_pnl if position else 0.0,
@@ -137,6 +149,7 @@ class TradingEngine:
             strength=signal.strength,
             strategy=signal.strategy_name,
             trigger_price=latest_close,
+            stop_loss=signal.stop_loss,
         )
         self._repository.save_signal(signal)
 
@@ -144,14 +157,30 @@ class TradingEngine:
         position = self._repository.get_current_position(self._symbol)
         trades_today = self._repository.get_trades_today(self._symbol)
 
+        # Assemble account state for risk engine
+        current_equity = self._broker.equity
+        if current_equity > self._peak_equity:
+            self._peak_equity = current_equity
+        account_state = AccountState(
+            equity=current_equity, peak_equity=self._peak_equity
+        )
+
         log.debug(
             "risk_eval_context",
             position_qty=position.quantity if position else 0.0,
             position_avg_cost=position.average_cost if position else 0.0,
             unrealized_pnl=position.unrealized_pnl if position else 0.0,
             trades_today_count=len(trades_today),
+            equity=current_equity,
+            peak_equity=self._peak_equity,
         )
-        decision = self._risk_engine.evaluate(signal, position, trades_today)
+        decision = self._risk_engine.evaluate(
+            signal,
+            position,
+            trades_today,
+            account_state=account_state,
+            recent_trade_pnls=self._trade_pnls,
+        )
 
         log.info(
             "risk_decision",
@@ -164,13 +193,21 @@ class TradingEngine:
             self._session_rejections += 1
             return
 
-        # Step 4: Create and place order
+        # Step 4: Calculate position size and create order
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
+
+        quantity = self._risk_engine.calculate_position_size(
+            signal, account_state, latest_close
+        )
+        if quantity <= 0.0:
+            quantity = self._fallback_position_size
+
         order = Order(
             signal_id=signal.id,
             symbol=self._symbol,
             side=side,
-            quantity=1.0,
+            quantity=quantity,
+            stop_loss=signal.stop_loss,
         )
 
         trade = self._broker.place_order(order)
@@ -186,9 +223,22 @@ class TradingEngine:
         )
         self._repository.save_trade(trade)
 
-        # Step 5: Update position
+        # Step 5: Update position and track P&L
         prev_position = position
         updated_position = self._broker.get_positions(self._symbol)
+
+        # Track trade P&L for consecutive loss detection
+        prev_realized = prev_position.realized_pnl if prev_position else 0.0
+        new_realized = updated_position.realized_pnl if updated_position else 0.0
+        trade_pnl = new_realized - prev_realized
+        if trade_pnl != 0.0:
+            self._trade_pnls.append(trade_pnl)
+
+        # Update peak equity
+        current_equity = self._broker.equity
+        if current_equity > self._peak_equity:
+            self._peak_equity = current_equity
+
         if updated_position:
             self._repository.save_position(updated_position)
             log.info(

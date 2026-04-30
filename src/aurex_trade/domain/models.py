@@ -45,6 +45,7 @@ class Signal:
     strategy_name: str = ""
     strength: float = 0.0
     metadata: dict[str, str] = field(default_factory=dict)
+    stop_loss: float | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class Order:
     order_type: OrderType = OrderType.MARKET
     quantity: float = 0.0
     limit_price: float | None = None  # Required for LIMIT orders, None for MARKET
+    stop_loss: float | None = None    # Stop-loss price level (for broker to respect)
     status: OrderStatus = OrderStatus.PENDING
     timestamp: datetime = field(default_factory=_utc_now)
 
@@ -111,3 +113,15 @@ class Position:
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
     timestamp: datetime = field(default_factory=_utc_now)
+
+
+@dataclass(frozen=True)
+class AccountState:
+    """Snapshot of account state for risk evaluation.
+
+    Passed to RiskEngine.evaluate() so it can enforce drawdown limits
+    and calculate position sizes without depending on broker adapters.
+    """
+
+    equity: float = 0.0
+    peak_equity: float = 0.0

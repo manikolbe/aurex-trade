@@ -31,6 +31,10 @@ class RiskConfig(BaseSettings):
     max_daily_loss: float = 500.0
     max_trades_per_day: int = 10
     kill_switch: bool = False
+    require_stop_loss: bool = True
+    risk_per_trade: float = 0.02
+    max_drawdown_pct: float = 0.20
+    max_consecutive_losses: int = 5
 
 
 class StrategyConfig(BaseSettings):
@@ -42,6 +46,8 @@ class StrategyConfig(BaseSettings):
 
     sma_short_window: int = 10
     sma_long_window: int = 30
+    atr_multiplier: float = 2.0
+    atr_period: int = 14
 
 
 class AppConfig(BaseSettings):

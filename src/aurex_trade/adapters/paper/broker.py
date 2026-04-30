@@ -19,11 +19,23 @@ class PaperBrokerAdapter:
     Tracks positions in memory and simulates fills at the current market price.
     """
 
-    def __init__(self, base_price: float = 180.0, seed: int | None = None) -> None:
+    def __init__(
+        self,
+        base_price: float = 180.0,
+        seed: int | None = None,
+        initial_capital: float = 100_000.0,
+    ) -> None:
         self._base_price = base_price
         self._rng = random.Random(seed)  # noqa: S311
         self._positions: dict[str, Position] = {}
         self._price_history: dict[str, list[BarData]] = {}
+        self._capital = initial_capital
+
+    @property
+    def equity(self) -> float:
+        """Current equity: capital + unrealized P&L on all open positions."""
+        unrealized = sum(pos.unrealized_pnl for pos in self._positions.values())
+        return self._capital + unrealized
 
     # -- MarketDataPort --
 
@@ -108,11 +120,16 @@ class PaperBrokerAdapter:
                 new_avg = (current_qty * current_cost + quantity * price) / new_qty
             else:
                 new_avg = 0.0
+                # Closing a short: realize P&L
+                realized_pnl += abs(current_qty) * (current_cost - price)
+                self._capital += abs(current_qty) * (current_cost - price)
         else:
             new_qty = current_qty - quantity
-            # Realize P&L on the sold portion
-            realized_pnl += quantity * (price - current_cost)
             new_avg = current_cost if new_qty != 0 else 0.0
+            # Realize P&L on the sold portion
+            pnl = quantity * (price - current_cost)
+            realized_pnl += pnl
+            self._capital += pnl
 
         self._positions[symbol] = Position(
             symbol=symbol,

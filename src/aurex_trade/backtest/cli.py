@@ -92,6 +92,20 @@ def main() -> None:
     run_parser.add_argument(
         "--max-trades-per-day", type=int, default=100, help="Max trades per day (risk)"
     )
+    run_parser.add_argument(
+        "--risk-per-trade", type=float, default=0.02, help="Risk per trade as fraction"
+    )
+    run_parser.add_argument(
+        "--max-drawdown-pct", type=float, default=0.20, help="Max drawdown from peak"
+    )
+    run_parser.add_argument(
+        "--max-consecutive-losses", type=int, default=5, help="Max consecutive losses"
+    )
+    run_parser.add_argument(
+        "--no-require-stop-loss",
+        action="store_true",
+        help="Disable stop-loss requirement",
+    )
 
     # sweep subcommand
     sweep_parser = subparsers.add_parser(
@@ -124,6 +138,10 @@ def main() -> None:
     sweep_parser.add_argument("--max-position", type=int, default=10)
     sweep_parser.add_argument("--max-daily-loss", type=float, default=5000.0)
     sweep_parser.add_argument("--max-trades-per-day", type=int, default=100)
+    sweep_parser.add_argument("--risk-per-trade", type=float, default=0.02)
+    sweep_parser.add_argument("--max-drawdown-pct", type=float, default=0.20)
+    sweep_parser.add_argument("--max-consecutive-losses", type=int, default=5)
+    sweep_parser.add_argument("--no-require-stop-loss", action="store_true")
     sweep_parser.add_argument(
         "--rank-by",
         default="sharpe_ratio",
@@ -161,6 +179,10 @@ def main() -> None:
     wf_parser.add_argument("--max-position", type=int, default=10)
     wf_parser.add_argument("--max-daily-loss", type=float, default=5000.0)
     wf_parser.add_argument("--max-trades-per-day", type=int, default=100)
+    wf_parser.add_argument("--risk-per-trade", type=float, default=0.02)
+    wf_parser.add_argument("--max-drawdown-pct", type=float, default=0.20)
+    wf_parser.add_argument("--max-consecutive-losses", type=int, default=5)
+    wf_parser.add_argument("--no-require-stop-loss", action="store_true")
     wf_parser.add_argument(
         "--rank-by",
         default="sharpe_ratio",
@@ -243,6 +265,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
         max_trades_per_day=args.max_trades_per_day,
+        require_stop_loss=not args.no_require_stop_loss,
+        risk_per_trade=args.risk_per_trade,
+        max_drawdown_pct=args.max_drawdown_pct,
+        max_consecutive_losses=args.max_consecutive_losses,
     )
     market_data = HistoricalMarketDataAdapter(bars, config.bar_count)
     broker = SimulatedBrokerAdapter(
@@ -347,6 +373,10 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
         max_trades_per_day=args.max_trades_per_day,
+        require_stop_loss=not args.no_require_stop_loss,
+        risk_per_trade=args.risk_per_trade,
+        max_drawdown_pct=args.max_drawdown_pct,
+        max_consecutive_losses=args.max_consecutive_losses,
     )
 
     sweep = ParameterSweep(
@@ -398,6 +428,10 @@ def _cmd_walk_forward(args: argparse.Namespace) -> None:
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
         max_trades_per_day=args.max_trades_per_day,
+        require_stop_loss=not args.no_require_stop_loss,
+        risk_per_trade=args.risk_per_trade,
+        max_drawdown_pct=args.max_drawdown_pct,
+        max_consecutive_losses=args.max_consecutive_losses,
     )
 
     validator = WalkForwardValidator(

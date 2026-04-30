@@ -11,7 +11,7 @@ from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapte
 from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.results import BacktestResult, BacktestTradeRecord
 from aurex_trade.domain.enums import OrderSide, RiskAction, SignalType
-from aurex_trade.domain.models import Order
+from aurex_trade.domain.models import AccountState, Order
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.metrics import calculate_metrics
@@ -40,12 +40,13 @@ class BacktestRunner:
         self._broker = broker
         self._repository = repository
         self._config = config
+        self._peak_equity: float = config.initial_capital
+        self._trade_pnls: list[float] = []
 
     def run(self) -> BacktestResult:
         """Execute the full backtest and return results."""
         equity_curve: list[float] = [self._config.initial_capital]
         trade_records: list[BacktestTradeRecord] = []
-        trade_pnls: list[float] = []
         bar_index = 0
 
         while not self._market_data.is_exhausted:
@@ -61,10 +62,13 @@ class BacktestRunner:
                 new_realized = self._get_realized_pnl()
                 pnl = new_realized - prev_realized
                 if pnl != 0.0:
-                    trade_pnls.append(pnl)
+                    self._trade_pnls.append(pnl)
 
-            # Record equity after this step
-            equity_curve.append(self._broker.equity)
+            # Record equity after this step and update peak
+            current_equity = self._broker.equity
+            if current_equity > self._peak_equity:
+                self._peak_equity = current_equity
+            equity_curve.append(current_equity)
             bar_index += 1
 
             # Advance to next bar
@@ -73,7 +77,7 @@ class BacktestRunner:
         # Calculate metrics
         metrics = calculate_metrics(
             equity_curve=equity_curve,
-            trade_pnls=trade_pnls,
+            trade_pnls=self._trade_pnls,
             initial_capital=self._config.initial_capital,
             total_commission=self._broker.total_commission,
         )
@@ -109,22 +113,46 @@ class BacktestRunner:
 
         self._repository.save_signal(signal)
 
-        # Step 3: Risk evaluation
+        # Step 3: Risk evaluation with account state
         position = self._repository.get_current_position(self._config.symbol)
         trades_today = self._repository.get_trades_today(self._config.symbol)
-        decision = self._risk_engine.evaluate(signal, position, trades_today)
+
+        current_equity = self._broker.equity
+        account_state = AccountState(
+            equity=current_equity, peak_equity=self._peak_equity
+        )
+
+        decision = self._risk_engine.evaluate(
+            signal,
+            position,
+            trades_today,
+            account_state=account_state,
+            recent_trade_pnls=self._trade_pnls,
+        )
         self._repository.save_decision(decision)
 
         if decision.action != RiskAction.APPROVED:
             return None
 
-        # Step 4: Place order
+        # Step 4: Calculate position size and place order
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
+        entry_price = bars[-1].close
+
+        quantity = self._risk_engine.calculate_position_size(
+            signal, account_state, entry_price
+        )
+        if quantity <= 0.0:
+            quantity = self._config.position_size
+
+        # Cap at configured max
+        quantity = min(quantity, self._config.position_size)
+
         order = Order(
             signal_id=signal.id,
             symbol=self._config.symbol,
             side=side,
-            quantity=self._config.position_size,
+            quantity=quantity,
+            stop_loss=signal.stop_loss,
         )
 
         trade = self._broker.place_order(order)

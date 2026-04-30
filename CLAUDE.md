@@ -37,7 +37,7 @@ src/aurex_trade/
 ├── metrics.py          # SHARED: PerformanceMetrics + calculate_metrics() (backtest + live)
 ├── domain/
 │   ├── enums.py        # TradingMode, OrderSide, SignalType, OrderStatus, RiskAction
-│   ├── models.py       # Frozen dataclasses: BarData, Signal, Order, Trade, Position, RiskDecision
+│   ├── models.py       # Frozen dataclasses: BarData, Signal, Order, Trade, Position, RiskDecision, AccountState
 │   ├── strategy/
 │   │   ├── base.py     # Strategy Protocol
 │   │   └── sma_crossover.py  # SMA Crossover implementation
@@ -119,6 +119,39 @@ just sweep --strategy sma_crossover --param short_window=5,10,15,20 --param long
 just walk-forward --strategy sma_crossover --param short_window=5,10,20 --param long_window=20,30,50 --spread 0.6
 ```
 
+## Risk Engine
+
+The `RiskEngine` is the mandatory gate between strategy signals and order execution.
+Every signal passes through `evaluate()` — no trade can bypass this check.
+
+### Rules (evaluated in priority order)
+
+| # | Rule | Config | Behavior |
+|---|------|--------|----------|
+| 1 | Kill switch | `RISK_KILL_SWITCH` | Rejects ALL signals immediately |
+| 2 | Stop-loss enforcement | `RISK_REQUIRE_STOP_LOSS` | Rejects signals without a stop_loss price (configurable) |
+| 3 | Max drawdown breaker | `RISK_MAX_DRAWDOWN_PCT` | Halts trading if equity drops >N% from peak |
+| 4 | Consecutive loss pause | `RISK_MAX_CONSECUTIVE_LOSSES` | Halts trading after N losing trades in a row |
+| 5 | Max position size | `RISK_MAX_POSITION_SIZE` | Rejects if position already at limit |
+| 6 | Max daily loss | `RISK_MAX_DAILY_LOSS` | Rejects if daily P&L exceeds loss threshold |
+| 7 | Trade frequency | `RISK_MAX_TRADES_PER_DAY` | Rejects if too many trades today |
+
+### Position Sizing
+
+Dynamic position sizing replaces fixed quantities:
+```
+units = (equity × risk_per_trade) / stop_distance
+```
+Capped at `max_position_size`. Falls back to configured `position_size` when
+stop-loss is not available (i.e., `require_stop_loss=False`).
+
+### Stop-Loss via ATR
+
+The SMA Crossover strategy computes stop-loss using Average True Range:
+- **LONG**: `stop_loss = entry_price - (atr_multiplier × ATR)`
+- **SHORT**: `stop_loss = entry_price + (atr_multiplier × ATR)`
+- Configurable via `STRATEGY_ATR_MULTIPLIER` (default 2.0) and `STRATEGY_ATR_PERIOD` (default 14)
+
 ## Backtesting
 
 The backtesting framework replays historical data through any `Strategy` Protocol
@@ -154,7 +187,8 @@ just backtest --short-window 20 --long-window 50 --spread 0.6 --slippage 0.2
 - **Deterministic**: Same seed + same data = identical results every time
 - **Strategy-agnostic**: Any class satisfying the `Strategy` Protocol works
 - **Realistic costs**: Configurable spread, slippage (randomized per fill), commission
-- **Full risk engine**: Same risk checks as live (position limits, daily loss, trade frequency)
+- **Full risk engine**: Same risk checks as live (stop-loss, drawdown, consecutive losses, position limits, daily loss, trade frequency)
+- **Dynamic position sizing**: Risk-based sizing `units = (equity * risk_pct) / stop_distance`
 
 ### CLI Options (run subcommand)
 
@@ -174,6 +208,10 @@ just backtest --short-window 20 --long-window 50 --spread 0.6 --slippage 0.2
 | `--max-position` | 10 | Risk: max position size |
 | `--max-daily-loss` | 500.0 | Risk: daily loss limit |
 | `--max-trades-per-day` | 100 | Risk: trade frequency limit |
+| `--risk-per-trade` | 0.02 | Risk: fraction of equity per trade |
+| `--max-drawdown-pct` | 0.20 | Risk: max drawdown from peak before halt |
+| `--max-consecutive-losses` | 5 | Risk: pause after N consecutive losses |
+| `--no-require-stop-loss` | (flag) | Disable stop-loss enforcement |
 
 ### Metrics Output
 

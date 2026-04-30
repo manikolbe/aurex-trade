@@ -101,12 +101,18 @@ def main() -> None:
     strategy = SMACrossover(
         short_window=config.strategy.sma_short_window,
         long_window=config.strategy.sma_long_window,
+        atr_multiplier=config.strategy.atr_multiplier,
+        atr_period=config.strategy.atr_period,
     )
     risk_engine = RiskEngine(
         max_position_size=config.risk.max_position_size,
         max_daily_loss=config.risk.max_daily_loss,
         max_trades_per_day=config.risk.max_trades_per_day,
         kill_switch=config.risk.kill_switch,
+        require_stop_loss=config.risk.require_stop_loss,
+        risk_per_trade=config.risk.risk_per_trade,
+        max_drawdown_pct=config.risk.max_drawdown_pct,
+        max_consecutive_losses=config.risk.max_consecutive_losses,
     )
 
     engine = TradingEngine(
