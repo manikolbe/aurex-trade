@@ -34,3 +34,33 @@ class BacktestResult:
     start_date: datetime | None = None
     end_date: datetime | None = None
     parameters: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SweepResult:
+    """Results of a parameter sweep — all runs ranked by metric."""
+
+    results: list[BacktestResult]
+    rank_metric: str
+    symbol: str
+    total_combinations: int
+
+
+@dataclass(frozen=True)
+class WalkForwardWindow:
+    """Results from one train/test window."""
+
+    train_result: BacktestResult
+    test_result: BacktestResult
+    best_params: dict[str, int]
+    window_index: int
+
+
+@dataclass(frozen=True)
+class WalkForwardResult:
+    """Aggregate walk-forward validation results."""
+
+    windows: list[WalkForwardWindow]
+    aggregate_test_metrics: PerformanceMetrics
+    strategy_name: str
+    symbol: str

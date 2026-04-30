@@ -40,6 +40,14 @@ download-data *args='':
 backtest *args='':
     uv run python -m aurex_trade.backtest run {{args}}
 
+# Run parameter sweep (grid search)
+sweep *args='':
+    uv run python -m aurex_trade.backtest sweep {{args}}
+
+# Run walk-forward validation
+walk-forward *args='':
+    uv run python -m aurex_trade.backtest walk-forward {{args}}
+
 # Install/sync dependencies
 sync:
     uv sync

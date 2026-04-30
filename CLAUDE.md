@@ -59,10 +59,12 @@ src/aurex_trade/
 │   └── sqlite/         # SQLite persistence
 ├── backtest/
 │   ├── __main__.py     # Entry point for `python -m aurex_trade.backtest`
-│   ├── cli.py          # CLI subcommands: download-data, run
+│   ├── cli.py          # CLI subcommands: download-data, run, sweep, walk-forward
 │   ├── config.py       # BacktestConfig (Pydantic Settings)
 │   ├── runner.py       # BacktestRunner — core orchestration loop
-│   └── results.py      # BacktestResult, BacktestTradeRecord
+│   ├── sweep.py        # ParameterSweep — grid search over strategy params
+│   ├── walk_forward.py # WalkForwardValidator — train/test window validation
+│   └── results.py      # BacktestResult, SweepResult, WalkForwardResult
 ├── engine/
 │   └── trading_engine.py  # Main trading loop — depends ONLY on ports
 ├── logging.py          # structlog configuration
@@ -109,6 +111,12 @@ just sync       # Install/sync dependencies
 # Backtesting
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
 just backtest --short-window 10 --long-window 30 --capital 100000 --spread 0.6 --slippage 0.2
+
+# Parameter sweep (grid search)
+just sweep --strategy sma_crossover --param short_window=5,10,15,20 --param long_window=20,30,50 --spread 0.6
+
+# Walk-forward validation (train/test on unseen data)
+just walk-forward --strategy sma_crossover --param short_window=5,10,20 --param long_window=20,30,50 --spread 0.6
 ```
 
 ## Backtesting
@@ -178,6 +186,36 @@ just backtest --short-window 20 --long-window 50 --spread 0.6 --slippage 0.2
 | Max Drawdown | Largest peak-to-trough equity drop |
 | Sharpe Ratio | Risk-adjusted return (annualized) |
 
+### Parameter Sweep (Grid Search)
+
+Automatically tests all parameter combinations and ranks by a metric:
+
+```bash
+just sweep --strategy sma_crossover \
+    --param short_window=5,10,15,20 --param long_window=20,30,50,100 \
+    --spread 0.6 --slippage 0.2 --rank-by sharpe_ratio
+```
+
+- Generic `--param key=v1,v2,...` design — works for any strategy
+- Invalid combos filtered automatically (e.g. short >= long for SMA)
+- Deterministic — same inputs always produce identical rankings
+- Strategy registry in `backtest/cli.py` maps names to factory callables
+
+### Walk-Forward Validation
+
+Prevents overfitting by validating best params on unseen data:
+
+```bash
+just walk-forward --strategy sma_crossover \
+    --param short_window=5,10,20 --param long_window=20,30,50 \
+    --train-bars 7200 --test-bars 7200 --spread 0.6
+```
+
+- Non-overlapping windows: Train [Wk1] → Test [Wk2], Train [Wk3] → Test [Wk4], ...
+- Default: 7200 bars train + 7200 bars test = 1 week each (M1)
+- Configurable via `--train-bars` and `--test-bars` for different strategies
+- Aggregates out-of-sample metrics across all test windows
+
 ### Data Storage
 
 Historical bars are stored as CSV in `data/historical/{SYMBOL}_{GRANULARITY}.csv`.
@@ -195,7 +233,10 @@ the existing file for that symbol/granularity pair.
 3. Register it in `app.py` composition root
 4. Add tests in `tests/unit/domain/test_your_strategy.py`
 5. Add configuration params to `StrategyConfig` if needed
-6. Backtest it: add a strategy option in `backtest/cli.py` and run with historical data
+6. Register in `backtest/cli.py`:
+   - Add factory to `STRATEGY_REGISTRY` dict
+   - Add validator to `PARAM_VALIDATORS` dict (if params have constraints)
+7. Sweep/validate: `just sweep --strategy your_strategy --param key=v1,v2`
 
 ### Adding a New Broker Adapter
 
