@@ -89,7 +89,7 @@ class RiskEngine:
                 (account_state.peak_equity - account_state.equity)
                 / account_state.peak_equity
             )
-            if drawdown_pct > self._max_drawdown_pct:
+            if drawdown_pct >= self._max_drawdown_pct:
                 return RiskDecision(
                     signal_id=signal.id,
                     action=RiskAction.REJECTED,

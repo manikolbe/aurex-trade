@@ -244,6 +244,12 @@ class TestMaxDrawdownBreaker:
         assert result.action == RiskAction.REJECTED
         assert "drawdown" in result.reason
 
+    def test_rejected_at_exactly_the_limit(self) -> None:
+        engine = _engine(max_drawdown_pct=0.20)
+        account = AccountState(equity=80_000, peak_equity=100_000)  # exactly 20%
+        result = engine.evaluate(_signal(), None, [], account_state=account)
+        assert result.action == RiskAction.REJECTED
+
     def test_approved_when_drawdown_below_limit(self) -> None:
         engine = _engine(max_drawdown_pct=0.20)
         account = AccountState(equity=85_000, peak_equity=100_000)  # 15% drawdown

@@ -108,7 +108,11 @@ class PaperBrokerAdapter:
     def _update_position(
         self, symbol: str, side: OrderSide, quantity: float, price: float
     ) -> None:
-        """Update in-memory position after a fill."""
+        """Update in-memory position after a fill.
+
+        Mirrors SimulatedBrokerAdapter logic: only realize P&L when closing
+        (or reducing) an existing position, not when opening.
+        """
         current = self._positions.get(symbol)
         current_qty = current.quantity if current else 0.0
         current_cost = current.average_cost if current else 0.0
@@ -116,26 +120,54 @@ class PaperBrokerAdapter:
 
         if side == OrderSide.BUY:
             new_qty = current_qty + quantity
+            if current_qty < 0:
+                # Closing (or reducing) a short — realize P&L
+                close_qty = min(quantity, abs(current_qty))
+                pnl = close_qty * (current_cost - price)
+                realized_pnl += pnl
+                self._capital += pnl
             if new_qty != 0:
-                new_avg = (current_qty * current_cost + quantity * price) / new_qty
+                if current_qty >= 0:
+                    # Adding to long (or opening long)
+                    new_avg = (current_qty * current_cost + quantity * price) / new_qty
+                elif new_qty > 0:
+                    # Flipped from short to long — new cost is buy price
+                    new_avg = price
+                else:
+                    # Reduced short but still short — keep original cost
+                    new_avg = current_cost
             else:
                 new_avg = 0.0
-                # Closing a short: realize P&L
-                realized_pnl += abs(current_qty) * (current_cost - price)
-                self._capital += abs(current_qty) * (current_cost - price)
         else:
             new_qty = current_qty - quantity
-            new_avg = current_cost if new_qty != 0 else 0.0
-            # Realize P&L on the sold portion
-            pnl = quantity * (price - current_cost)
-            realized_pnl += pnl
-            self._capital += pnl
+            if current_qty > 0:
+                # Closing (or reducing) a long — realize P&L
+                close_qty = min(quantity, current_qty)
+                pnl = close_qty * (price - current_cost)
+                realized_pnl += pnl
+                self._capital += pnl
+            if new_qty != 0:
+                if current_qty <= 0:
+                    # Adding to short (or opening short)
+                    total_cost = abs(current_qty) * current_cost + quantity * price
+                    new_avg = total_cost / abs(new_qty)
+                elif new_qty < 0:
+                    # Flipped from long to short — new cost is sell price
+                    new_avg = price
+                else:
+                    # Reduced long but still long — keep original cost
+                    new_avg = current_cost
+            else:
+                new_avg = 0.0
+
+        market_value = new_qty * price if new_qty != 0 else 0.0
+        unrealized = new_qty * (price - new_avg) if new_qty != 0 else 0.0
 
         self._positions[symbol] = Position(
             symbol=symbol,
             quantity=new_qty,
             average_cost=round(new_avg, 4),
-            market_value=round(new_qty * price, 2),
-            unrealized_pnl=round(new_qty * (price - new_avg), 2),
+            market_value=round(market_value, 2),
+            unrealized_pnl=round(unrealized, 2),
             realized_pnl=round(realized_pnl, 2),
         )

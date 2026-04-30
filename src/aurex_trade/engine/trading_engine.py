@@ -200,7 +200,10 @@ class TradingEngine:
             signal, account_state, latest_close
         )
         if quantity <= 0.0:
-            quantity = self._fallback_position_size
+            quantity = min(
+                self._fallback_position_size,
+                float(self._risk_engine._max_position_size),
+            )
 
         order = Order(
             signal_id=signal.id,

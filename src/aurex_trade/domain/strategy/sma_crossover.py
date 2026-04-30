@@ -58,11 +58,11 @@ class SMACrossover:
         entry_price = latest.close
         atr = _calculate_atr(bars, self._atr_period)
 
-        # Calculate stop-loss based on ATR
+        # Calculate stop-loss based on ATR (clamped to sensible bounds)
         stop_loss: float | None = None
         if atr > 0:
             if signal_type == SignalType.LONG:
-                stop_loss = entry_price - (self._atr_multiplier * atr)
+                stop_loss = max(0.0, entry_price - (self._atr_multiplier * atr))
             else:
                 stop_loss = entry_price + (self._atr_multiplier * atr)
 
