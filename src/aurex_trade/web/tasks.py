@@ -52,7 +52,7 @@ class TaskRegistry:
         info = TaskInfo(
             id=task_id,
             task_type=task_type,
-            status=TaskStatus.PENDING,
+            status=TaskStatus.RUNNING,
             created_at=datetime.now(UTC),
         )
 
@@ -61,9 +61,6 @@ class TaskRegistry:
 
         future: Future[object] = self._executor.submit(fn)
         future.add_done_callback(lambda f: self._on_done(task_id, f))
-
-        with self._lock:
-            self._tasks[task_id].status = TaskStatus.RUNNING
 
         return task_id
 
