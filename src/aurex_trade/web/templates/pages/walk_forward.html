@@ -9,11 +9,19 @@
 <div class="collapse collapse-arrow bg-info/10 mb-4">
   <input type="checkbox">
   <div class="collapse-title text-sm font-medium min-h-0 py-2">
-    How does this work?
+    Step 3 of 3 — What am I doing here?
   </div>
   <div class="collapse-content text-sm text-base-content/70">
-    <p class="mb-2"><strong>Walk-Forward Validation</strong> checks whether your best settings actually hold up on data they've never seen — like studying with practice exams, then sitting the real one.</p>
-    <p>It splits your price history into chunks. For each chunk it finds the best settings using the first half ("learning" period), then tests those settings on the second half ("exam" period) where the outcome is unknown. If performance stays consistent across multiple exam periods, the strategy is likely robust — not just memorizing old patterns.</p>
+    <p class="mb-2">This is the final check before you trust a strategy with real money. The sweep (Step 2) found settings that scored best on past data — but were they genuinely good, or just lucky? Walk-forward answers this by testing on data the strategy has never seen.</p>
+    <p class="mb-2"><strong>How it works:</strong> Your price history gets split into alternating chunks. For each pair: the first chunk ("Learning Period") is used to find the best settings, then those settings are tested on the next chunk ("Exam Period") — data the strategy has never seen before. This repeats across multiple pairs.</p>
+    <p class="mb-2"><strong>What to do:</strong> Use the same parameter ranges from your sweep. Set the Learning and Exam period sizes (default 7200 bars = ~1 week of minute data). Hit Run.</p>
+    <p class="mb-2"><strong>Reading the results:</strong></p>
+    <ul class="list-disc list-inside mb-2 text-base-content/60">
+      <li>If most exam periods are profitable → the strategy is robust, not a fluke</li>
+      <li>If performance is wildly inconsistent between exam periods → the settings are fragile, go back to Step 2 and try different ranges</li>
+      <li>Look at which settings get chosen each period — if the same ones keep winning, that's a strong signal</li>
+    </ul>
+    <p class="text-base-content/50 italic">Passes walk-forward? You've found a strategy and settings you can have confidence in. Consider moving to live paper trading via the <a href="/bot" class="link link-primary">Bot</a> page.</p>
   </div>
 </div>
 

@@ -9,11 +9,19 @@
 <div class="collapse collapse-arrow bg-info/10 mb-4">
   <input type="checkbox">
   <div class="collapse-title text-sm font-medium min-h-0 py-2">
-    How does this work?
+    Step 2 of 3 — What am I doing here?
   </div>
   <div class="collapse-content text-sm text-base-content/70">
-    <p class="mb-2"><strong>Parameter Sweep</strong> tries every combination of settings you provide and tells you which ones work best. Think of it like taste-testing recipes — you change one ingredient at a time and keep track of which version scores highest.</p>
-    <p>For the SMA Crossover strategy, this means testing different "lookback" lengths (how far back the averages look) and ranking the results. The winning combination appears at the top — but just because it worked on past data doesn't guarantee it works going forward. Use Walk-Forward to double-check.</p>
+    <p class="mb-2">You've confirmed the strategy works in principle (Step 1). Now instead of manually guessing which settings are best, let the computer try every combination and rank them for you.</p>
+    <p class="mb-2"><strong>What to do:</strong> Set the range of values to try for Short Window and Long Window (start, end, step). For example, Short Window from 5 to 20 in steps of 5 means it will test 5, 10, 15, and 20. The sweep tries every pairing and shows you which scored highest.</p>
+    <p class="mb-2"><strong>Reading the results:</strong> The table shows every combination ranked by your chosen metric (Sharpe Ratio by default). The top row is the "winner" — but be cautious. Just because settings scored highest on past data doesn't guarantee they'll keep working. That's what Step 3 is for.</p>
+    <p class="mb-2"><strong>Tips:</strong></p>
+    <ul class="list-disc list-inside mb-2 text-base-content/60">
+      <li>Start with wide ranges and big steps (fast exploration), then narrow in on promising areas</li>
+      <li>If many nearby settings all score well, that's a good sign — the strategy isn't fragile</li>
+      <li>If only one specific setting works and its neighbours are terrible, be suspicious</li>
+    </ul>
+    <p class="text-base-content/50 italic">Found your best settings? Take them to <a href="/walk-forward" class="link link-primary">Walk-Forward Validation</a> to check they're not a fluke.</p>
   </div>
 </div>
 
