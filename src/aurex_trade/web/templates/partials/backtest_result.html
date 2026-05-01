@@ -1,0 +1,68 @@
+<div>
+  <div class="flex items-center gap-2 mb-3">
+    <h3 class="text-lg font-semibold">{{ result.strategy_name }}</h3>
+    <div class="badge badge-outline badge-sm">{{ result.symbol }}</div>
+    <div class="badge badge-outline badge-sm">{{ result.trade_count }} trades</div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <!-- Metrics -->
+    <div>
+      {% with metrics=result.metrics %}
+      {% include "partials/metrics_table.html" %}
+      {% endwith %}
+      <div class="mt-2 text-xs text-base-content/50">
+        Params: {% for k, v in result.parameters.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+      </div>
+    </div>
+
+    <!-- Equity Curve Chart -->
+    <div>
+      <canvas id="equity-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const data = {{ result.equity_curve | tojson }};
+  const ctx = document.getElementById('equity-chart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map((_, i) => i),
+      datasets: [{
+        label: 'Equity',
+        data: data,
+        borderColor: 'hsl(160, 60%, 50%)',
+        backgroundColor: 'hsla(160, 60%, 50%, 0.1)',
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Equity Curve', color: '#a6adbb' }
+      },
+      scales: {
+        x: {
+          display: true,
+          title: { display: true, text: 'Bar', color: '#a6adbb' },
+          ticks: { color: '#a6adbb', maxTicksLimit: 8 },
+          grid: { color: 'rgba(166,173,187,0.1)' }
+        },
+        y: {
+          display: true,
+          title: { display: true, text: 'Equity ($)', color: '#a6adbb' },
+          ticks: { color: '#a6adbb' },
+          grid: { color: 'rgba(166,173,187,0.1)' }
+        }
+      }
+    }
+  });
+})();
+</script>

@@ -131,6 +131,7 @@ class BacktestResultResponse(BaseModel):
     parameters: dict[str, str]
     trade_count: int
     equity_curve_length: int
+    equity_curve: list[float] = []
 
 
 # --- Sweep ---
@@ -328,6 +329,17 @@ def metrics_to_response(m: PerformanceMetrics) -> MetricsResponse:
     )
 
 
+def _downsample_curve(curve: list[float], max_points: int = 500) -> list[float]:
+    """Downsample an equity curve to at most max_points, keeping first and last."""
+    n = len(curve)
+    if n <= max_points:
+        return curve
+    step = (n - 1) / (max_points - 1)
+    indices = [int(i * step) for i in range(max_points - 1)]
+    indices.append(n - 1)
+    return [curve[i] for i in indices]
+
+
 def backtest_result_to_response(r: BacktestResult) -> BacktestResultResponse:
     """Convert domain BacktestResult to API response."""
     return BacktestResultResponse(
@@ -339,6 +351,7 @@ def backtest_result_to_response(r: BacktestResult) -> BacktestResultResponse:
         parameters=r.parameters,
         trade_count=len(r.trades),
         equity_curve_length=len(r.equity_curve),
+        equity_curve=_downsample_curve(r.equity_curve),
     )
 
 

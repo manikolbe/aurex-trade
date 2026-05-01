@@ -1,0 +1,84 @@
+<div>
+  <div class="flex items-center gap-2 mb-3">
+    <h3 class="text-lg font-semibold">Sweep Results</h3>
+    <div class="badge badge-outline badge-sm">{{ result.symbol }}</div>
+    <div class="badge badge-outline badge-sm">{{ result.total_combinations }} combinations</div>
+    <div class="badge badge-primary badge-sm">Ranked by {{ result.rank_metric }}</div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="table table-sm table-zebra">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Parameters</th>
+          <th>P&L</th>
+          <th>Win Rate</th>
+          <th>Sharpe</th>
+          <th>Profit Factor</th>
+          <th>Max DD</th>
+          <th>Trades</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in result.results %}
+        <tr class="{% if loop.first %}bg-success/10{% endif %}">
+          <td>{{ loop.index }}</td>
+          <td class="font-mono text-xs">
+            {% for k, v in r.parameters.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+          </td>
+          <td class="{% if r.metrics.total_pnl >= 0 %}text-success{% else %}text-error{% endif %}">
+            ${{ "%.2f"|format(r.metrics.total_pnl) }}
+          </td>
+          <td>{{ "%.1f"|format(r.metrics.win_rate * 100) }}%</td>
+          <td>{{ "%.3f"|format(r.metrics.sharpe_ratio) }}</td>
+          <td>{{ "%.2f"|format(r.metrics.profit_factor) }}</td>
+          <td class="text-error">{{ "%.1f"|format(r.metrics.max_drawdown_pct * 100) }}%</td>
+          <td>{{ r.metrics.trade_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if result.results %}
+  <!-- Equity curve of best result -->
+  <div class="mt-4">
+    <h4 class="text-sm font-medium mb-2">Best Result Equity Curve</h4>
+    <canvas id="sweep-equity-chart"></canvas>
+  </div>
+  <script>
+  (function() {
+    const data = {{ result.results[0].equity_curve | tojson }};
+    const ctx = document.getElementById('sweep-equity-chart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i),
+        datasets: [{
+          label: 'Equity (Best)',
+          data: data,
+          borderColor: 'hsl(160, 60%, 50%)',
+          backgroundColor: 'hsla(160, 60%, 50%, 0.1)',
+          fill: true,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          tension: 0.1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Best Parameters - Equity Curve', color: '#a6adbb' }
+        },
+        scales: {
+          x: { ticks: { color: '#a6adbb', maxTicksLimit: 8 }, grid: { color: 'rgba(166,173,187,0.1)' } },
+          y: { ticks: { color: '#a6adbb' }, grid: { color: 'rgba(166,173,187,0.1)' } }
+        }
+      }
+    });
+  })();
+  </script>
+  {% endif %}
+</div>

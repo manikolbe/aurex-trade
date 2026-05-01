@@ -1,0 +1,53 @@
+<div>
+  <div class="flex items-center gap-2 mb-3">
+    <h3 class="text-lg font-semibold">Walk-Forward Results</h3>
+    <div class="badge badge-outline badge-sm">{{ result.symbol }}</div>
+    <div class="badge badge-outline badge-sm">{{ result.strategy_name }}</div>
+    <div class="badge badge-outline badge-sm">{{ result.windows | length }} windows</div>
+  </div>
+
+  <!-- Aggregate Metrics -->
+  <div class="mb-4">
+    <h4 class="text-sm font-medium mb-2">Aggregate Out-of-Sample Performance</h4>
+    {% with metrics=result.aggregate_test_metrics %}
+    {% include "partials/metrics_table.html" %}
+    {% endwith %}
+  </div>
+
+  <!-- Per-Window Results -->
+  <div class="overflow-x-auto">
+    <h4 class="text-sm font-medium mb-2">Per-Window Breakdown</h4>
+    <table class="table table-sm table-zebra">
+      <thead>
+        <tr>
+          <th>Window</th>
+          <th>Best Params</th>
+          <th>Train P&L</th>
+          <th>Train Sharpe</th>
+          <th>Test P&L</th>
+          <th>Test Sharpe</th>
+          <th>Test Win Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in result.windows %}
+        <tr>
+          <td>{{ w.window_index + 1 }}</td>
+          <td class="font-mono text-xs">
+            {% for k, v in w.best_params.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+          </td>
+          <td class="{% if w.train_metrics.total_pnl >= 0 %}text-success{% else %}text-error{% endif %}">
+            ${{ "%.2f"|format(w.train_metrics.total_pnl) }}
+          </td>
+          <td>{{ "%.3f"|format(w.train_metrics.sharpe_ratio) }}</td>
+          <td class="{% if w.test_metrics.total_pnl >= 0 %}text-success{% else %}text-error{% endif %}">
+            ${{ "%.2f"|format(w.test_metrics.total_pnl) }}
+          </td>
+          <td>{{ "%.3f"|format(w.test_metrics.sharpe_ratio) }}</td>
+          <td>{{ "%.1f"|format(w.test_metrics.win_rate * 100) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

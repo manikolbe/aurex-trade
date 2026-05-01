@@ -6,6 +6,8 @@
     <ul class="menu menu-horizontal px-1 gap-1">
       <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a></li>
       <li><a href="/backtest" class="{% if request.url.path == '/backtest' %}active{% endif %}">Backtest</a></li>
+      <li><a href="/sweep" class="{% if request.url.path == '/sweep' %}active{% endif %}">Sweep</a></li>
+      <li><a href="/walk-forward" class="{% if request.url.path == '/walk-forward' %}active{% endif %}">Walk-Forward</a></li>
       <li><a href="/bot" class="{% if request.url.path == '/bot' %}active{% endif %}">Bot</a></li>
       <li><a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}">Settings</a></li>
     </ul>

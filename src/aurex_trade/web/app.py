@@ -55,11 +55,12 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
 
     # Import and include additional routers (lazy to avoid circular imports)
-    from aurex_trade.web.routers import backtest, bot, settings
+    from aurex_trade.web.routers import backtest, bot, htmx, settings
 
     app.include_router(backtest.router)
     app.include_router(bot.router)
     app.include_router(settings.router)
+    app.include_router(htmx.router)
 
     # Page routes (serve HTML templates)
     @app.get("/", response_class=HTMLResponse)
@@ -69,6 +70,14 @@ def create_app() -> FastAPI:
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest_page(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(request, "pages/backtest.html")
+
+    @app.get("/sweep", response_class=HTMLResponse)
+    def sweep_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(request, "pages/sweep.html")
+
+    @app.get("/walk-forward", response_class=HTMLResponse)
+    def walk_forward_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(request, "pages/walk_forward.html")
 
     @app.get("/bot", response_class=HTMLResponse)
     def bot_page(request: Request) -> HTMLResponse:

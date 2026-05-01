@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}aurexTrade - Backtest{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/htmx-ext-json-enc@2.0.4/json-enc.js"></script>
+{% endblock %}
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Backtest</h1>
 
@@ -8,10 +12,22 @@
   <div class="card bg-base-100 shadow-md lg:col-span-1">
     <div class="card-body">
       <h2 class="card-title text-lg">Parameters</h2>
-      <form hx-post="/api/backtest" hx-target="#backtest-result" hx-swap="innerHTML">
+      <form hx-post="/htmx/backtest/submit" hx-target="#backtest-result" hx-swap="innerHTML" hx-ext="json-enc">
+        <!-- Strategy Params -->
         <div class="form-control mb-2">
           <label class="label label-text">Symbol</label>
           <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
+        </div>
+        <div class="form-control mb-2">
+          <label class="label label-text">Granularity</label>
+          <select name="granularity" class="select select-bordered select-sm">
+            <option value="M1" selected>M1</option>
+            <option value="M5">M5</option>
+            <option value="M15">M15</option>
+            <option value="H1">H1</option>
+            <option value="H4">H4</option>
+            <option value="D">D</option>
+          </select>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
@@ -25,24 +41,95 @@
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
-            <label class="label label-text">Capital</label>
-            <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
+            <label class="label label-text">Start Date</label>
+            <input type="date" name="start_date" class="input input-bordered input-sm">
           </div>
           <div class="form-control">
-            <label class="label label-text">Spread</label>
-            <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
+            <label class="label label-text">End Date</label>
+            <input type="date" name="end_date" class="input input-bordered input-sm">
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="form-control">
-            <label class="label label-text">Slippage</label>
-            <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
-          </div>
-          <div class="form-control">
-            <label class="label label-text">Seed</label>
-            <input type="number" name="seed" value="42" class="input input-bordered input-sm">
+
+        <!-- Cost Params -->
+        <div class="collapse collapse-arrow bg-base-200 mt-3">
+          <input type="checkbox">
+          <div class="collapse-title text-sm font-medium py-2 min-h-0">Cost Settings</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-2 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Capital</label>
+                <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Position Size</label>
+                <input type="number" name="position_size" value="1.0" step="0.1" class="input input-bordered input-sm">
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Spread</label>
+                <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Slippage</label>
+                <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Commission</label>
+                <input type="number" name="commission" value="0" step="0.01" class="input input-bordered input-sm">
+              </div>
+            </div>
+            <div class="form-control">
+              <label class="label label-text">Seed</label>
+              <input type="number" name="seed" value="42" class="input input-bordered input-sm">
+            </div>
           </div>
         </div>
+
+        <!-- Risk Params -->
+        <div class="collapse collapse-arrow bg-base-200 mt-2">
+          <input type="checkbox">
+          <div class="collapse-title text-sm font-medium py-2 min-h-0">Risk Settings</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-2 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Max Position</label>
+                <input type="number" name="max_position" value="10" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Max Daily Loss</label>
+                <input type="number" name="max_daily_loss" value="500" class="input input-bordered input-sm">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Risk/Trade</label>
+                <input type="number" name="risk_per_trade" value="0.02" step="0.01" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Max Drawdown %</label>
+                <input type="number" name="max_drawdown_pct" value="0.20" step="0.01" class="input input-bordered input-sm">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Max Trades/Day</label>
+                <input type="number" name="max_trades_per_day" value="100" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Max Consec. Losses</label>
+                <input type="number" name="max_consecutive_losses" value="5" class="input input-bordered input-sm">
+              </div>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox" name="require_stop_loss" checked class="checkbox checkbox-sm">
+                <span class="label-text">Require Stop Loss</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div class="form-control mt-4">
           <button type="submit" class="btn btn-primary btn-sm">Run Backtest</button>
         </div>

@@ -1,0 +1,190 @@
+"""HTMX endpoints that return HTML fragments for the backtest UI."""
+
+from __future__ import annotations
+
+from uuid import UUID
+
+import structlog
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+from aurex_trade.web._run_helpers import (
+    create_backtest_runner,
+    create_sweep_runner,
+    create_walk_forward_runner,
+)
+from aurex_trade.web.dependencies import get_task_registry
+from aurex_trade.web.schemas import (
+    BacktestRequest,
+    SweepRequest,
+    WalkForwardRequest,
+    backtest_result_to_response,
+    sweep_result_to_response,
+    walk_forward_result_to_response,
+)
+from aurex_trade.web.tasks import TaskRegistry, TaskStatus
+
+logger = structlog.get_logger()
+
+router = APIRouter(prefix="/htmx", tags=["htmx"])
+
+
+def _get_templates(request: Request) -> Jinja2Templates:
+    return request.app.state.templates  # type: ignore[no-any-return]
+
+
+# --- Backtest ---
+
+
+@router.post("/backtest/submit", response_class=HTMLResponse)
+def htmx_submit_backtest(
+    request: Request,
+    req: BacktestRequest,
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> HTMLResponse:
+    """Submit a backtest and return a loading fragment that polls for results."""
+    task_id = registry.submit(create_backtest_runner(req), task_type="backtest")
+    logger.info("htmx.backtest.submitted", task_id=str(task_id))
+    templates = _get_templates(request)
+    return templates.TemplateResponse(
+        request, "partials/backtest_loading.html", {"task_id": task_id}
+    )
+
+
+@router.get("/backtest/{task_id}/poll", response_class=HTMLResponse)
+def htmx_poll_backtest(
+    request: Request,
+    task_id: UUID,
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> HTMLResponse:
+    """Poll backtest status. Returns loading/result/error partial."""
+    templates = _get_templates(request)
+    info = registry.get(task_id)
+
+    if info is None:
+        return templates.TemplateResponse(
+            request, "partials/backtest_error.html", {"error": "Task not found"}
+        )
+
+    if info.status == TaskStatus.FAILED:
+        return templates.TemplateResponse(
+            request, "partials/backtest_error.html", {"error": info.error or "Unknown error"}
+        )
+
+    if info.status == TaskStatus.COMPLETED and info.result is not None:
+        from aurex_trade.backtest.results import BacktestResult
+
+        result: BacktestResult = info.result  # type: ignore[assignment]
+        response = backtest_result_to_response(result)
+        return templates.TemplateResponse(
+            request, "partials/backtest_result.html", {"result": response}
+        )
+
+    return templates.TemplateResponse(
+        request, "partials/backtest_loading.html", {"task_id": task_id}
+    )
+
+
+# --- Sweep ---
+
+
+@router.post("/sweep/submit", response_class=HTMLResponse)
+def htmx_submit_sweep(
+    request: Request,
+    req: SweepRequest,
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> HTMLResponse:
+    """Submit a sweep and return a loading fragment that polls for results."""
+    task_id = registry.submit(create_sweep_runner(req), task_type="sweep")
+    logger.info("htmx.sweep.submitted", task_id=str(task_id))
+    templates = _get_templates(request)
+    return templates.TemplateResponse(
+        request, "partials/sweep_loading.html", {"task_id": task_id}
+    )
+
+
+@router.get("/sweep/{task_id}/poll", response_class=HTMLResponse)
+def htmx_poll_sweep(
+    request: Request,
+    task_id: UUID,
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> HTMLResponse:
+    """Poll sweep status. Returns loading/result/error partial."""
+    templates = _get_templates(request)
+    info = registry.get(task_id)
+
+    if info is None:
+        return templates.TemplateResponse(
+            request, "partials/sweep_error.html", {"error": "Task not found"}
+        )
+
+    if info.status == TaskStatus.FAILED:
+        return templates.TemplateResponse(
+            request, "partials/sweep_error.html", {"error": info.error or "Unknown error"}
+        )
+
+    if info.status == TaskStatus.COMPLETED and info.result is not None:
+        from aurex_trade.backtest.results import SweepResult
+
+        result: SweepResult = info.result  # type: ignore[assignment]
+        response = sweep_result_to_response(result)
+        return templates.TemplateResponse(
+            request, "partials/sweep_result.html", {"result": response}
+        )
+
+    return templates.TemplateResponse(
+        request, "partials/sweep_loading.html", {"task_id": task_id}
+    )
+
+
+# --- Walk-Forward ---
+
+
+@router.post("/walk-forward/submit", response_class=HTMLResponse)
+def htmx_submit_walk_forward(
+    request: Request,
+    req: WalkForwardRequest,
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> HTMLResponse:
+    """Submit walk-forward validation and return a loading fragment."""
+    task_id = registry.submit(create_walk_forward_runner(req), task_type="walk_forward")
+    logger.info("htmx.walk_forward.submitted", task_id=str(task_id))
+    templates = _get_templates(request)
+    return templates.TemplateResponse(
+        request, "partials/wf_loading.html", {"task_id": task_id}
+    )
+
+
+@router.get("/walk-forward/{task_id}/poll", response_class=HTMLResponse)
+def htmx_poll_walk_forward(
+    request: Request,
+    task_id: UUID,
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> HTMLResponse:
+    """Poll walk-forward status. Returns loading/result/error partial."""
+    templates = _get_templates(request)
+    info = registry.get(task_id)
+
+    if info is None:
+        return templates.TemplateResponse(
+            request, "partials/wf_error.html", {"error": "Task not found"}
+        )
+
+    if info.status == TaskStatus.FAILED:
+        return templates.TemplateResponse(
+            request, "partials/wf_error.html", {"error": info.error or "Unknown error"}
+        )
+
+    if info.status == TaskStatus.COMPLETED and info.result is not None:
+        from aurex_trade.backtest.results import WalkForwardResult
+
+        result: WalkForwardResult = info.result  # type: ignore[assignment]
+        response = walk_forward_result_to_response(result)
+        return templates.TemplateResponse(
+            request, "partials/wf_result.html", {"result": response}
+        )
+
+    return templates.TemplateResponse(
+        request, "partials/wf_loading.html", {"task_id": task_id}
+    )

@@ -1,0 +1,48 @@
+<div class="overflow-x-auto">
+  <table class="table table-sm table-zebra">
+    <tbody>
+      <tr>
+        <td class="font-medium">Total P&L</td>
+        <td class="text-right {% if metrics.total_pnl >= 0 %}text-success{% else %}text-error{% endif %}">
+          ${{ "%.2f"|format(metrics.total_pnl) }}
+        </td>
+      </tr>
+      <tr>
+        <td class="font-medium">Win Rate</td>
+        <td class="text-right">{{ "%.1f"|format(metrics.win_rate * 100) }}%</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Trades</td>
+        <td class="text-right">{{ metrics.trade_count }} ({{ metrics.win_count }}W / {{ metrics.loss_count }}L)</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Sharpe Ratio</td>
+        <td class="text-right">{{ "%.3f"|format(metrics.sharpe_ratio) }}</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Profit Factor</td>
+        <td class="text-right">{{ "%.2f"|format(metrics.profit_factor) }}</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Expectancy</td>
+        <td class="text-right">${{ "%.2f"|format(metrics.expectancy) }}</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Max Drawdown</td>
+        <td class="text-right text-error">${{ "%.2f"|format(metrics.max_drawdown) }} ({{ "%.1f"|format(metrics.max_drawdown_pct * 100) }}%)</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Initial Capital</td>
+        <td class="text-right">${{ "%.2f"|format(metrics.initial_capital) }}</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Final Capital</td>
+        <td class="text-right">${{ "%.2f"|format(metrics.final_capital) }}</td>
+      </tr>
+      <tr>
+        <td class="font-medium">Commission</td>
+        <td class="text-right">${{ "%.2f"|format(metrics.total_commission) }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

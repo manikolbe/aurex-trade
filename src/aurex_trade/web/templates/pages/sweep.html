@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}aurexTrade - Parameter Sweep{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/htmx-ext-json-enc@2.0.4/json-enc.js"></script>
+{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Parameter Sweep</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <!-- Sweep Form -->
+  <div class="card bg-base-100 shadow-md lg:col-span-1">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Configuration</h2>
+      <form id="sweep-form" hx-post="/htmx/sweep/submit" hx-target="#sweep-result" hx-swap="innerHTML" hx-ext="json-enc">
+        <div class="form-control mb-2">
+          <label class="label label-text">Strategy</label>
+          <select name="strategy" class="select select-bordered select-sm">
+            <option value="sma_crossover" selected>SMA Crossover</option>
+          </select>
+        </div>
+        <div class="form-control mb-2">
+          <label class="label label-text">Symbol</label>
+          <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
+        </div>
+
+        <!-- Parameter Grid -->
+        <div class="bg-base-200 rounded-lg p-3 mb-2">
+          <h3 class="text-sm font-medium mb-2">Parameter Ranges</h3>
+          <div class="form-control mb-2">
+            <label class="label label-text text-xs">Short Window (start, end, step)</label>
+            <div class="grid grid-cols-3 gap-1">
+              <input type="number" id="sw-start" value="5" class="input input-bordered input-sm">
+              <input type="number" id="sw-end" value="20" class="input input-bordered input-sm">
+              <input type="number" id="sw-step" value="5" class="input input-bordered input-sm">
+            </div>
+          </div>
+          <div class="form-control">
+            <label class="label label-text text-xs">Long Window (start, end, step)</label>
+            <div class="grid grid-cols-3 gap-1">
+              <input type="number" id="lw-start" value="20" class="input input-bordered input-sm">
+              <input type="number" id="lw-end" value="50" class="input input-bordered input-sm">
+              <input type="number" id="lw-step" value="10" class="input input-bordered input-sm">
+            </div>
+          </div>
+        </div>
+
+        <!-- Hidden field for params (populated by JS) -->
+        <input type="hidden" name="params" id="params-json">
+
+        <div class="form-control mb-2">
+          <label class="label label-text">Rank By</label>
+          <select name="rank_by" class="select select-bordered select-sm">
+            <option value="sharpe_ratio" selected>Sharpe Ratio</option>
+            <option value="total_pnl">Total P&L</option>
+            <option value="profit_factor">Profit Factor</option>
+            <option value="win_rate">Win Rate</option>
+          </select>
+        </div>
+
+        <!-- Cost Params -->
+        <div class="collapse collapse-arrow bg-base-200 mt-2">
+          <input type="checkbox">
+          <div class="collapse-title text-sm font-medium py-2 min-h-0">Cost & Risk Settings</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-2 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Capital</label>
+                <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Spread</label>
+                <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="form-control">
+                <label class="label label-text">Slippage</label>
+                <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
+              </div>
+              <div class="form-control">
+                <label class="label label-text">Seed</label>
+                <input type="number" name="seed" value="42" class="input input-bordered input-sm">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-control mt-4">
+          <button type="submit" class="btn btn-primary btn-sm">Run Sweep</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card bg-base-100 shadow-md lg:col-span-2">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Results</h2>
+      <div id="sweep-result">
+        <p class="text-base-content/50">Configure parameters and run a sweep to see ranked results.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function generateRange(start, end, step) {
+  const values = [];
+  for (let i = start; i <= end; i += step) {
+    values.push(i);
+  }
+  return values;
+}
+
+document.getElementById('sweep-form').addEventListener('htmx:configRequest', function(evt) {
+  const swStart = parseInt(document.getElementById('sw-start').value);
+  const swEnd = parseInt(document.getElementById('sw-end').value);
+  const swStep = parseInt(document.getElementById('sw-step').value);
+  const lwStart = parseInt(document.getElementById('lw-start').value);
+  const lwEnd = parseInt(document.getElementById('lw-end').value);
+  const lwStep = parseInt(document.getElementById('lw-step').value);
+
+  const params = {
+    short_window: generateRange(swStart, swEnd, swStep),
+    long_window: generateRange(lwStart, lwEnd, lwStep)
+  };
+
+  evt.detail.parameters['params'] = params;
+  // Remove the range inputs from submission
+  delete evt.detail.parameters['sw-start'];
+  delete evt.detail.parameters['sw-end'];
+  delete evt.detail.parameters['sw-step'];
+  delete evt.detail.parameters['lw-start'];
+  delete evt.detail.parameters['lw-end'];
+  delete evt.detail.parameters['lw-step'];
+  delete evt.detail.parameters['params-json'];
+});
+</script>
+{% endblock %}
