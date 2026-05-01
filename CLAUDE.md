@@ -72,6 +72,7 @@ src/aurex_trade/
 │   ├── __main__.py     # Entry point for `python -m aurex_trade.web`
 │   ├── app.py          # FastAPI app factory (composition root)
 │   ├── config.py       # WebConfig (Pydantic Settings)
+│   ├── errors.py       # Exception handlers (JSON for API, HTML for HTMX)
 │   ├── schemas.py      # Pydantic request/response models
 │   ├── tasks.py        # Background task registry (ThreadPoolExecutor)
 │   ├── dependencies.py # FastAPI Depends callables
@@ -295,6 +296,23 @@ CLI — no domain changes needed.
 - **Templates**: Jinja2 + HTMX (polling via `hx-get` + `hx-trigger`)
 - **Charts**: Chart.js via CDN — equity curves rendered in result partials
 - **Styling**: DaisyUI + Tailwind via CDN (no bundler)
+
+### Error Responses
+
+All `/api/*` errors return a consistent JSON schema — never HTML or stack traces:
+
+```json
+{"error": "Human-readable message", "detail": "Field-level info or null", "status_code": 422}
+```
+
+| Status | When | `detail` contains |
+|--------|------|-------------------|
+| 422 | Request validation fails | Semicolon-separated field errors |
+| 4xx | HTTPException raised in a route | `null` |
+| 500 | Unhandled exception | `null` (traceback logged server-side only) |
+
+HTMX routes (`/htmx/*`) return HTML error fragments (DaisyUI alert) instead of JSON
+so the UI can swap them in-place without extra handling.
 
 ### API Endpoints (JSON)
 

@@ -68,7 +68,7 @@ class TestBacktestPoll:
         """Polling unknown task_id returns 404."""
         resp = client.get(f"/api/backtest/{uuid4()}")
         assert resp.status_code == 404
-        assert resp.json()["detail"] == "Task not found"
+        assert resp.json()["error"] == "Task not found"
 
     def test_running_task_returns_status(self, client: TestClient) -> None:
         """Polling a running task returns TaskStatusResponse."""

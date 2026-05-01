@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from aurex_trade.logging import setup_logging
 from aurex_trade.web.config import WebConfig
+from aurex_trade.web.errors import register_error_handlers
 from aurex_trade.web.routers import health
 from aurex_trade.web.tasks import TaskRegistry
 
@@ -43,6 +44,9 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    # Error handlers
+    register_error_handlers(app)
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
