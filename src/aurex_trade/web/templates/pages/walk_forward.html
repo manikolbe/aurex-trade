@@ -6,6 +6,17 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Walk-Forward Validation</h1>
 
+<div class="collapse collapse-arrow bg-info/10 mb-4">
+  <input type="checkbox">
+  <div class="collapse-title text-sm font-medium min-h-0 py-2">
+    How does this work?
+  </div>
+  <div class="collapse-content text-sm text-base-content/70">
+    <p class="mb-2"><strong>Walk-Forward Validation</strong> checks whether your best settings actually hold up on data they've never seen — like studying with practice exams, then sitting the real one.</p>
+    <p>It splits your price history into chunks. For each chunk it finds the best settings using the first half ("learning" period), then tests those settings on the second half ("exam" period) where the outcome is unknown. If performance stays consistent across multiple exam periods, the strategy is likely robust — not just memorizing old patterns.</p>
+  </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
   <!-- Walk-Forward Form -->
   <div class="card bg-base-100 shadow-md lg:col-span-1">
@@ -13,33 +24,33 @@
       <h2 class="card-title text-lg">Configuration</h2>
       <form id="wf-form">
         <div class="form-control mb-2">
-          <label class="label label-text">Strategy</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="Which trading approach to test">Strategy</label>
           <select name="strategy" class="select select-bordered select-sm">
             <option value="sma_crossover" selected>SMA Crossover</option>
           </select>
         </div>
         <div class="form-control mb-2">
-          <label class="label label-text">Symbol</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="What to trade (e.g. XAU_USD = Gold vs US Dollar)">Symbol</label>
           <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
         </div>
 
         <!-- Window Config -->
         <div class="grid grid-cols-2 gap-2 mb-2">
           <div class="form-control">
-            <label class="label label-text">Train Bars</label>
+            <label class="label label-text tooltip tooltip-top" data-tip="Price points used to find best settings">Learning Period (bars)</label>
             <input type="number" name="train_bars" value="7200" class="input input-bordered input-sm">
           </div>
           <div class="form-control">
-            <label class="label label-text">Test Bars</label>
+            <label class="label label-text tooltip tooltip-top" data-tip="Unseen price points to test settings on">Exam Period (bars)</label>
             <input type="number" name="test_bars" value="7200" class="input input-bordered input-sm">
           </div>
         </div>
 
         <!-- Parameter Grid -->
         <div class="bg-base-200 rounded-lg p-3 mb-2">
-          <h3 class="text-sm font-medium mb-2">Parameter Ranges</h3>
+          <h3 class="text-sm font-medium mb-2 tooltip tooltip-top" data-tip="Every combination of start to end in steps">Parameter Ranges</h3>
           <div class="form-control mb-2">
-            <label class="label label-text text-xs">Short Window (start, end, step)</label>
+            <label class="label label-text text-xs tooltip tooltip-top" data-tip="'Fast' average lookback length">Short Window (start, end, step)</label>
             <div class="grid grid-cols-3 gap-1">
               <input type="number" id="wf-sw-start" value="5" class="input input-bordered input-sm">
               <input type="number" id="wf-sw-end" value="20" class="input input-bordered input-sm">
@@ -47,7 +58,7 @@
             </div>
           </div>
           <div class="form-control">
-            <label class="label label-text text-xs">Long Window (start, end, step)</label>
+            <label class="label label-text text-xs tooltip tooltip-top" data-tip="'Slow' average lookback length">Long Window (start, end, step)</label>
             <div class="grid grid-cols-3 gap-1">
               <input type="number" id="wf-lw-start" value="20" class="input input-bordered input-sm">
               <input type="number" id="wf-lw-end" value="50" class="input input-bordered input-sm">
@@ -57,7 +68,7 @@
         </div>
 
         <div class="form-control mb-2">
-          <label class="label label-text">Rank By</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="How to sort results (best at top)">Rank By</label>
           <select name="rank_by" class="select select-bordered select-sm">
             <option value="sharpe_ratio" selected>Sharpe Ratio</option>
             <option value="total_pnl">Total P&L</option>
@@ -72,21 +83,21 @@
           <div class="collapse-content">
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Capital</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Starting balance (USD)">Capital</label>
                 <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Spread</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Broker fee per trade">Spread</label>
                 <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Slippage</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Random price shift (real-world delays)">Slippage</label>
                 <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Seed</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Same number = same outcome">Seed</label>
                 <input type="number" name="seed" value="42" class="input input-bordered input-sm">
               </div>
             </div>

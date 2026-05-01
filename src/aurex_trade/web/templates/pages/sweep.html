@@ -6,6 +6,17 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Parameter Sweep</h1>
 
+<div class="collapse collapse-arrow bg-info/10 mb-4">
+  <input type="checkbox">
+  <div class="collapse-title text-sm font-medium min-h-0 py-2">
+    How does this work?
+  </div>
+  <div class="collapse-content text-sm text-base-content/70">
+    <p class="mb-2"><strong>Parameter Sweep</strong> tries every combination of settings you provide and tells you which ones work best. Think of it like taste-testing recipes — you change one ingredient at a time and keep track of which version scores highest.</p>
+    <p>For the SMA Crossover strategy, this means testing different "lookback" lengths (how far back the averages look) and ranking the results. The winning combination appears at the top — but just because it worked on past data doesn't guarantee it works going forward. Use Walk-Forward to double-check.</p>
+  </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
   <!-- Sweep Form -->
   <div class="card bg-base-100 shadow-md lg:col-span-1">
@@ -13,21 +24,21 @@
       <h2 class="card-title text-lg">Configuration</h2>
       <form id="sweep-form">
         <div class="form-control mb-2">
-          <label class="label label-text">Strategy</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="Which trading approach to test">Strategy</label>
           <select name="strategy" class="select select-bordered select-sm">
             <option value="sma_crossover" selected>SMA Crossover</option>
           </select>
         </div>
         <div class="form-control mb-2">
-          <label class="label label-text">Symbol</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="What to trade (e.g. XAU_USD = Gold vs US Dollar)">Symbol</label>
           <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
         </div>
 
         <!-- Parameter Grid -->
         <div class="bg-base-200 rounded-lg p-3 mb-2">
-          <h3 class="text-sm font-medium mb-2">Parameter Ranges</h3>
+          <h3 class="text-sm font-medium mb-2 tooltip tooltip-top" data-tip="Every combination of start to end in steps">Parameter Ranges</h3>
           <div class="form-control mb-2">
-            <label class="label label-text text-xs">Short Window (start, end, step)</label>
+            <label class="label label-text text-xs tooltip tooltip-top" data-tip="'Fast' average lookback length">Short Window (start, end, step)</label>
             <div class="grid grid-cols-3 gap-1">
               <input type="number" id="sw-start" value="5" class="input input-bordered input-sm">
               <input type="number" id="sw-end" value="20" class="input input-bordered input-sm">
@@ -35,7 +46,7 @@
             </div>
           </div>
           <div class="form-control">
-            <label class="label label-text text-xs">Long Window (start, end, step)</label>
+            <label class="label label-text text-xs tooltip tooltip-top" data-tip="'Slow' average lookback length">Long Window (start, end, step)</label>
             <div class="grid grid-cols-3 gap-1">
               <input type="number" id="lw-start" value="20" class="input input-bordered input-sm">
               <input type="number" id="lw-end" value="50" class="input input-bordered input-sm">
@@ -45,7 +56,7 @@
         </div>
 
         <div class="form-control mb-2">
-          <label class="label label-text">Rank By</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="How to sort results (best at top)">Rank By</label>
           <select name="rank_by" class="select select-bordered select-sm">
             <option value="sharpe_ratio" selected>Sharpe Ratio</option>
             <option value="total_pnl">Total P&L</option>
@@ -61,21 +72,21 @@
           <div class="collapse-content">
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Capital</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Starting balance (USD)">Capital</label>
                 <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Spread</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Broker fee per trade">Spread</label>
                 <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Slippage</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Random price shift (real-world delays)">Slippage</label>
                 <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Seed</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Same number = same outcome">Seed</label>
                 <input type="number" name="seed" value="42" class="input input-bordered input-sm">
               </div>
             </div>

@@ -1,21 +1,51 @@
 {% extends "base.html" %}
-{% block title %}aurexTrade - Dashboard{% endblock %}
+{% block title %}aurexTrade{% endblock %}
 {% block content %}
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-  <div class="card bg-base-100 shadow-md">
-    <div class="card-body">
-      <h2 class="card-title">Backtest</h2>
-      <p>Run backtests, parameter sweeps, and walk-forward validation.</p>
-      <div class="card-actions justify-end">
-        <a href="/backtest" class="btn btn-primary btn-sm">Open</a>
-      </div>
+
+<!-- Strategy Testing Workflow -->
+<div class="card bg-base-100 shadow-md">
+  <div class="card-body">
+    <h2 class="card-title text-xl">Strategy Testing</h2>
+    <p class="text-sm text-base-content/70 mb-3">Trading strategies are just rules that decide when to buy and sell. But how do you know if those rules actually work? You test them — carefully, in stages — before risking real money. Here's the process:</p>
+
+    <div class="bg-base-200 rounded-lg p-3 mb-4 text-sm">
+      <p class="font-medium mb-2">Example — SMA Crossover on Gold</p>
+      <p class="text-base-content/70">This strategy watches two moving averages of the gold price — a "fast" one (say, the last 10 prices) and a "slow" one (say, the last 30 prices). When the fast average crosses <em>above</em> the slow one, it means prices are picking up momentum → buy. When it crosses <em>below</em> → sell. The numbers 10 and 30 are the "settings" you'll tune in the steps below.</p>
     </div>
+
+    <ul class="steps steps-vertical text-sm">
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <strong><a href="/backtest" class="link link-primary">1. Backtest</a></strong>
+          <p class="text-base-content/70 mt-1">Replay past price data and pretend you were trading with your strategy. Did it make money? How much did it lose at its worst? How often did it win? Think of it like watching a recording of a football match and seeing how your game plan would have played out. This is your first sanity check — if it doesn't work on old data, it won't work on new data either.</p>
+          <p class="text-base-content/50 mt-1 italic">e.g. "Run SMA Crossover with fast=10, slow=30 on last week's gold prices → it made $420 with a 58% win rate. Okay, the idea has legs."</p>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <strong><a href="/sweep" class="link link-primary">2. Parameter Sweep</a></strong>
+          <p class="text-base-content/70 mt-1">Every strategy has settings you can tweak (like how sensitive it is to price changes). A sweep tests <em>every</em> combination of settings and ranks the results — so instead of guessing, you find out which settings actually performed best. It's like trying every dial position on a radio to find the clearest signal.</p>
+          <p class="text-base-content/50 mt-1 italic">e.g. "Try fast=5,10,15,20 and slow=20,30,40,50 — that's 16 combinations. The sweep tells you fast=15, slow=40 scored best."</p>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <strong><a href="/walk-forward" class="link link-primary">3. Walk-Forward Validation</a></strong>
+          <p class="text-base-content/70 mt-1">Here's the catch: the "best" settings from a sweep might just be lucky — they fit the past perfectly but fall apart on new data (like memorizing answers to a specific test instead of actually learning the subject). Walk-forward solves this by repeatedly finding the best settings on one chunk of data, then testing them on the <em>next</em> chunk they've never seen. If performance holds up across multiple unseen chunks, the strategy is genuinely robust — not just a fluke. If it fails here, go back to step 2 and try different ranges.</p>
+          <p class="text-base-content/50 mt-1 italic">e.g. "Week 1 data picks fast=15, slow=40 as best → test on Week 2 (unseen) → still profitable? Week 3 picks best → test on Week 4 → still works? Great, you can trust these settings."</p>
+        </div>
+      </li>
+    </ul>
   </div>
+</div>
+
+<!-- Operations -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title">Trading Bot</h2>
-      <p>Start, stop, and monitor the live trading engine.</p>
-      <div class="card-actions justify-end">
+      <p class="text-sm text-base-content/70">Start, stop, and monitor the live trading engine.</p>
+      <div class="card-actions justify-end mt-2">
         <a href="/bot" class="btn btn-primary btn-sm">Open</a>
       </div>
     </div>
@@ -23,22 +53,68 @@
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title">Settings</h2>
-      <p>View and manage application configuration.</p>
-      <div class="card-actions justify-end">
+      <p class="text-sm text-base-content/70">View and manage application configuration.</p>
+      <div class="card-actions justify-end mt-2">
         <a href="/settings" class="btn btn-primary btn-sm">Open</a>
       </div>
     </div>
   </div>
 </div>
 
+<!-- System Health -->
 <div class="mt-6">
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title">System Health</h2>
-      <div id="health-status" hx-get="/api/health" hx-trigger="load, every 10s" hx-swap="innerHTML">
-        <span class="loading loading-spinner loading-sm"></span> Checking...
+      <div id="health-status">
+        <div class="flex items-center gap-2 text-sm text-base-content/50">
+          <span class="loading loading-spinner loading-xs"></span> Checking...
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<script>
+function updateHealth() {
+  fetch('/api/health')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('health-status');
+      const isOk = data.status === 'ok';
+      const time = new Date(data.timestamp).toLocaleTimeString();
+      el.innerHTML = `
+        <div class="flex items-center gap-4 flex-wrap">
+          <div class="flex items-center gap-2">
+            <div class="badge ${isOk ? 'badge-success' : 'badge-error'} gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                ${isOk
+                  ? '<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>'
+                  : '<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>'}
+              </svg>
+              ${isOk ? 'Healthy' : 'Unhealthy'}
+            </div>
+          </div>
+          <span class="text-sm text-base-content/50">Version ${data.version}</span>
+          <span class="text-sm text-base-content/50">Last checked: ${time}</span>
+        </div>
+      `;
+    })
+    .catch(() => {
+      document.getElementById('health-status').innerHTML = `
+        <div class="flex items-center gap-2">
+          <div class="badge badge-error gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+            Unreachable
+          </div>
+          <span class="text-sm text-base-content/50">Server not responding</span>
+        </div>
+      `;
+    });
+}
+updateHealth();
+setInterval(updateHealth, 10000);
+</script>
 {% endblock %}

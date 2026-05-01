@@ -6,6 +6,17 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Backtest</h1>
 
+<div class="collapse collapse-arrow bg-info/10 mb-4">
+  <input type="checkbox">
+  <div class="collapse-title text-sm font-medium min-h-0 py-2">
+    How does this work?
+  </div>
+  <div class="collapse-content text-sm text-base-content/70">
+    <p class="mb-2"><strong>Backtesting</strong> lets you test a trading strategy against past price data — like a "what if" simulation. You'll see whether the strategy would have made or lost money, how risky it was, and how often it won.</p>
+    <p><strong>SMA Crossover strategy:</strong> Compares two price averages — one that reacts quickly (short) and one that reacts slowly (long). When the fast average rises above the slow one, prices are trending up → buy. When it drops below → sell. The "window" numbers control how many past price points each average looks at.</p>
+  </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
   <!-- Backtest Form -->
   <div class="card bg-base-100 shadow-md lg:col-span-1">
@@ -14,11 +25,11 @@
       <form id="backtest-form" hx-target="#backtest-result" hx-swap="innerHTML">
         <!-- Strategy Params -->
         <div class="form-control mb-2">
-          <label class="label label-text">Symbol</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="What to trade (e.g. XAU_USD = Gold vs US Dollar)">Symbol</label>
           <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
         </div>
         <div class="form-control mb-2">
-          <label class="label label-text">Granularity</label>
+          <label class="label label-text tooltip tooltip-top" data-tip="How often prices are sampled — M1=every minute, H1=hourly, D=daily">Granularity</label>
           <select name="granularity" class="select select-bordered select-sm">
             <option value="M1" selected>M1</option>
             <option value="M5">M5</option>
@@ -30,21 +41,21 @@
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
-            <label class="label label-text">Short Window</label>
+            <label class="label label-text tooltip tooltip-top" data-tip="How many recent prices the 'fast' average uses (smaller = reacts quicker)">Short Window</label>
             <input type="number" name="short_window" value="10" class="input input-bordered input-sm">
           </div>
           <div class="form-control">
-            <label class="label label-text">Long Window</label>
+            <label class="label label-text tooltip tooltip-top" data-tip="How many recent prices the 'slow' average uses (larger = smoother, less jumpy)">Long Window</label>
             <input type="number" name="long_window" value="30" class="input input-bordered input-sm">
           </div>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
-            <label class="label label-text">Start Date</label>
+            <label class="label label-text tooltip tooltip-top" data-tip="Start of date range to test (leave empty for all data)">Start Date</label>
             <input type="date" name="start_date" class="input input-bordered input-sm">
           </div>
           <div class="form-control">
-            <label class="label label-text">End Date</label>
+            <label class="label label-text tooltip tooltip-top" data-tip="End of date range to test (leave empty for all data)">End Date</label>
             <input type="date" name="end_date" class="input input-bordered input-sm">
           </div>
         </div>
@@ -56,30 +67,30 @@
           <div class="collapse-content">
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Capital</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="How much money to start with (USD)">Capital</label>
                 <input type="number" name="capital" value="100000" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Position Size</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="How many units to buy/sell per trade">Position Size</label>
                 <input type="number" name="position_size" value="1.0" step="0.1" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div class="form-control">
-                <label class="label label-text">Spread</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Broker fee per trade">Spread</label>
                 <input type="number" name="spread" value="0.6" step="0.1" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Slippage</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Random price shift (real-world delays)">Slippage</label>
                 <input type="number" name="slippage" value="0.2" step="0.1" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Commission</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Fixed fee per trade">Commission</label>
                 <input type="number" name="commission" value="0" step="0.01" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="form-control">
-              <label class="label label-text">Seed</label>
+              <label class="label label-text tooltip tooltip-top" data-tip="Same number = same outcome (repeatability)">Seed</label>
               <input type="number" name="seed" value="42" class="input input-bordered input-sm">
             </div>
           </div>
@@ -92,36 +103,36 @@
           <div class="collapse-content">
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Max Position</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Largest trade size allowed">Max Position</label>
                 <input type="number" name="max_position" value="10" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Max Daily Loss</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Stop if daily losses hit this">Max Daily Loss</label>
                 <input type="number" name="max_daily_loss" value="500" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Risk/Trade</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Balance risked per trade (0.02 = 2%)">Risk/Trade</label>
                 <input type="number" name="risk_per_trade" value="0.02" step="0.01" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Max Drawdown %</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Stop if balance drops this far from peak">Max Drawdown %</label>
                 <input type="number" name="max_drawdown_pct" value="0.20" step="0.01" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div class="form-control">
-                <label class="label label-text">Max Trades/Day</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Max trades per day">Max Trades/Day</label>
                 <input type="number" name="max_trades_per_day" value="100" class="input input-bordered input-sm">
               </div>
               <div class="form-control">
-                <label class="label label-text">Max Consec. Losses</label>
+                <label class="label label-text tooltip tooltip-top" data-tip="Pause after this many losses in a row">Max Consec. Losses</label>
                 <input type="number" name="max_consecutive_losses" value="5" class="input input-bordered input-sm">
               </div>
             </div>
             <div class="form-control">
-              <label class="label cursor-pointer justify-start gap-2">
+              <label class="label cursor-pointer justify-start gap-2 tooltip tooltip-top" data-tip="Only allow trades with a safety exit price">
                 <span class="label-text">Require Stop Loss</span>
                 <input type="checkbox" id="require-stop-loss-cb" checked class="toggle toggle-sm toggle-primary">
               </label>
