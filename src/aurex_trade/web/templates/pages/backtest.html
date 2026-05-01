@@ -123,9 +123,10 @@
             </div>
             <div class="form-control">
               <label class="label cursor-pointer justify-start gap-2">
-                <input type="checkbox" name="require_stop_loss" checked class="checkbox checkbox-sm">
                 <span class="label-text">Require Stop Loss</span>
+                <input type="checkbox" id="require-stop-loss-cb" checked class="toggle toggle-sm toggle-primary">
               </label>
+              <input type="hidden" name="require_stop_loss" id="require-stop-loss-val" value="true">
             </div>
           </div>
         </div>
@@ -147,4 +148,10 @@
     </div>
   </div>
 </div>
+
+<script>
+document.getElementById('require-stop-loss-cb').addEventListener('change', function() {
+  document.getElementById('require-stop-loss-val').value = this.checked ? 'true' : 'false';
+});
+</script>
 {% endblock %}

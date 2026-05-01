@@ -75,8 +75,11 @@ src/aurex_trade/
 │   ├── schemas.py      # Pydantic request/response models
 │   ├── tasks.py        # Background task registry (ThreadPoolExecutor)
 │   ├── dependencies.py # FastAPI Depends callables
-│   ├── routers/        # API route handlers (health, backtest, bot, settings)
+│   ├── _run_helpers.py # Shared runner factories (backtest/sweep/walk-forward)
+│   ├── routers/        # API route handlers (health, backtest, bot, settings, htmx)
 │   ├── templates/      # Jinja2 + HTMX templates (DaisyUI via CDN)
+│   │   ├── pages/      # Full page templates (backtest, sweep, walk_forward, bot, settings)
+│   │   └── partials/   # HTMX fragments (loading, result, error for each task type)
 │   └── static/         # CSS assets
 ├── logging.py          # structlog configuration
 └── __main__.py         # Entry point for `python -m aurex_trade`
@@ -285,10 +288,15 @@ CLI — no domain changes needed.
 - **Background tasks**: `TaskRegistry` uses `ThreadPoolExecutor(max_workers=2)` for
   CPU-bound backtest/sweep/walk-forward jobs
 - **API pattern**: POST submits job → returns `task_id` → GET polls status/result
+- **HTMX pattern**: POST submits via `json-enc` → returns loading HTML with
+  `hx-trigger="every 2s"` → polls until done → swaps in results fragment
+- **Dual routers**: `/api/*` returns JSON (programmatic), `/htmx/*` returns HTML (UI)
+- **Runner helpers**: `_run_helpers.py` shared by both routers (no duplication)
 - **Templates**: Jinja2 + HTMX (polling via `hx-get` + `hx-trigger`)
+- **Charts**: Chart.js via CDN — equity curves rendered in result partials
 - **Styling**: DaisyUI + Tailwind via CDN (no bundler)
 
-### API Endpoints
+### API Endpoints (JSON)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -303,6 +311,28 @@ CLI — no domain changes needed.
 | POST | `/api/bot/stop` | Stop trading bot (stub) |
 | GET | `/api/bot/status` | Bot running status |
 | GET | `/api/settings` | Current config (secrets redacted) |
+
+### HTMX Endpoints (HTML fragments)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/htmx/backtest/submit` | Submit backtest, return loading partial |
+| GET | `/htmx/backtest/{task_id}/poll` | Poll: returns loading/result/error HTML |
+| POST | `/htmx/sweep/submit` | Submit sweep, return loading partial |
+| GET | `/htmx/sweep/{task_id}/poll` | Poll: returns loading/result/error HTML |
+| POST | `/htmx/walk-forward/submit` | Submit walk-forward, return loading partial |
+| GET | `/htmx/walk-forward/{task_id}/poll` | Poll: returns loading/result/error HTML |
+
+### Pages
+
+| Path | Description |
+|------|-------------|
+| `/` | Dashboard |
+| `/backtest` | Single backtest (form + results + equity curve chart) |
+| `/sweep` | Parameter grid search (form + ranked results table) |
+| `/walk-forward` | Train/test validation (form + per-window results) |
+| `/bot` | Bot control (start/stop) |
+| `/settings` | Current configuration |
 
 ### Configuration
 
