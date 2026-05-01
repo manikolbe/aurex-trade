@@ -11,7 +11,7 @@
   <div class="card bg-base-100 shadow-md lg:col-span-1">
     <div class="card-body">
       <h2 class="card-title text-lg">Configuration</h2>
-      <form id="wf-form" hx-post="/htmx/walk-forward/submit" hx-target="#wf-result" hx-swap="innerHTML">
+      <form id="wf-form">
         <div class="form-control mb-2">
           <label class="label label-text">Strategy</label>
           <select name="strategy" class="select select-bordered select-sm">
@@ -120,17 +120,16 @@ function generateRange(start, end, step) {
   return values;
 }
 
-document.getElementById('wf-form').addEventListener('htmx:configRequest', function(evt) {
-  evt.detail.headers['Content-Type'] = 'application/json';
-
-  const form = evt.detail.elt;
+document.getElementById('wf-form').addEventListener('submit', function(evt) {
+  evt.preventDefault();
+  const form = evt.target;
+  const target = document.getElementById('wf-result');
   const data = {};
   const formData = new FormData(form);
 
   for (const [key, value] of formData.entries()) {
     const input = form.querySelector('[name="' + key + '"]');
     if (!input) continue;
-
     if (input.type === 'number') {
       data[key] = value === '' ? null : Number(value);
     } else {
@@ -139,24 +138,30 @@ document.getElementById('wf-form').addEventListener('htmx:configRequest', functi
   }
 
   // Build params from range inputs
-  const swStart = parseInt(document.getElementById('wf-sw-start').value);
-  const swEnd = parseInt(document.getElementById('wf-sw-end').value);
-  const swStep = parseInt(document.getElementById('wf-sw-step').value);
-  const lwStart = parseInt(document.getElementById('wf-lw-start').value);
-  const lwEnd = parseInt(document.getElementById('wf-lw-end').value);
-  const lwStep = parseInt(document.getElementById('wf-lw-step').value);
-
   data.params = {
-    short_window: generateRange(swStart, swEnd, swStep),
-    long_window: generateRange(lwStart, lwEnd, lwStep)
+    short_window: generateRange(
+      parseInt(document.getElementById('wf-sw-start').value),
+      parseInt(document.getElementById('wf-sw-end').value),
+      parseInt(document.getElementById('wf-sw-step').value)
+    ),
+    long_window: generateRange(
+      parseInt(document.getElementById('wf-lw-start').value),
+      parseInt(document.getElementById('wf-lw-end').value),
+      parseInt(document.getElementById('wf-lw-step').value)
+    )
   };
 
-  // Handle empty dates
   if (!data.start_date) data.start_date = '';
   if (!data.end_date) data.end_date = '';
 
-  evt.detail.body = JSON.stringify(data);
-  evt.detail.parameters = {};
+  fetch('/htmx/walk-forward/submit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(r => r.text()).then(html => {
+    target.innerHTML = html;
+    htmx.process(target);
+  });
 });
 </script>
 {% endblock %}
