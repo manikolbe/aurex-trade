@@ -2,7 +2,6 @@
 {% block title %}aurexTrade - Backtest{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/htmx-ext-json-enc@2.0.4/json-enc.js"></script>
 {% endblock %}
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Backtest</h1>
@@ -12,7 +11,7 @@
   <div class="card bg-base-100 shadow-md lg:col-span-1">
     <div class="card-body">
       <h2 class="card-title text-lg">Parameters</h2>
-      <form hx-post="/htmx/backtest/submit" hx-target="#backtest-result" hx-swap="innerHTML" hx-ext="json-enc">
+      <form id="backtest-form" hx-post="/htmx/backtest/submit" hx-target="#backtest-result" hx-swap="innerHTML">
         <!-- Strategy Params -->
         <div class="form-control mb-2">
           <label class="label label-text">Symbol</label>
@@ -150,6 +149,35 @@
 </div>
 
 <script>
+document.getElementById('backtest-form').addEventListener('htmx:configRequest', function(evt) {
+  evt.detail.headers['Content-Type'] = 'application/json';
+
+  const form = evt.detail.elt;
+  const data = {};
+  const formData = new FormData(form);
+
+  for (const [key, value] of formData.entries()) {
+    const input = form.querySelector('[name="' + key + '"]');
+    if (!input) continue;
+
+    if (input.type === 'number') {
+      data[key] = value === '' ? null : Number(value);
+    } else if (key === 'require_stop_loss') {
+      data[key] = value === 'true';
+    } else {
+      data[key] = value;
+    }
+  }
+
+  // Handle empty dates (send empty string, not null)
+  if (!data.start_date) data.start_date = '';
+  if (!data.end_date) data.end_date = '';
+
+  evt.detail.headers['Content-Type'] = 'application/json';
+  evt.detail.body = JSON.stringify(data);
+  evt.detail.parameters = {};
+});
+
 document.getElementById('require-stop-loss-cb').addEventListener('change', function() {
   document.getElementById('require-stop-loss-val').value = this.checked ? 'true' : 'false';
 });

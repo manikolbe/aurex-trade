@@ -2,7 +2,6 @@
 {% block title %}aurexTrade - Parameter Sweep{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/htmx-ext-json-enc@2.0.4/json-enc.js"></script>
 {% endblock %}
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Parameter Sweep</h1>
@@ -12,7 +11,7 @@
   <div class="card bg-base-100 shadow-md lg:col-span-1">
     <div class="card-body">
       <h2 class="card-title text-lg">Configuration</h2>
-      <form id="sweep-form" hx-post="/htmx/sweep/submit" hx-target="#sweep-result" hx-swap="innerHTML" hx-ext="json-enc">
+      <form id="sweep-form" hx-post="/htmx/sweep/submit" hx-target="#sweep-result" hx-swap="innerHTML">
         <div class="form-control mb-2">
           <label class="label label-text">Strategy</label>
           <select name="strategy" class="select select-bordered select-sm">
@@ -44,9 +43,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Hidden field for params (populated by JS) -->
-        <input type="hidden" name="params" id="params-json">
 
         <div class="form-control mb-2">
           <label class="label label-text">Rank By</label>
@@ -114,6 +110,25 @@ function generateRange(start, end, step) {
 }
 
 document.getElementById('sweep-form').addEventListener('htmx:configRequest', function(evt) {
+  evt.detail.headers['Content-Type'] = 'application/json';
+
+  const form = evt.detail.elt;
+  const data = {};
+  const formData = new FormData(form);
+
+  for (const [key, value] of formData.entries()) {
+    const input = form.querySelector('[name="' + key + '"]');
+    if (!input) continue;
+    if (key === 'params') continue; // handled below
+
+    if (input.type === 'number') {
+      data[key] = value === '' ? null : Number(value);
+    } else {
+      data[key] = value;
+    }
+  }
+
+  // Build params from range inputs
   const swStart = parseInt(document.getElementById('sw-start').value);
   const swEnd = parseInt(document.getElementById('sw-end').value);
   const swStep = parseInt(document.getElementById('sw-step').value);
@@ -121,20 +136,17 @@ document.getElementById('sweep-form').addEventListener('htmx:configRequest', fun
   const lwEnd = parseInt(document.getElementById('lw-end').value);
   const lwStep = parseInt(document.getElementById('lw-step').value);
 
-  const params = {
+  data.params = {
     short_window: generateRange(swStart, swEnd, swStep),
     long_window: generateRange(lwStart, lwEnd, lwStep)
   };
 
-  evt.detail.parameters['params'] = params;
-  // Remove the range inputs from submission
-  delete evt.detail.parameters['sw-start'];
-  delete evt.detail.parameters['sw-end'];
-  delete evt.detail.parameters['sw-step'];
-  delete evt.detail.parameters['lw-start'];
-  delete evt.detail.parameters['lw-end'];
-  delete evt.detail.parameters['lw-step'];
-  delete evt.detail.parameters['params-json'];
+  // Handle empty dates
+  if (!data.start_date) data.start_date = '';
+  if (!data.end_date) data.end_date = '';
+
+  evt.detail.body = JSON.stringify(data);
+  evt.detail.parameters = {};
 });
 </script>
 {% endblock %}
