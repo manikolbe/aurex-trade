@@ -52,12 +52,10 @@ def _wait_for_terminal(registry: TaskRegistry, task_id, timeout: float = 5.0) ->
     """Poll until task reaches a terminal state."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        with registry._lock:
-            info = registry._tasks.get(task_id)
-            if info and info.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
-                return info
+        info = registry.get(task_id)
+        if info and info.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+            return info
         time.sleep(0.01)
-    # Debug: print current status
     info = registry.get(task_id)
     status = info.status if info else "NOT FOUND"
     msg = f"Task did not reach terminal state (current: {status})"
