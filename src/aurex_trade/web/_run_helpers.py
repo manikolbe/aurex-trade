@@ -81,7 +81,24 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             repository=repository,
             config=config,
         )
-        return runner.run()
+        result = runner.run()
+
+        # Attach strategy parameters (runner leaves them empty)
+        from aurex_trade.backtest.results import BacktestResult
+
+        return BacktestResult(
+            metrics=result.metrics,
+            equity_curve=result.equity_curve,
+            trades=result.trades,
+            strategy_name=result.strategy_name,
+            symbol=result.symbol,
+            start_date=result.start_date,
+            end_date=result.end_date,
+            parameters={
+                "short_window": str(req.short_window),
+                "long_window": str(req.long_window),
+            },
+        )
 
     return run
 
