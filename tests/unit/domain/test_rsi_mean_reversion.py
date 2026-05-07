@@ -214,3 +214,22 @@ class TestStopLossCalculation:
         signal = strategy.generate(bars)
         assert signal is not None
         assert signal.stop_loss is None
+
+
+class TestRSIMeanReversionMinBars:
+    """Tests for the min_bars property."""
+
+    def test_min_bars_period_dominates(self) -> None:
+        """period + 2 > atr_period + 1: max(7, 4) = 7."""
+        strategy = RSIMeanReversion(period=5, atr_period=3)
+        assert strategy.min_bars == 7
+
+    def test_min_bars_atr_dominates(self) -> None:
+        """atr_period + 1 > period + 2: max(7, 31) = 31."""
+        strategy = RSIMeanReversion(period=5, atr_period=30)
+        assert strategy.min_bars == 31
+
+    def test_min_bars_not_inflated_by_overbought(self) -> None:
+        """overbought=70 must NOT inflate min_bars (the original bug)."""
+        strategy = RSIMeanReversion(period=14, overbought=70, oversold=30, atr_period=14)
+        assert strategy.min_bars == 16

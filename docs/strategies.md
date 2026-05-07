@@ -10,6 +10,9 @@ class Strategy(Protocol):
     @property
     def name(self) -> str: ...
 
+    @property
+    def min_bars(self) -> int: ...
+
     def generate(self, bars: list[BarData]) -> Signal | None: ...
 
     @classmethod
@@ -105,6 +108,8 @@ periods in trending markets).
 1. Create `src/aurex_trade/domain/strategy/your_strategy.py`
 2. Implement the `Strategy` Protocol:
    - `name` property returning a unique string identifier
+   - `min_bars` property returning the minimum number of bars needed for signal generation
+     (e.g., `max(lookback_window + 1, atr_period + 1)`)
    - `generate(bars)` method with your signal logic
    - `metadata()` classmethod returning `StrategyMetadata` with `ParamMeta` entries
 3. Use `calculate_atr` from `indicators.py` for stop-loss (recommended)

@@ -289,6 +289,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
         print(f"Invalid parameters for {strategy_name}: {params}")
         sys.exit(1)
 
+    # Construct strategy first to get min_bars
+    strategy = STRATEGY_REGISTRY[strategy_name](params)
+
     config = BacktestConfig(
         symbol=args.symbol,
         granularity=args.granularity,
@@ -301,13 +304,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         commission_per_trade=args.commission,
         deterministic_seed=args.seed,
         data_dir=Path(args.data_dir),
-        bar_count=int(max(params.values())) + 5,
+        bar_count=strategy.min_bars,
     )
 
     bars = _load_bars(config)
-
-    # Wire components
-    strategy = STRATEGY_REGISTRY[strategy_name](params)
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,

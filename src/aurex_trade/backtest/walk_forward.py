@@ -164,7 +164,7 @@ class WalkForwardValidator:
         """Run a single backtest with given params on test bars."""
 
         strategy = self._strategy_factory(params)
-        bar_count = int(max(params.values())) + 5
+        bar_count = strategy.min_bars
 
         market_data = HistoricalMarketDataAdapter(bars, bar_count=bar_count)
         broker = SimulatedBrokerAdapter(

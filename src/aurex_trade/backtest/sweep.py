@@ -110,9 +110,7 @@ class ParameterSweep:
     def _run_single(self, params: dict[str, int | float]) -> BacktestResult:
         """Run a single backtest with the given parameters."""
         strategy = self._strategy_factory(params)
-
-        # Derive bar_count from params (need enough bars for strategy warmup)
-        bar_count = int(max(params.values())) + 5
+        bar_count = strategy.min_bars
 
         market_data = HistoricalMarketDataAdapter(self._bars, bar_count=bar_count)
         broker = SimulatedBrokerAdapter(

@@ -36,6 +36,10 @@ class RSIMeanReversion:
     def name(self) -> str:
         return "rsi_mean_reversion"
 
+    @property
+    def min_bars(self) -> int:
+        return max(self._period + 2, self._atr_period + 1)
+
     @classmethod
     def metadata(cls) -> StrategyMetadata:
         return StrategyMetadata(

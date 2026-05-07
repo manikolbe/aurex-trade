@@ -33,6 +33,10 @@ class SMACrossover:
     def name(self) -> str:
         return "sma_crossover"
 
+    @property
+    def min_bars(self) -> int:
+        return max(self._long_window + 1, self._atr_period + 1)
+
     @classmethod
     def metadata(cls) -> StrategyMetadata:
         return StrategyMetadata(

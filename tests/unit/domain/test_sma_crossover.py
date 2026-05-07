@@ -232,3 +232,22 @@ class TestStopLossCalculation:
         assert "entry_price" in signal.metadata
         assert "atr" in signal.metadata
         assert float(signal.metadata["atr"]) > 0
+
+
+class TestSMACrossoverMinBars:
+    """Tests for the min_bars property."""
+
+    def test_min_bars_atr_dominates(self) -> None:
+        """Default atr_period=14 dominates long_window=5: max(6, 15) = 15."""
+        strategy = SMACrossover(short_window=3, long_window=5)
+        assert strategy.min_bars == 15
+
+    def test_min_bars_long_window_dominates(self) -> None:
+        """When long_window > atr_period: max(51, 15) = 51."""
+        strategy = SMACrossover(short_window=10, long_window=50, atr_period=14)
+        assert strategy.min_bars == 51
+
+    def test_min_bars_with_large_atr_period(self) -> None:
+        """When atr_period > long_window: max(6, 31) = 31."""
+        strategy = SMACrossover(short_window=3, long_window=5, atr_period=30)
+        assert strategy.min_bars == 31

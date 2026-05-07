@@ -42,9 +42,7 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             msg = f"Invalid parameters for {req.strategy}: {params}"
             raise ValueError(msg)
 
-        # Compute bar_count from largest int/float param value
-        numeric_values = [v for v in params.values() if isinstance(v, (int, float))]
-        bar_count = int(max(numeric_values, default=50)) + 5
+        strategy = STRATEGY_REGISTRY[req.strategy](params)
 
         config = BacktestConfig(
             symbol=req.symbol,
@@ -58,7 +56,7 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             commission_per_trade=req.commission,
             deterministic_seed=req.seed,
             data_dir=Path("data/historical"),
-            bar_count=bar_count,
+            bar_count=strategy.min_bars,
         )
 
         data_store = HistoricalDataStore(config.data_dir)
@@ -77,7 +75,6 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             msg = f"No data found for {config.symbol} ({config.granularity})"
             raise FileNotFoundError(msg)
 
-        strategy = STRATEGY_REGISTRY[req.strategy](params)
         risk_engine = RiskEngine(
             max_position_size=req.max_position,
             max_daily_loss=req.max_daily_loss,

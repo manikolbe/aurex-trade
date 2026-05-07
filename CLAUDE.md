@@ -111,6 +111,7 @@ See `docs/strategies.md` for the full guide. Summary:
 1. Create `src/aurex_trade/domain/strategy/your_strategy.py`
 2. Implement the `Strategy` Protocol from `base.py`:
    - `name: str` property
+   - `min_bars: int` property (minimum bars needed for signal generation)
    - `generate(bars: list[BarData]) -> Signal | None`
    - `metadata() -> StrategyMetadata` classmethod (with `ParamMeta` for each param)
 3. Register in `backtest/cli.py`: add to `STRATEGY_REGISTRY`, `PARAM_VALIDATORS`, `STRATEGY_METADATA`

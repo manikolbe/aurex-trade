@@ -36,6 +36,9 @@ class Strategy(Protocol):
     @property
     def name(self) -> str: ...
 
+    @property
+    def min_bars(self) -> int: ...
+
     def generate(self, bars: list[BarData]) -> Signal | None: ...
 
     @classmethod
