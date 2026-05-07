@@ -44,6 +44,7 @@ class TaskStatusResponse(BaseModel):
     created_at: datetime
     completed_at: datetime | None = None
     error: str | None = None
+    message: str | None = None
 
 
 class TaskSubmittedResponse(BaseModel):
@@ -444,4 +445,5 @@ def task_info_to_response(info: TaskInfo) -> TaskStatusResponse:
         created_at=info.created_at,
         completed_at=info.completed_at,
         error=info.error,
+        message=info.message,
     )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -44,11 +44,13 @@ def htmx_submit_backtest(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> HTMLResponse:
     """Submit a backtest and return a loading fragment that polls for results."""
-    task_id = registry.submit(create_backtest_runner(req), task_type="backtest")
+    task_id = uuid4()
+    runner = create_backtest_runner(req, task_id=task_id, registry=registry)
+    registry.submit(runner, task_type="backtest", task_id=task_id)
     logger.info("htmx.backtest.submitted", task_id=str(task_id))
     templates = _get_templates(request)
     return templates.TemplateResponse(
-        request, "partials/backtest_loading.html", {"task_id": task_id}
+        request, "partials/backtest_loading.html", {"task_id": task_id, "message": None}
     )
 
 
@@ -82,7 +84,7 @@ def htmx_poll_backtest(
         )
 
     return templates.TemplateResponse(
-        request, "partials/backtest_loading.html", {"task_id": task_id}
+        request, "partials/backtest_loading.html", {"task_id": task_id, "message": info.message}
     )
 
 
@@ -96,11 +98,13 @@ def htmx_submit_sweep(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> HTMLResponse:
     """Submit a sweep and return a loading fragment that polls for results."""
-    task_id = registry.submit(create_sweep_runner(req), task_type="sweep")
+    task_id = uuid4()
+    runner = create_sweep_runner(req, task_id=task_id, registry=registry)
+    registry.submit(runner, task_type="sweep", task_id=task_id)
     logger.info("htmx.sweep.submitted", task_id=str(task_id))
     templates = _get_templates(request)
     return templates.TemplateResponse(
-        request, "partials/sweep_loading.html", {"task_id": task_id}
+        request, "partials/sweep_loading.html", {"task_id": task_id, "message": None}
     )
 
 
@@ -134,7 +138,7 @@ def htmx_poll_sweep(
         )
 
     return templates.TemplateResponse(
-        request, "partials/sweep_loading.html", {"task_id": task_id}
+        request, "partials/sweep_loading.html", {"task_id": task_id, "message": info.message}
     )
 
 
@@ -148,11 +152,13 @@ def htmx_submit_walk_forward(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> HTMLResponse:
     """Submit walk-forward validation and return a loading fragment."""
-    task_id = registry.submit(create_walk_forward_runner(req), task_type="walk_forward")
+    task_id = uuid4()
+    runner = create_walk_forward_runner(req, task_id=task_id, registry=registry)
+    registry.submit(runner, task_type="walk_forward", task_id=task_id)
     logger.info("htmx.walk_forward.submitted", task_id=str(task_id))
     templates = _get_templates(request)
     return templates.TemplateResponse(
-        request, "partials/wf_loading.html", {"task_id": task_id}
+        request, "partials/wf_loading.html", {"task_id": task_id, "message": None}
     )
 
 
@@ -186,5 +192,5 @@ def htmx_poll_walk_forward(
         )
 
     return templates.TemplateResponse(
-        request, "partials/wf_loading.html", {"task_id": task_id}
+        request, "partials/wf_loading.html", {"task_id": task_id, "message": info.message}
     )

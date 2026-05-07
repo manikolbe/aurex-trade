@@ -36,6 +36,7 @@ class TaskInfo:
     completed_at: datetime | None = None
     result: object = None
     error: str | None = None
+    message: str | None = None
 
 
 class TaskRegistry:
@@ -46,9 +47,12 @@ class TaskRegistry:
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
-    def submit(self, fn: Callable[[], object], task_type: str) -> UUID:
+    def submit(
+        self, fn: Callable[[], object], task_type: str, task_id: UUID | None = None
+    ) -> UUID:
         """Submit a callable for background execution. Returns task ID."""
-        task_id = uuid4()
+        if task_id is None:
+            task_id = uuid4()
         info = TaskInfo(
             id=task_id,
             task_type=task_type,
@@ -63,6 +67,13 @@ class TaskRegistry:
         future.add_done_callback(lambda f: self._on_done(task_id, f))
 
         return task_id
+
+    def update_message(self, task_id: UUID, message: str) -> None:
+        """Update the progress message for a running task."""
+        with self._lock:
+            info = self._tasks.get(task_id)
+            if info is not None:
+                info.message = message
 
     def get(self, task_id: UUID) -> TaskInfo | None:
         """Get task info by ID."""

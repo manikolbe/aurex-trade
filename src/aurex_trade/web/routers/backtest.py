@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
@@ -43,7 +43,9 @@ def submit_backtest(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> TaskSubmittedResponse:
     """Submit a backtest for background execution."""
-    task_id = registry.submit(create_backtest_runner(req), task_type="backtest")
+    task_id = uuid4()
+    runner = create_backtest_runner(req, task_id=task_id, registry=registry)
+    registry.submit(runner, task_type="backtest", task_id=task_id)
     logger.info("backtest.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="backtest", status=TaskStatus.RUNNING)
 
@@ -73,7 +75,9 @@ def submit_sweep(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> TaskSubmittedResponse:
     """Submit a parameter sweep for background execution."""
-    task_id = registry.submit(create_sweep_runner(req), task_type="sweep")
+    task_id = uuid4()
+    runner = create_sweep_runner(req, task_id=task_id, registry=registry)
+    registry.submit(runner, task_type="sweep", task_id=task_id)
     logger.info("sweep.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="sweep", status=TaskStatus.RUNNING)
 
@@ -103,7 +107,9 @@ def submit_walk_forward(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> TaskSubmittedResponse:
     """Submit a walk-forward validation for background execution."""
-    task_id = registry.submit(create_walk_forward_runner(req), task_type="walk_forward")
+    task_id = uuid4()
+    runner = create_walk_forward_runner(req, task_id=task_id, registry=registry)
+    registry.submit(runner, task_type="walk_forward", task_id=task_id)
     logger.info("walk_forward.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(
         task_id=task_id, task_type="walk_forward", status=TaskStatus.RUNNING

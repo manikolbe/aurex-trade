@@ -1,7 +1,7 @@
 <div hx-get="/htmx/walk-forward/{{ task_id }}/poll" hx-trigger="every 2s" hx-swap="outerHTML">
   <div class="flex items-center gap-3 p-4">
     <span class="loading loading-spinner loading-md text-primary"></span>
-    <span>Running walk-forward validation...</span>
+    <span>{{ message or "Running walk-forward validation..." }}</span>
   </div>
   <progress class="progress progress-primary w-full"></progress>
 </div>

@@ -2,14 +2,107 @@
 
 from __future__ import annotations
 
+import contextlib
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from aurex_trade.web.schemas import BacktestRequest, SweepRequest, WalkForwardRequest
+from aurex_trade.web.tasks import TaskRegistry
+
+if TYPE_CHECKING:
+    from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
+    from aurex_trade.domain.models import BarData
+
+_logger = logging.getLogger(__name__)
 
 
-def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
+def _ensure_data_available(
+    data_store: HistoricalDataStore,
+    symbol: str,
+    granularity: str,
+    start: datetime | None,
+    end: datetime | None,
+    task_id: UUID | None = None,
+    registry: TaskRegistry | None = None,
+) -> list[BarData]:
+    """Load historical bars, auto-downloading from OANDA if missing.
+
+    Returns bars for the requested range. Downloads from OANDA when the local
+    CSV is missing or does not fully cover the requested date range.
+
+    Raises:
+        FileNotFoundError: If data cannot be obtained (no dates or download empty).
+        ValueError: If OANDA credentials are not configured.
+    """
+    # Attempt to load existing data
+    bars: list[BarData] = []
+    with contextlib.suppress(FileNotFoundError):
+        bars = data_store.load_bars(symbol, granularity, start, end)
+
+    # Check if existing data covers the requested range
+    if bars:
+        range_covered = True
+        if start and bars[0].timestamp > start:
+            range_covered = False
+        if end and bars[-1].timestamp < end:
+            range_covered = False
+        if range_covered:
+            return bars
+
+    # Cannot download without concrete date range
+    if start is None or end is None:
+        msg = f"No data found for {symbol} ({granularity})"
+        raise FileNotFoundError(msg)
+
+    # Check OANDA credentials
+    from aurex_trade.config import OANDAConfig
+
+    oanda_config = OANDAConfig()
+    if not oanda_config.access_token or not oanda_config.account_id:
+        msg = (
+            "OANDA credentials not configured. "
+            "Set OANDA_ACCESS_TOKEN and OANDA_ACCOUNT_ID in your .env file, "
+            "or configure them in Settings."
+        )
+        raise ValueError(msg)
+
+    # Update task progress
+    if task_id is not None and registry is not None:
+        registry.update_message(
+            task_id, f"Downloading {symbol} ({granularity}) data..."
+        )
+
+    # Download from OANDA
+    from aurex_trade.adapters.oanda.connection import OANDAConnection
+    from aurex_trade.adapters.oanda.downloader import OANDAHistoricalDownloader
+
+    connection = OANDAConnection(oanda_config)
+    try:
+        connection.connect()
+        downloader = OANDAHistoricalDownloader(connection, data_store)
+        count = downloader.download(symbol, granularity, start, end)
+        _logger.info("Downloaded %d candles for %s (%s)", count, symbol, granularity)
+    finally:
+        connection.disconnect()
+
+    # Reload bars after download
+    bars = data_store.load_bars(symbol, granularity, start, end)
+    if not bars:
+        msg = f"No data found for {symbol} ({granularity}) after download"
+        raise FileNotFoundError(msg)
+
+    return bars
+
+
+def create_backtest_runner(
+    req: BacktestRequest,
+    task_id: UUID | None = None,
+    registry: TaskRegistry | None = None,
+) -> Callable[[], object]:
     """Create a callable that runs a single backtest with the given parameters."""
 
     def run() -> object:
@@ -70,10 +163,13 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             if config.end_date
             else None
         )
-        bars = data_store.load_bars(config.symbol, config.granularity, start, end)
-        if not bars:
-            msg = f"No data found for {config.symbol} ({config.granularity})"
-            raise FileNotFoundError(msg)
+        bars = _ensure_data_available(
+            data_store, config.symbol, config.granularity, start, end,
+            task_id=task_id, registry=registry,
+        )
+
+        if task_id is not None and registry is not None:
+            registry.update_message(task_id, "Running backtest...")
 
         risk_engine = RiskEngine(
             max_position_size=req.max_position,
@@ -121,7 +217,11 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
     return run
 
 
-def create_sweep_runner(req: SweepRequest) -> Callable[[], object]:
+def create_sweep_runner(
+    req: SweepRequest,
+    task_id: UUID | None = None,
+    registry: TaskRegistry | None = None,
+) -> Callable[[], object]:
     """Create a callable that runs a parameter sweep with the given parameters."""
 
     def run() -> object:
@@ -160,10 +260,13 @@ def create_sweep_runner(req: SweepRequest) -> Callable[[], object]:
             if config.end_date
             else None
         )
-        bars = data_store.load_bars(config.symbol, config.granularity, start, end)
-        if not bars:
-            msg = f"No data found for {config.symbol} ({config.granularity})"
-            raise FileNotFoundError(msg)
+        bars = _ensure_data_available(
+            data_store, config.symbol, config.granularity, start, end,
+            task_id=task_id, registry=registry,
+        )
+
+        if task_id is not None and registry is not None:
+            registry.update_message(task_id, "Running parameter sweep...")
 
         risk_engine = RiskEngine(
             max_position_size=req.max_position,
@@ -189,7 +292,11 @@ def create_sweep_runner(req: SweepRequest) -> Callable[[], object]:
     return run
 
 
-def create_walk_forward_runner(req: WalkForwardRequest) -> Callable[[], object]:
+def create_walk_forward_runner(
+    req: WalkForwardRequest,
+    task_id: UUID | None = None,
+    registry: TaskRegistry | None = None,
+) -> Callable[[], object]:
     """Create a callable that runs walk-forward validation with the given parameters."""
 
     def run() -> object:
@@ -228,10 +335,13 @@ def create_walk_forward_runner(req: WalkForwardRequest) -> Callable[[], object]:
             if config.end_date
             else None
         )
-        bars = data_store.load_bars(config.symbol, config.granularity, start, end)
-        if not bars:
-            msg = f"No data found for {config.symbol} ({config.granularity})"
-            raise FileNotFoundError(msg)
+        bars = _ensure_data_available(
+            data_store, config.symbol, config.granularity, start, end,
+            task_id=task_id, registry=registry,
+        )
+
+        if task_id is not None and registry is not None:
+            registry.update_message(task_id, "Running walk-forward validation...")
 
         risk_engine = RiskEngine(
             max_position_size=req.max_position,
