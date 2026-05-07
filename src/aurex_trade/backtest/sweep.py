@@ -33,13 +33,13 @@ class ParameterSweep:
 
     def __init__(
         self,
-        strategy_factory: Callable[[dict[str, int]], Strategy],
-        param_grid: dict[str, list[int]],
+        strategy_factory: Callable[[dict[str, int | float]], Strategy],
+        param_grid: dict[str, list[int | float]],
         bars: list[BarData],
         config: BacktestConfig,
         risk_engine: RiskEngine,
         rank_by: str = "sharpe_ratio",
-        param_validator: Callable[[dict[str, int]], bool] | None = None,
+        param_validator: Callable[[dict[str, int | float]], bool] | None = None,
     ) -> None:
         self._strategy_factory = strategy_factory
         self._param_grid = param_grid
@@ -85,7 +85,7 @@ class ParameterSweep:
             total_combinations=len(combinations),
         )
 
-    def _generate_combinations(self) -> list[dict[str, int]]:
+    def _generate_combinations(self) -> list[dict[str, int | float]]:
         """Generate all valid parameter combinations from the grid."""
         keys = list(self._param_grid.keys())
         values = [self._param_grid[k] for k in keys]
@@ -107,12 +107,12 @@ class ParameterSweep:
 
         return valid
 
-    def _run_single(self, params: dict[str, int]) -> BacktestResult:
+    def _run_single(self, params: dict[str, int | float]) -> BacktestResult:
         """Run a single backtest with the given parameters."""
         strategy = self._strategy_factory(params)
 
         # Derive bar_count from params (need enough bars for strategy warmup)
-        bar_count = max(params.values()) + 5
+        bar_count = int(max(params.values())) + 5
 
         market_data = HistoricalMarketDataAdapter(self._bars, bar_count=bar_count)
         broker = SimulatedBrokerAdapter(

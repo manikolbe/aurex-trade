@@ -141,7 +141,7 @@ class SweepRequest(BaseModel):
     """Request to run a parameter sweep."""
 
     strategy: str = "sma_crossover"
-    params: dict[str, list[int]] = Field(..., max_length=10)
+    params: dict[str, list[int | float]] = Field(..., max_length=10)
     symbol: Symbol = "XAU_USD"
     granularity: Granularity = "M1"
     start_date: str = ""
@@ -181,7 +181,9 @@ class SweepRequest(BaseModel):
 
     @field_validator("params")
     @classmethod
-    def validate_params(cls, v: dict[str, list[int]]) -> dict[str, list[int]]:
+    def validate_params(
+        cls, v: dict[str, list[int | float]]
+    ) -> dict[str, list[int | float]]:
         """Limit parameter grid size to prevent combinatorial explosion."""
         total_combos = 1
         for values in v.values():
@@ -211,7 +213,7 @@ class WalkForwardRequest(BaseModel):
     """Request to run walk-forward validation."""
 
     strategy: str = "sma_crossover"
-    params: dict[str, list[int]] = Field(..., max_length=10)
+    params: dict[str, list[int | float]] = Field(..., max_length=10)
     symbol: Symbol = "XAU_USD"
     granularity: Granularity = "M1"
     start_date: str = ""
@@ -251,7 +253,9 @@ class WalkForwardRequest(BaseModel):
 
     @field_validator("params")
     @classmethod
-    def validate_params(cls, v: dict[str, list[int]]) -> dict[str, list[int]]:
+    def validate_params(
+        cls, v: dict[str, list[int | float]]
+    ) -> dict[str, list[int | float]]:
         """Limit parameter grid size to prevent combinatorial explosion."""
         total_combos = 1
         for values in v.values():
@@ -271,7 +275,7 @@ class WalkForwardWindowResponse(BaseModel):
     """Single walk-forward window response."""
 
     window_index: int
-    best_params: dict[str, int]
+    best_params: dict[str, int | float]
     train_metrics: MetricsResponse
     test_metrics: MetricsResponse
 

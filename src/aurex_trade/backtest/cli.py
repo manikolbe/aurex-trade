@@ -17,23 +17,39 @@ from aurex_trade.config import OANDAConfig
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
+from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 
 # Strategy factory registry — maps name to (params → Strategy) callable
-STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int]], Strategy]] = {
+STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
     "sma_crossover": lambda p: SMACrossover(
-        short_window=p["short_window"], long_window=p["long_window"]
+        short_window=int(p["short_window"]),
+        long_window=int(p["long_window"]),
+        atr_multiplier=float(p.get("atr_multiplier", 2.0)),
+        atr_period=int(p.get("atr_period", 14)),
+    ),
+    "rsi_mean_reversion": lambda p: RSIMeanReversion(
+        period=int(p.get("period", 14)),
+        overbought=int(p.get("overbought", 70)),
+        oversold=int(p.get("oversold", 30)),
+        atr_multiplier=float(p.get("atr_multiplier", 2.0)),
+        atr_period=int(p.get("atr_period", 14)),
     ),
 }
 
 # Per-strategy validators — filters out invalid param combos
-PARAM_VALIDATORS: dict[str, Callable[[dict[str, int]], bool]] = {
+PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
     "sma_crossover": lambda p: p["short_window"] < p["long_window"],
+    "rsi_mean_reversion": lambda p: (
+        p.get("period", 14) > 0
+        and 0 < p.get("oversold", 30) < p.get("overbought", 70) < 100
+    ),
 }
 
 # Maps strategy names to their metadata accessor
 STRATEGY_METADATA: dict[str, Callable[[], StrategyMetadata]] = {
     "sma_crossover": SMACrossover.metadata,
+    "rsi_mean_reversion": RSIMeanReversion.metadata,
 }
 
 
@@ -67,6 +83,19 @@ def main() -> None:
 
     # run subcommand
     run_parser = subparsers.add_parser("run", help="Run a backtest")
+    run_parser.add_argument(
+        "--strategy",
+        default="sma_crossover",
+        choices=list(STRATEGY_REGISTRY.keys()),
+        help="Strategy to use",
+    )
+    run_parser.add_argument(
+        "--param",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Strategy parameter (e.g. --param short_window=10)",
+    )
     run_parser.add_argument("--symbol", default="XAU_USD", help="Instrument symbol")
     run_parser.add_argument("--granularity", default="M1", help="Bar granularity")
     run_parser.add_argument("--start", default="", help="Start date filter (YYYY-MM-DD)")
@@ -76,12 +105,6 @@ def main() -> None:
     )
     run_parser.add_argument(
         "--position-size", type=float, default=1.0, help="Units per trade"
-    )
-    run_parser.add_argument(
-        "--short-window", type=int, default=10, help="SMA short window"
-    )
-    run_parser.add_argument(
-        "--long-window", type=int, default=30, help="SMA long window"
     )
     run_parser.add_argument(
         "--spread", type=float, default=1.5, help="Spread in price units"
@@ -253,6 +276,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
     from aurex_trade.adapters.memory.repository import InMemoryRepository
     from aurex_trade.backtest.runner import BacktestRunner
 
+    strategy_name: str = args.strategy
+    if strategy_name not in STRATEGY_REGISTRY:
+        print(f"Unknown strategy: {strategy_name}")
+        sys.exit(1)
+
+    params = _parse_params(args.param) if args.param else _default_params(strategy_name)
+
     config = BacktestConfig(
         symbol=args.symbol,
         granularity=args.granularity,
@@ -265,15 +295,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
         commission_per_trade=args.commission,
         deterministic_seed=args.seed,
         data_dir=Path(args.data_dir),
-        bar_count=args.long_window + 5,
+        bar_count=int(max(params.values())) + 5,
     )
 
     bars = _load_bars(config)
 
     # Wire components
-    strategy = SMACrossover(
-        short_window=args.short_window, long_window=args.long_window
-    )
+    strategy = STRATEGY_REGISTRY[strategy_name](params)
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
@@ -338,19 +366,51 @@ def _load_bars(config: BacktestConfig) -> list[BarData]:
     return bars
 
 
-def _parse_param_grid(param_args: list[str]) -> dict[str, list[int]]:
+def _parse_params(param_args: list[str]) -> dict[str, int | float]:
+    """Parse --param key=value arguments into a single-value dict."""
+    params: dict[str, int | float] = {}
+    for arg in param_args:
+        if "=" not in arg:
+            print(f"Invalid --param format: {arg!r} (expected key=value)")
+            sys.exit(1)
+        key, value_str = arg.split("=", 1)
+        value_str = value_str.strip()
+        try:
+            params[key] = int(value_str)
+        except ValueError:
+            try:
+                params[key] = float(value_str)
+            except ValueError:
+                print(f"Invalid --param value for {key!r}: {value_str!r}")
+                sys.exit(1)
+    return params
+
+
+def _default_params(strategy_name: str) -> dict[str, int | float]:
+    """Build a params dict from strategy metadata defaults."""
+    meta = STRATEGY_METADATA[strategy_name]()
+    return {p.key: p.default for p in meta.params}
+
+
+def _parse_param_grid(param_args: list[str]) -> dict[str, list[int | float]]:
     """Parse --param key=v1,v2,v3 arguments into a grid dict."""
-    grid: dict[str, list[int]] = {}
+    grid: dict[str, list[int | float]] = {}
     for arg in param_args:
         if "=" not in arg:
             print(f"Invalid --param format: {arg!r} (expected key=v1,v2,...)")
             sys.exit(1)
         key, values_str = arg.split("=", 1)
-        try:
-            values = [int(v.strip()) for v in values_str.split(",")]
-        except ValueError:
-            print(f"Invalid --param values for {key!r}: must be integers")
-            sys.exit(1)
+        values: list[int | float] = []
+        for v_str in values_str.split(","):
+            v_str = v_str.strip()
+            try:
+                values.append(int(v_str))
+            except ValueError:
+                try:
+                    values.append(float(v_str))
+                except ValueError:
+                    print(f"Invalid --param value for {key!r}: {v_str!r}")
+                    sys.exit(1)
         grid[key] = values
     return grid
 

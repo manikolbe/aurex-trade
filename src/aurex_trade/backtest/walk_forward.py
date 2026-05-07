@@ -38,15 +38,15 @@ class WalkForwardValidator:
 
     def __init__(
         self,
-        strategy_factory: Callable[[dict[str, int]], Strategy],
-        param_grid: dict[str, list[int]],
+        strategy_factory: Callable[[dict[str, int | float]], Strategy],
+        param_grid: dict[str, list[int | float]],
         bars: list[BarData],
         config: BacktestConfig,
         risk_engine: RiskEngine,
         train_bars: int = 7200,
         test_bars: int = 7200,
         rank_by: str = "sharpe_ratio",
-        param_validator: Callable[[dict[str, int]], bool] | None = None,
+        param_validator: Callable[[dict[str, int | float]], bool] | None = None,
     ) -> None:
         self._strategy_factory = strategy_factory
         self._param_grid = param_grid
@@ -105,7 +105,12 @@ class WalkForwardValidator:
 
             # Best params from training
             best_train = sweep_result.results[0]
-            best_params = {k: int(v) for k, v in best_train.parameters.items()}
+            best_params: dict[str, int | float] = {}
+            for k, v in best_train.parameters.items():
+                try:
+                    best_params[k] = int(v)
+                except ValueError:
+                    best_params[k] = float(v)
 
             # Step 2: Run best params on test data (unseen)
             test_result = self._run_test(best_params, test_slice)
@@ -154,12 +159,12 @@ class WalkForwardValidator:
         )
 
     def _run_test(
-        self, params: dict[str, int], bars: list[BarData]
+        self, params: dict[str, int | float], bars: list[BarData]
     ) -> BacktestResult:
         """Run a single backtest with given params on test bars."""
 
         strategy = self._strategy_factory(params)
-        bar_count = max(params.values()) + 5
+        bar_count = int(max(params.values())) + 5
 
         market_data = HistoricalMarketDataAdapter(bars, bar_count=bar_count)
         broker = SimulatedBrokerAdapter(

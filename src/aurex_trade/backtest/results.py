@@ -52,7 +52,7 @@ class WalkForwardWindow:
 
     train_result: BacktestResult
     test_result: BacktestResult
-    best_params: dict[str, int]
+    best_params: dict[str, int | float]
     window_index: int
 
 

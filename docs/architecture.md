@@ -27,7 +27,7 @@ nothing about OANDA, SQLite, or any other external system.
 
               Domain Core (center — no external deps):
               ├── models.py (BarData, Signal, Order, Trade, Position)
-              ├── strategy/ (Strategy Protocol, SMA Crossover)
+              ├── strategy/ (Strategy Protocol, indicators, SMA Crossover, RSI Mean-Reversion)
               └── risk/ (RiskEngine)
 ```
 
@@ -177,18 +177,16 @@ class RepositoryPort(Protocol):
 - Used for all trading modes — data persists across restarts
 - DB path configurable via `DB_PATH` (default: `data/aurex_trade.db`)
 
-## Strategy: SMA Crossover
+## Strategies
 
-Simple Moving Average crossover — the first (MVP) strategy.
+All strategies satisfy the `Strategy` Protocol (see `docs/strategies.md` for details):
 
-```
-Short SMA (10 bars) crosses ABOVE Long SMA (30 bars) → LONG signal
-Short SMA (10 bars) crosses BELOW Long SMA (30 bars) → SHORT signal
-No crossover → FLAT (no action)
-```
+- **SMA Crossover** — trend-following, buys when short MA crosses above long MA
+- **RSI Mean-Reversion** — counter-trend, buys when RSI crosses below oversold
 
-The strategy is pure — it takes price bars in and returns a signal.
-It has no side effects and no external dependencies.
+Strategies are pure — they take price bars in and return a signal.
+They have no side effects and no external dependencies.
+Shared indicators live in `domain/strategy/indicators.py`.
 
 ## Risk Engine
 

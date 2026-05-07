@@ -3,6 +3,7 @@
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData, Signal
 from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
+from aurex_trade.domain.strategy.indicators import calculate_atr
 
 
 class SMACrossover:
@@ -122,7 +123,7 @@ class SMACrossover:
 
         latest = bars[-1]
         entry_price = latest.close
-        atr = _calculate_atr(bars, self._atr_period)
+        atr = calculate_atr(bars, self._atr_period)
 
         # Calculate stop-loss based on ATR (clamped to sensible bounds)
         stop_loss: float | None = None
@@ -152,25 +153,3 @@ def _sma(values: list[float], window: int) -> float:
     return sum(values[-window:]) / window
 
 
-def _calculate_atr(bars: list[BarData], period: int) -> float:
-    """Calculate Average True Range over the given period.
-
-    ATR measures market volatility using the maximum of:
-    - Current high - current low
-    - |Current high - previous close|
-    - |Current low - previous close|
-
-    Returns 0.0 if insufficient bars are available.
-    """
-    if len(bars) < period + 1:
-        return 0.0
-
-    true_ranges: list[float] = []
-    for i in range(-period, 0):
-        high = bars[i].high
-        low = bars[i].low
-        prev_close = bars[i - 1].close
-        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
-        true_ranges.append(tr)
-
-    return sum(true_ranges) / len(true_ranges)
