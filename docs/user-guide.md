@@ -118,6 +118,58 @@ Each cycle, the bot:
 4. **Executes** — if approved, places an order with the broker
 5. **Persists** — saves signal, decision, and trade to the database
 
+## Web Interface
+
+The web interface provides a guided workflow for strategy validation, aimed at
+users who prefer a visual interface over the command line.
+
+```bash
+just web        # Start web server at http://127.0.0.1:8000
+```
+
+### Pages
+
+| Page | Purpose |
+|------|---------|
+| **Backtest** (`/backtest`) | Run a single backtest with chosen strategy and parameters |
+| **Parameter Sweep** (`/sweep`) | Test every combination of parameter ranges, ranked by metric |
+| **Walk-Forward** (`/walk-forward`) | Validate strategy robustness on unseen data |
+| **Bot** (`/bot`) | Start/stop the live trading bot |
+
+### Guided 3-Step Workflow
+
+The web UI walks you through a three-step validation process:
+
+1. **Backtest** — Sanity check: does the strategy make money on historical data?
+2. **Sweep** — Find optimal settings by testing all parameter combinations
+3. **Walk-Forward** — Verify the best settings aren't a fluke by testing on unseen data
+
+Each page includes a collapsible explainer section that describes what you're doing
+and how to interpret the results, written in plain language for non-technical users.
+
+### Strategy Selection
+
+All pages feature a strategy dropdown populated from the strategy registry. Selecting
+a different strategy:
+
+- Updates the parameter form fields (labels, defaults, valid ranges)
+- Updates tooltips on each field with strategy-specific guidance
+- Updates the educational explainer text to describe the selected strategy's logic
+
+This content is driven by strategy metadata — new strategies automatically appear
+with appropriate guidance when registered.
+
+### API Access
+
+The web layer exposes a REST API for programmatic use:
+
+- `POST /api/backtest` — Submit a backtest (`strategy`, `params`, plus config)
+- `POST /api/sweep` — Submit a parameter sweep
+- `POST /api/walk-forward` — Submit walk-forward validation
+- `GET /api/strategies` — List all strategies with parameter metadata
+
+All run endpoints return a `task_id` for polling via `GET /api/{type}/{task_id}`.
+
 ## Development
 
 ```bash

@@ -17,10 +17,34 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
         from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
         from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapter
         from aurex_trade.adapters.memory.repository import InMemoryRepository
+        from aurex_trade.backtest.cli import (
+            PARAM_VALIDATORS,
+            STRATEGY_METADATA,
+            STRATEGY_REGISTRY,
+        )
         from aurex_trade.backtest.config import BacktestConfig
         from aurex_trade.backtest.runner import BacktestRunner
         from aurex_trade.domain.risk.engine import RiskEngine
-        from aurex_trade.domain.strategy.sma_crossover import SMACrossover
+
+        if req.strategy not in STRATEGY_REGISTRY:
+            msg = f"Unknown strategy: {req.strategy}"
+            raise ValueError(msg)
+
+        # Resolve params: fill defaults from metadata if not provided
+        params = dict(req.params)
+        if not params:
+            meta = STRATEGY_METADATA[req.strategy]()
+            params = {p.key: p.default for p in meta.params}
+
+        # Validate params
+        validator = PARAM_VALIDATORS.get(req.strategy)
+        if validator and not validator(params):
+            msg = f"Invalid parameters for {req.strategy}: {params}"
+            raise ValueError(msg)
+
+        # Compute bar_count from largest int/float param value
+        numeric_values = [v for v in params.values() if isinstance(v, (int, float))]
+        bar_count = int(max(numeric_values, default=50)) + 5
 
         config = BacktestConfig(
             symbol=req.symbol,
@@ -34,7 +58,7 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             commission_per_trade=req.commission,
             deterministic_seed=req.seed,
             data_dir=Path("data/historical"),
-            bar_count=req.long_window + 5,
+            bar_count=bar_count,
         )
 
         data_store = HistoricalDataStore(config.data_dir)
@@ -53,7 +77,7 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             msg = f"No data found for {config.symbol} ({config.granularity})"
             raise FileNotFoundError(msg)
 
-        strategy = SMACrossover(short_window=req.short_window, long_window=req.long_window)
+        strategy = STRATEGY_REGISTRY[req.strategy](params)
         risk_engine = RiskEngine(
             max_position_size=req.max_position,
             max_daily_loss=req.max_daily_loss,
@@ -94,10 +118,7 @@ def create_backtest_runner(req: BacktestRequest) -> Callable[[], object]:
             symbol=result.symbol,
             start_date=result.start_date,
             end_date=result.end_date,
-            parameters={
-                "short_window": str(req.short_window),
-                "long_window": str(req.long_window),
-            },
+            parameters={k: str(v) for k, v in params.items()},
         )
 
     return run

@@ -131,6 +131,20 @@ just walk-forward --strategy rsi_mean_reversion \
 - Configurable via `--train-bars` and `--test-bars` for different strategies
 - Aggregates out-of-sample metrics across all test windows
 
+## Web UI
+
+The same backtest, sweep, and walk-forward functionality is available through the
+web interface. Start with `just web` and visit `http://127.0.0.1:8000`.
+
+- **Strategy selection**: Dropdown on each page shows all registered strategies
+- **Dynamic parameters**: Form fields update automatically based on the selected
+  strategy's metadata (labels, tooltips, defaults, and valid ranges)
+- **API endpoint**: `GET /api/strategies` returns all registered strategies with
+  their parameter metadata (useful for programmatic access)
+
+The web UI supports all the same operations as the CLI — select a strategy,
+configure parameters, and run backtests, sweeps, or walk-forward validation.
+
 ## Data Storage
 
 Historical bars are stored as CSV in `data/historical/{SYMBOL}_{GRANULARITY}.csv`.

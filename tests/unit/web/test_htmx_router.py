@@ -32,7 +32,11 @@ class TestHtmxBacktest:
             mock.return_value = lambda: None
             response = client.post(
                 "/htmx/backtest/submit",
-                json={"symbol": "XAU_USD", "short_window": 10, "long_window": 30},
+                json={
+                    "symbol": "XAU_USD",
+                    "strategy": "sma_crossover",
+                    "params": {"short_window": 10, "long_window": 30},
+                },
             )
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -54,7 +58,11 @@ class TestHtmxBacktest:
             mock.return_value = lambda: time.sleep(10)
             submit_resp = client.post(
                 "/htmx/backtest/submit",
-                json={"symbol": "XAU_USD", "short_window": 10, "long_window": 30},
+                json={
+                    "symbol": "XAU_USD",
+                    "strategy": "sma_crossover",
+                    "params": {"short_window": 10, "long_window": 30},
+                },
             )
 
         match = re.search(r"/htmx/backtest/([a-f0-9-]+)/poll", submit_resp.text)

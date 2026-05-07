@@ -33,8 +33,10 @@
       <form id="wf-form">
         <div class="form-control mb-2">
           <label class="label label-text tooltip tooltip-top" data-tip="Which trading approach to test">Strategy</label>
-          <select name="strategy" class="select select-bordered select-sm">
-            <option value="sma_crossover" selected>SMA Crossover</option>
+          <select id="strategy-select" name="strategy" class="select select-bordered select-sm">
+            {% for key, meta in strategies.items() %}
+            <option value="{{ key }}" {% if loop.first %}selected{% endif %}>{{ meta.display_name }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="form-control mb-2">
@@ -54,25 +56,9 @@
           </div>
         </div>
 
-        <!-- Parameter Grid -->
-        <div class="bg-base-200 rounded-lg p-3 mb-2">
+        <!-- Dynamic Parameter Ranges -->
+        <div id="wf-params" class="bg-base-200 rounded-lg p-3 mb-2">
           <h3 class="text-sm font-medium mb-2 tooltip tooltip-top" data-tip="Every combination of start to end in steps">Parameter Ranges</h3>
-          <div class="form-control mb-2">
-            <label class="label label-text text-xs tooltip tooltip-top" data-tip="'Fast' average lookback length">Short Window (start, end, step)</label>
-            <div class="grid grid-cols-3 gap-1">
-              <input type="number" id="wf-sw-start" value="5" class="input input-bordered input-sm">
-              <input type="number" id="wf-sw-end" value="20" class="input input-bordered input-sm">
-              <input type="number" id="wf-sw-step" value="5" class="input input-bordered input-sm">
-            </div>
-          </div>
-          <div class="form-control">
-            <label class="label label-text text-xs tooltip tooltip-top" data-tip="'Slow' average lookback length">Long Window (start, end, step)</label>
-            <div class="grid grid-cols-3 gap-1">
-              <input type="number" id="wf-lw-start" value="20" class="input input-bordered input-sm">
-              <input type="number" id="wf-lw-end" value="50" class="input input-bordered input-sm">
-              <input type="number" id="wf-lw-step" value="10" class="input input-bordered input-sm">
-            </div>
-          </div>
         </div>
 
         <div class="form-control mb-2">
@@ -131,13 +117,49 @@
 </div>
 
 <script>
+const STRATEGIES = {{ strategies | tojson }};
+
 function generateRange(start, end, step) {
   const values = [];
-  for (let i = start; i <= end; i += step) {
-    values.push(i);
+  for (let i = start; i <= end + step * 0.01; i += step) {
+    values.push(Math.round(i * 1000) / 1000);
   }
   return values;
 }
+
+function renderWfParams(strategyKey) {
+  const container = document.getElementById('wf-params');
+  const params = STRATEGIES[strategyKey].params;
+  // Target ~500 total combinations — scale values-per-param by param count
+  const valuesPerParam = Math.max(3, Math.floor(Math.pow(500, 1 / params.length)));
+  container.innerHTML = '<h3 class="text-sm font-medium mb-2 tooltip tooltip-top" data-tip="Every combination of start to end in steps">Parameter Ranges</h3>';
+  params.forEach(function(p) {
+    const step = Number.isInteger(p.default) ? 1 : 0.1;
+    const range = p.max_value - p.min_value;
+    const rangeStep = Number.isInteger(p.default)
+      ? Math.max(1, Math.round(range / (valuesPerParam - 1)))
+      : Math.max(0.1, Math.round((range / (valuesPerParam - 1)) * 10) / 10);
+    const div = document.createElement('div');
+    div.className = 'form-control mb-2';
+    div.innerHTML =
+      '<label class="label label-text text-xs tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + ' (start, end, step)</label>' +
+      '<div class="grid grid-cols-3 gap-1">' +
+        '<input type="number" data-param="' + p.key + '" data-role="start" value="' + p.min_value + '" step="' + step + '" class="input input-bordered input-sm">' +
+        '<input type="number" data-param="' + p.key + '" data-role="end" value="' + p.max_value + '" step="' + step + '" class="input input-bordered input-sm">' +
+        '<input type="number" data-param="' + p.key + '" data-role="step" value="' + rangeStep + '" step="' + step + '" class="input input-bordered input-sm">' +
+      '</div>';
+    container.appendChild(div);
+  });
+}
+
+// Initial render
+const initialStrategy = document.getElementById('strategy-select').value;
+renderWfParams(initialStrategy);
+
+// Re-render on strategy change
+document.getElementById('strategy-select').addEventListener('change', function() {
+  renderWfParams(this.value);
+});
 
 document.getElementById('wf-form').addEventListener('submit', function(evt) {
   evt.preventDefault();
@@ -157,18 +179,19 @@ document.getElementById('wf-form').addEventListener('submit', function(evt) {
   }
 
   // Build params from range inputs
-  data.params = {
-    short_window: generateRange(
-      parseInt(document.getElementById('wf-sw-start').value),
-      parseInt(document.getElementById('wf-sw-end').value),
-      parseInt(document.getElementById('wf-sw-step').value)
-    ),
-    long_window: generateRange(
-      parseInt(document.getElementById('wf-lw-start').value),
-      parseInt(document.getElementById('wf-lw-end').value),
-      parseInt(document.getElementById('wf-lw-step').value)
-    )
-  };
+  const params = {};
+  const strategyKey = document.getElementById('strategy-select').value;
+  STRATEGIES[strategyKey].params.forEach(function(p) {
+    const startEl = document.querySelector('[data-param="' + p.key + '"][data-role="start"]');
+    const endEl = document.querySelector('[data-param="' + p.key + '"][data-role="end"]');
+    const stepEl = document.querySelector('[data-param="' + p.key + '"][data-role="step"]');
+    if (startEl && endEl && stepEl) {
+      params[p.key] = generateRange(
+        Number(startEl.value), Number(endEl.value), Number(stepEl.value)
+      );
+    }
+  });
+  data.params = params;
 
   if (!data.start_date) data.start_date = '';
   if (!data.end_date) data.end_date = '';

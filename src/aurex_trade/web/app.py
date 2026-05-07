@@ -26,6 +26,31 @@ _TEMPLATES_DIR = _WEB_DIR / "templates"
 _STATIC_DIR = _WEB_DIR / "static"
 
 
+def _get_strategies_context() -> dict[str, dict[str, str | list[dict[str, str | int | float]]]]:
+    """Build a JSON-serializable strategies dict for template context."""
+    from aurex_trade.backtest.cli import STRATEGY_METADATA
+
+    result: dict[str, dict[str, str | list[dict[str, str | int | float]]]] = {}
+    for name, meta_fn in STRATEGY_METADATA.items():
+        meta = meta_fn()
+        result[name] = {
+            "display_name": meta.display_name,
+            "description": meta.description,
+            "params": [
+                {
+                    "key": p.key,
+                    "label": p.label,
+                    "tooltip": p.tooltip,
+                    "default": p.default,
+                    "min_value": p.min_value,
+                    "max_value": p.max_value,
+                }
+                for p in meta.params
+            ],
+        }
+    return result
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
@@ -73,15 +98,21 @@ def create_app() -> FastAPI:
 
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/backtest.html")
+        return templates.TemplateResponse(
+            request, "pages/backtest.html", {"strategies": _get_strategies_context()}
+        )
 
     @app.get("/sweep", response_class=HTMLResponse)
     def sweep_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/sweep.html")
+        return templates.TemplateResponse(
+            request, "pages/sweep.html", {"strategies": _get_strategies_context()}
+        )
 
     @app.get("/walk-forward", response_class=HTMLResponse)
     def walk_forward_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/walk_forward.html")
+        return templates.TemplateResponse(
+            request, "pages/walk_forward.html", {"strategies": _get_strategies_context()}
+        )
 
     @app.get("/bot", response_class=HTMLResponse)
     def bot_page(request: Request) -> HTMLResponse:

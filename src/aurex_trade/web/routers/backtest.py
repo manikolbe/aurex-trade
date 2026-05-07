@@ -16,6 +16,9 @@ from aurex_trade.web.dependencies import get_task_registry
 from aurex_trade.web.schemas import (
     BacktestRequest,
     BacktestResultResponse,
+    ParamMetaResponse,
+    StrategiesResponse,
+    StrategyInfoResponse,
     SweepRequest,
     SweepResultResponse,
     TaskStatusResponse,
@@ -124,3 +127,32 @@ def get_walk_forward_status(
         return walk_forward_result_to_response(result)
 
     return task_info_to_response(info)
+
+
+@router.get("/strategies")
+def list_strategies() -> StrategiesResponse:
+    """Return all registered strategies with their parameter metadata."""
+    from aurex_trade.backtest.cli import STRATEGY_METADATA
+
+    strategies = []
+    for name, meta_fn in STRATEGY_METADATA.items():
+        meta = meta_fn()
+        strategies.append(
+            StrategyInfoResponse(
+                name=name,
+                display_name=meta.display_name,
+                description=meta.description,
+                params=[
+                    ParamMetaResponse(
+                        key=p.key,
+                        label=p.label,
+                        tooltip=p.tooltip,
+                        default=p.default,
+                        min_value=p.min_value,
+                        max_value=p.max_value,
+                    )
+                    for p in meta.params
+                ],
+            )
+        )
+    return StrategiesResponse(strategies=strategies)

@@ -81,14 +81,14 @@ class MetricsResponse(BaseModel):
 class BacktestRequest(BaseModel):
     """Request to run a single backtest."""
 
+    strategy: str = "sma_crossover"
+    params: dict[str, int | float] = Field(default_factory=dict)
     symbol: Symbol = "XAU_USD"
     granularity: Granularity = "M1"
     start_date: str = ""
     end_date: str = ""
     capital: float = Field(default=100_000.0, gt=0)
     position_size: float = Field(default=1.0, gt=0)
-    short_window: int = Field(default=10, gt=0)
-    long_window: int = Field(default=30, gt=0)
     spread: float = Field(default=0.6, ge=0)
     slippage: float = Field(default=0.2, ge=0)
     commission: float = Field(default=0.0, ge=0)
@@ -309,6 +309,35 @@ class SettingsResponse(BaseModel):
     symbol: str
     interval_seconds: int
     log_level: str
+
+
+# --- Strategies ---
+
+
+class ParamMetaResponse(BaseModel):
+    """Metadata for a single strategy parameter."""
+
+    key: str
+    label: str
+    tooltip: str
+    default: int | float
+    min_value: int | float
+    max_value: int | float
+
+
+class StrategyInfoResponse(BaseModel):
+    """Metadata for a registered strategy."""
+
+    name: str
+    display_name: str
+    description: str
+    params: list[ParamMetaResponse]
+
+
+class StrategiesResponse(BaseModel):
+    """All registered strategies with metadata."""
+
+    strategies: list[StrategyInfoResponse]
 
 
 # --- Converters ---

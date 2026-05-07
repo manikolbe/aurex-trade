@@ -59,7 +59,7 @@ src/aurex_trade/
 │   └── walk_forward.py # WalkForwardValidator — train/test validation
 ├── engine/
 │   └── trading_engine.py  # Main trading loop
-├── web/                # FastAPI app (API + HTMX UI)
+├── web/                # FastAPI app (API + HTMX UI, GET /api/strategies for metadata)
 └── logging.py          # structlog configuration
 ```
 
@@ -116,6 +116,9 @@ See `docs/strategies.md` for the full guide. Summary:
 3. Register in `backtest/cli.py`: add to `STRATEGY_REGISTRY`, `PARAM_VALIDATORS`, `STRATEGY_METADATA`
 4. Add tests in `tests/unit/domain/test_your_strategy.py`
 5. Verify: `just backtest --strategy your_strategy --param key=value`
+6. **Web UI**: No template changes needed — the UI renders dynamically from strategy
+   metadata. New strategies automatically appear in dropdowns with correct param
+   fields, tooltips, and educational descriptions.
 
 ### Adding a New Broker/Persistence Adapter
 

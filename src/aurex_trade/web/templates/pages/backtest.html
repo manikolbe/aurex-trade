@@ -13,8 +13,8 @@
   </div>
   <div class="collapse-content text-sm text-base-content/70">
     <p class="mb-2">This is your first sanity check. You're replaying past price data and pretending you were trading — did the strategy make money, or lose it? If it can't work on old data, it definitely won't work on new data.</p>
-    <p class="mb-2"><strong>What to do:</strong> Pick a symbol (e.g. Gold), set your Short and Long Window numbers, and hit Run. The results will tell you whether this combination of settings is worth exploring further.</p>
-    <p class="mb-2"><strong>How the strategy works:</strong> The SMA Crossover watches two averages of recent prices — a "fast" one (Short Window, e.g. last 10 prices) and a "slow" one (Long Window, e.g. last 30 prices). When the fast average rises above the slow one, prices are gaining momentum → buy. When it drops below → sell. Smaller numbers react quicker but produce more false signals; larger numbers are smoother but slower to respond.</p>
+    <p class="mb-2"><strong>What to do:</strong> Pick a strategy from the dropdown, adjust its parameters, and hit Run. The results will tell you whether this combination of settings is worth exploring further.</p>
+    <p class="mb-2" id="strategy-description"><strong>How the strategy works:</strong> {{ strategies[strategies.keys()|list|first].description }}</p>
     <p class="mb-2"><strong>Reading the results:</strong></p>
     <ul class="list-disc list-inside mb-2 text-base-content/60">
       <li><strong>Total P&L</strong> — did it make or lose money overall?</li>
@@ -32,7 +32,17 @@
     <div class="card-body">
       <h2 class="card-title text-lg">Parameters</h2>
       <form id="backtest-form" hx-target="#backtest-result" hx-swap="innerHTML">
-        <!-- Strategy Params -->
+        <!-- Strategy Selection -->
+        <div class="form-control mb-2">
+          <label class="label label-text tooltip tooltip-top" data-tip="Which trading approach to use">Strategy</label>
+          <select id="strategy-select" name="strategy" class="select select-bordered select-sm">
+            {% for key, meta in strategies.items() %}
+            <option value="{{ key }}" {% if loop.first %}selected{% endif %}>{{ meta.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Common Params -->
         <div class="form-control mb-2">
           <label class="label label-text tooltip tooltip-top" data-tip="What to trade (e.g. XAU_USD = Gold vs US Dollar)">Symbol</label>
           <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm">
@@ -48,16 +58,10 @@
             <option value="D">D</option>
           </select>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="form-control">
-            <label class="label label-text tooltip tooltip-top" data-tip="How many recent prices the 'fast' average uses (smaller = reacts quicker)">Short Window</label>
-            <input type="number" name="short_window" value="10" class="input input-bordered input-sm">
-          </div>
-          <div class="form-control">
-            <label class="label label-text tooltip tooltip-top" data-tip="How many recent prices the 'slow' average uses (larger = smoother, less jumpy)">Long Window</label>
-            <input type="number" name="long_window" value="30" class="input input-bordered input-sm">
-          </div>
-        </div>
+
+        <!-- Dynamic Strategy Params -->
+        <div id="strategy-params" class="grid grid-cols-2 gap-2"></div>
+
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
             <label class="label label-text tooltip tooltip-top" data-tip="Start of date range to test (leave empty for all data)">Start Date</label>
@@ -169,6 +173,39 @@
 </div>
 
 <script>
+const STRATEGIES = {{ strategies | tojson }};
+
+function renderParams(strategyKey) {
+  const container = document.getElementById('strategy-params');
+  const params = STRATEGIES[strategyKey].params;
+  container.innerHTML = '';
+  params.forEach(function(p) {
+    const step = Number.isInteger(p.default) ? '1' : '0.1';
+    const div = document.createElement('div');
+    div.className = 'form-control';
+    div.innerHTML =
+      '<label class="label label-text tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + '</label>' +
+      '<input type="number" name="param__' + p.key + '" value="' + p.default + '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value + '" class="input input-bordered input-sm">';
+    container.appendChild(div);
+  });
+}
+
+function updateDescription(strategyKey) {
+  const desc = STRATEGIES[strategyKey].description;
+  document.getElementById('strategy-description').innerHTML = '<strong>How the strategy works:</strong> ' + desc;
+}
+
+// Initial render
+const initialStrategy = document.getElementById('strategy-select').value;
+renderParams(initialStrategy);
+updateDescription(initialStrategy);
+
+// Re-render on strategy change
+document.getElementById('strategy-select').addEventListener('change', function() {
+  renderParams(this.value);
+  updateDescription(this.value);
+});
+
 document.getElementById('require-stop-loss-cb').addEventListener('change', function() {
   document.getElementById('require-stop-loss-val').value = this.checked ? 'true' : 'false';
 });
@@ -178,19 +215,26 @@ document.getElementById('backtest-form').addEventListener('submit', function(evt
   const form = evt.target;
   const target = document.getElementById('backtest-result');
   const data = {};
+  const params = {};
   const formData = new FormData(form);
 
   for (const [key, value] of formData.entries()) {
-    const input = form.querySelector('[name="' + key + '"]');
-    if (!input) continue;
-    if (input.type === 'number') {
-      data[key] = value === '' ? null : Number(value);
-    } else if (key === 'require_stop_loss') {
-      data[key] = value === 'true';
+    if (key.startsWith('param__')) {
+      const paramKey = key.substring(7);
+      params[paramKey] = value === '' ? null : Number(value);
     } else {
-      data[key] = value;
+      const input = form.querySelector('[name="' + key + '"]');
+      if (!input) continue;
+      if (input.type === 'number') {
+        data[key] = value === '' ? null : Number(value);
+      } else if (key === 'require_stop_loss') {
+        data[key] = value === 'true';
+      } else {
+        data[key] = value;
+      }
     }
   }
+  data.params = params;
   if (!data.start_date) data.start_date = '';
   if (!data.end_date) data.end_date = '';
 

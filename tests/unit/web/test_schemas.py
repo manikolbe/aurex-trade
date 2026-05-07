@@ -17,6 +17,17 @@ class TestBacktestRequestValidation:
         assert req.symbol == "XAU_USD"
         assert req.granularity == "M1"
         assert req.capital == 100_000.0
+        assert req.strategy == "sma_crossover"
+        assert req.params == {}
+
+    def test_strategy_and_params(self) -> None:
+        """Strategy and params fields are accepted."""
+        req = BacktestRequest(
+            strategy="rsi_mean_reversion",
+            params={"period": 14, "overbought": 70, "oversold": 30},
+        )
+        assert req.strategy == "rsi_mean_reversion"
+        assert req.params["period"] == 14
 
     def test_valid_date_format(self) -> None:
         """YYYY-MM-DD dates are accepted."""
@@ -108,11 +119,6 @@ class TestBacktestRequestValidation:
             BacktestRequest(max_drawdown_pct=1.5)
         req = BacktestRequest(max_drawdown_pct=1.0)
         assert req.max_drawdown_pct == 1.0
-
-    def test_zero_short_window_rejected(self) -> None:
-        """Short window must be > 0."""
-        with pytest.raises(ValidationError):
-            BacktestRequest(short_window=0)
 
 
 class TestSweepRequestValidation:
