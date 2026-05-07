@@ -75,10 +75,24 @@ class TestRSIMeanReversion:
         assert signal is not None
         assert signal.signal_type == SignalType.SHORT
 
-    def test_no_crossing_returns_none(self) -> None:
+    def test_no_crossing_neutral_zone_returns_none(self) -> None:
         """RSI stays in neutral zone (between 30-70) → None."""
         # Gentle oscillation that keeps RSI in the middle
         prices = [100.0, 100.5, 100.0, 100.5, 100.0, 100.5, 100.0]
+        bars = _make_bars(prices)
+        assert self.strategy.generate(bars) is None
+
+    def test_already_oversold_no_crossing_returns_none(self) -> None:
+        """RSI already below oversold on both bars (no crossing) → None."""
+        # Monotonic decline: RSI=0 on both bars (already below 30, not crossing)
+        prices = [100.0, 98.0, 96.0, 94.0, 92.0, 90.0, 88.0]
+        bars = _make_bars(prices)
+        assert self.strategy.generate(bars) is None
+
+    def test_already_overbought_no_crossing_returns_none(self) -> None:
+        """RSI already above overbought on both bars (no crossing) → None."""
+        # Monotonic rise: RSI=100 on both bars (already above 70, not crossing)
+        prices = [100.0, 102.0, 104.0, 106.0, 108.0, 110.0, 112.0]
         bars = _make_bars(prices)
         assert self.strategy.generate(bars) is None
 

@@ -283,6 +283,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     params = _parse_params(args.param) if args.param else _default_params(strategy_name)
 
+    # Validate params (same check as sweep/walk-forward)
+    validator = PARAM_VALIDATORS.get(strategy_name)
+    if validator and not validator(params):
+        print(f"Invalid parameters for {strategy_name}: {params}")
+        sys.exit(1)
+
     config = BacktestConfig(
         symbol=args.symbol,
         granularity=args.granularity,
