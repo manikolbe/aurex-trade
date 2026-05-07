@@ -17,6 +17,7 @@
       </li>
       <li><a href="/bot" class="{% if request.url.path == '/bot' %}active{% endif %}">Bot</a></li>
       <li><a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}">Settings</a></li>
+      <li><a href="/guide/" class="{% if request.url.path.startswith('/guide') %}active{% endif %}">Guide</a></li>
     </ul>
   </div>
   <div class="navbar-end">

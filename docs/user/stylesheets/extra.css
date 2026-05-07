@@ -1,0 +1,19 @@
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #1d232a;
+  --md-primary-fg-color--light: #2a323c;
+  --md-primary-fg-color--dark: #15191e;
+  --md-primary-bg-color: #a6adba;
+  --md-accent-fg-color: #b8a070;
+  --md-typeset-a-color: #b8a070;
+}
+
+/* Match main site nav height */
+.md-header {
+  height: 4rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+}
+
+.md-header__inner {
+  height: 4rem;
+}
+

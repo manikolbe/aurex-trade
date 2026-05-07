@@ -1,0 +1,37 @@
+site_name: aurexTrade Guide
+site_description: A beginner-friendly guide to using aurexTrade's web interface
+docs_dir: docs/user
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: custom
+    accent: custom
+  features:
+    - navigation.instant
+    - navigation.sections
+    - search.highlight
+    - content.tooltips
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Trading Concepts: trading-concepts.md
+  - Understanding Results: understanding-results.md
+  - Glossary: glossary.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - attr_list
+  - def_list
+  - tables

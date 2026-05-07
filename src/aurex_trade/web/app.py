@@ -24,6 +24,8 @@ logger = structlog.get_logger()
 _WEB_DIR = Path(__file__).parent
 _TEMPLATES_DIR = _WEB_DIR / "templates"
 _STATIC_DIR = _WEB_DIR / "static"
+_PROJECT_ROOT = _WEB_DIR.parent.parent.parent
+_DOCS_SITE_DIR = _PROJECT_ROOT / "site"
 
 
 def _get_strategies_context() -> dict[str, dict[str, str | list[dict[str, str | int | float]]]]:
@@ -75,6 +77,12 @@ def create_app() -> FastAPI:
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+    # User-facing documentation (built by mkdocs build)
+    if _DOCS_SITE_DIR.is_dir():
+        app.mount(
+            "/guide", StaticFiles(directory=str(_DOCS_SITE_DIR), html=True), name="guide"
+        )
 
     # Templates
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))

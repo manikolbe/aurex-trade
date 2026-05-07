@@ -160,3 +160,48 @@ Before EVERY commit, verify:
 - **Adapter tests**: Unit tests with mocked external services
 - **Integration tests**: Marked with `@pytest.mark.integration`
 - Run `just check` before every commit
+
+## Documentation Strategy
+
+### Tooling & Structure
+
+- **User-facing docs**: MkDocs + Material theme, served at `/guide/` from the web app
+- **Internal/dev docs**: Raw markdown in `docs/` (architecture, backtesting, strategies dev guide, user-guide)
+- **Source**: `docs/user/` → published via MkDocs; `docs/*.md` → repo-only (never published)
+- **Build**: `just docs` (build) / `just docs-serve` (local preview)
+
+### Writing Guide (Diátaxis Framework)
+
+All user-facing documentation follows the Diátaxis framework as a writing lens:
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| **Tutorial** | Learning-oriented, step-by-step | "Getting Started" |
+| **Explanation** | Understanding-oriented, concepts | "Trading Concepts" |
+| **How-To** | Task-oriented, problem-solving | (added as project grows) |
+| **Reference** | Information-oriented, dry facts | "Glossary" |
+
+### Audience Split
+
+| Location | Audience | Depth | Purpose |
+|----------|----------|-------|---------|
+| In-app tooltips/explainers | Web users | Brief, contextual | "What do I do here?" |
+| `docs/user/` (MkDocs) | Web users | Comprehensive, conceptual | "Help me understand" |
+| `docs/*.md` (repo-only) | Developers/operators | Technical | Setup, architecture, internals |
+
+**Rule**: In-app and MkDocs docs complement — never duplicate. In-app says "do this";
+docs say "understand why".
+
+### When Adding a Strategy
+
+New strategies automatically appear in the web UI (driven by `StrategyMetadata`).
+For docs, update:
+- `docs/user/trading-concepts.md` — add plain-English explanation of the strategy
+- `docs/user/glossary.md` — add any new terms
+
+### Commands
+
+```bash
+just docs          # Build MkDocs site to site/
+just docs-serve    # Serve docs locally at http://127.0.0.1:8000
+```

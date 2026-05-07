@@ -1,7 +1,7 @@
 # aurexTrade
 
-Automated gold trading bot using Interactive Brokers. Rule-based strategies with
-risk management, paper trading, and a path to live trading.
+Automated gold trading bot using OANDA for forex/CFD trading. Rule-based strategies
+with risk management, paper trading, and a path to live trading.
 
 ## Quick Start
 
@@ -22,6 +22,7 @@ just check
 ## Documentation
 
 - **[User Guide](docs/user-guide.md)** — Setup, configuration, running
+- **[Web Guide](docs/user/index.md)** — Non-technical guide for web interface users
 - **[Architecture](docs/architecture.md)** — Hexagonal design, data flow, schemas
 - **[CLAUDE.md](CLAUDE.md)** — LLM onboarding and conventions
 
@@ -30,5 +31,5 @@ just check
 | Mode | Description | Broker Required? |
 |---|---|---|
 | `local` | Simulated data, no broker | No |
-| `paper` | IBKR paper trading | Yes |
+| `paper` | OANDA practice trading | Yes |
 | `live` | Real trading (double-gated) | Yes |

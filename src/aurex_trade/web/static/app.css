@@ -1,5 +1,15 @@
 /* aurexTrade custom styles — extend DaisyUI as needed */
 
+/* Custom dark theme — subtle warm gold accent for consistency with docs */
+[data-theme="dark"] {
+  --p: 0.62 0.09 75;        /* primary: desaturated warm gold */
+  --pf: 0.52 0.08 75;       /* primary-focus: darker */
+  --pc: 0.95 0.02 75;       /* primary-content: light text on gold */
+  --a: 0.68 0.09 80;        /* accent: soft warm gold */
+  --af: 0.58 0.08 80;       /* accent-focus */
+  --ac: 0.95 0.02 80;       /* accent-content */
+}
+
 /* Allow tooltips inside open collapse sections to overflow.
    DaisyUI v4 collapse sets overflow:hidden on both .collapse
    and .collapse-content — override both when open. */

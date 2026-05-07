@@ -192,14 +192,22 @@ Shared indicators live in `domain/strategy/indicators.py`.
 
 The risk engine is the **mandatory gate** between strategy signals and order execution.
 
-### Rules (all checked, in order)
+### Rules (all checked, in priority order)
 
 1. **Kill switch** — if `RISK_KILL_SWITCH=true`, reject everything immediately
-2. **Max position size** — reject if resulting position would exceed `RISK_MAX_POSITION_SIZE`
-3. **Max daily loss** — reject if today's realized + unrealized P&L is below `-RISK_MAX_DAILY_LOSS`
-4. **Trade frequency** — reject if already executed `RISK_MAX_TRADES_PER_DAY` trades today
+2. **Stop-loss enforcement** — reject if signal has no stop-loss (when `RISK_REQUIRE_STOP_LOSS=true`)
+3. **Max drawdown** — reject if equity drawdown from peak exceeds `RISK_MAX_DRAWDOWN_PCT`
+4. **Consecutive losses** — reject if last N trades were all losers (`RISK_MAX_CONSECUTIVE_LOSSES`)
+5. **Max position size** — reject if resulting position would exceed `RISK_MAX_POSITION_SIZE`
+6. **Max daily loss** — reject if today's realized + unrealized P&L is below `-RISK_MAX_DAILY_LOSS`
+7. **Trade frequency** — reject if already executed `RISK_MAX_TRADES_PER_DAY` trades today
 
 If any rule rejects, the entire signal is rejected with a logged reason.
+
+### Position Sizing
+
+Units are calculated dynamically: `units = (equity * risk_per_trade) / stop_distance`,
+capped at `max_position_size`.
 
 ## Database Schema
 
@@ -263,8 +271,10 @@ AppConfig
 ├── risk: RiskConfig
 │   ├── max_position_size, max_daily_loss
 │   ├── max_trades_per_day, kill_switch
+│   ├── require_stop_loss, risk_per_trade
+│   └── max_drawdown_pct, max_consecutive_losses
 └── strategy: StrategyConfig
-    └── sma_short_window, sma_long_window
+    └── sma_short_window, sma_long_window, atr_multiplier, atr_period
 ```
 
 Environment variable mapping uses prefixes:

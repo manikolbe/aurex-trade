@@ -50,6 +50,10 @@ Edit `.env` to configure the bot. All settings have safe defaults.
 | `RISK_MAX_POSITION_SIZE` | `10` | Maximum units to hold |
 | `RISK_MAX_DAILY_LOSS` | `500.0` | Stop trading if daily loss exceeds this (USD) |
 | `RISK_KILL_SWITCH` | `false` | Emergency stop — halts ALL trading immediately |
+| `RISK_REQUIRE_STOP_LOSS` | `true` | Reject signals without a stop-loss |
+| `RISK_RISK_PER_TRADE` | `0.02` | Risk per trade as fraction of equity (0.02 = 2%) |
+| `RISK_MAX_DRAWDOWN_PCT` | `0.20` | Stop if drawdown exceeds this (0.20 = 20%) |
+| `RISK_MAX_CONSECUTIVE_LOSSES` | `5` | Pause trading after N consecutive losses |
 
 ### OANDA Connection
 
@@ -120,46 +124,14 @@ Each cycle, the bot:
 
 ## Web Interface
 
-The web interface provides a guided workflow for strategy validation, aimed at
-users who prefer a visual interface over the command line.
-
 ```bash
 just web        # Start web server at http://127.0.0.1:8000
 ```
 
-### Pages
+For a full walkthrough of the web interface (aimed at non-technical users), see
+the **[Web Guide](user/index.md)**.
 
-| Page | Purpose |
-|------|---------|
-| **Backtest** (`/backtest`) | Run a single backtest with chosen strategy and parameters |
-| **Parameter Sweep** (`/sweep`) | Test every combination of parameter ranges, ranked by metric |
-| **Walk-Forward** (`/walk-forward`) | Validate strategy robustness on unseen data |
-| **Bot** (`/bot`) | Start/stop the live trading bot |
-
-### Guided 3-Step Workflow
-
-The web UI walks you through a three-step validation process:
-
-1. **Backtest** — Sanity check: does the strategy make money on historical data?
-2. **Sweep** — Find optimal settings by testing all parameter combinations
-3. **Walk-Forward** — Verify the best settings aren't a fluke by testing on unseen data
-
-Each page includes a collapsible explainer section that describes what you're doing
-and how to interpret the results, written in plain language for non-technical users.
-
-### Strategy Selection
-
-All pages feature a strategy dropdown populated from the strategy registry. Selecting
-a different strategy:
-
-- Updates the parameter form fields (labels, defaults, valid ranges)
-- Updates tooltips on each field with strategy-specific guidance
-- Updates the educational explainer text to describe the selected strategy's logic
-
-This content is driven by strategy metadata — new strategies automatically appear
-with appropriate guidance when registered.
-
-### API Access
+### API Access (Developers)
 
 The web layer exposes a REST API for programmatic use:
 

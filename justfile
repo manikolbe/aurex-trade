@@ -60,6 +60,14 @@ web-dev:
 sync:
     uv sync
 
+# Build user-facing documentation site
+docs:
+    uv run mkdocs build
+
+# Serve documentation locally for preview
+docs-serve:
+    uv run mkdocs serve
+
 # Clean build artifacts
 clean:
     rm -rf dist/ build/ .eggs/ *.egg-info/
