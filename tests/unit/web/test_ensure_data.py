@@ -112,11 +112,15 @@ class TestAutoDownload:
         mock_conn.disconnect.assert_called_once()
         mock_dl.download.assert_called_once_with("XAU_USD", "M1", start, end)
 
-    def test_downloads_when_range_incomplete(self, tmp_path: Path) -> None:
-        """Triggers download when existing data doesn't cover the full range."""
+    def test_uses_partial_data_without_redownload(self, tmp_path: Path) -> None:
+        """Returns existing bars even if they don't cover the full range.
+
+        Avoids redundant downloads when markets are closed (weekends/holidays)
+        and OANDA wouldn't return additional data anyway.
+        """
         start = datetime(2025, 1, 1, tzinfo=UTC)
         end = datetime(2025, 1, 5, tzinfo=UTC)
-        # Existing data only covers Jan 1-2
+        # Existing data only covers Jan 1-2 (e.g. market closed Jan 3-5)
         existing_bars = [
             _make_bar(datetime(2025, 1, 1, tzinfo=UTC)),
             _make_bar(datetime(2025, 1, 2, tzinfo=UTC)),
@@ -124,42 +128,10 @@ class TestAutoDownload:
         data_store = HistoricalDataStore(tmp_path)
         data_store.save_bars(existing_bars, "XAU_USD", "M1")
 
-        full_bars = [
-            _make_bar(datetime(2025, 1, 1, tzinfo=UTC)),
-            _make_bar(datetime(2025, 1, 2, tzinfo=UTC)),
-            _make_bar(datetime(2025, 1, 3, tzinfo=UTC)),
-            _make_bar(datetime(2025, 1, 4, tzinfo=UTC)),
-            _make_bar(datetime(2025, 1, 5, tzinfo=UTC)),
-        ]
+        result = _ensure_data_available(data_store, "XAU_USD", "M1", start, end)
 
-        with (
-            patch("aurex_trade.config.OANDAConfig") as mock_config_cls,
-            patch("aurex_trade.adapters.oanda.connection.OANDAConnection") as mock_conn_cls,
-            patch(
-                "aurex_trade.adapters.oanda.downloader.OANDAHistoricalDownloader"
-            ) as mock_dl_cls,
-        ):
-            mock_config = MagicMock()
-            mock_config.access_token = "test-token"  # noqa: S105
-            mock_config.account_id = "test-account"
-            mock_config_cls.return_value = mock_config
-
-            mock_conn = MagicMock()
-            mock_conn_cls.return_value = mock_conn
-
-            mock_dl = MagicMock()
-            mock_dl.download.side_effect = lambda *a, **kw: (
-                data_store.save_bars(full_bars, "XAU_USD", "M1"),
-                5,
-            )[1]
-            mock_dl_cls.return_value = mock_dl
-
-            result = _ensure_data_available(
-                data_store, "XAU_USD", "M1", start, end
-            )
-
-        assert len(result) == 5
-        mock_dl.download.assert_called_once()
+        # Returns available bars without attempting download
+        assert len(result) == 2
 
     def test_updates_task_message_during_download(self, tmp_path: Path) -> None:
         """Registry.update_message is called with download progress."""

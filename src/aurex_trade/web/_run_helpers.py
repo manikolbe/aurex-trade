@@ -43,15 +43,10 @@ def _ensure_data_available(
     with contextlib.suppress(FileNotFoundError):
         bars = data_store.load_bars(symbol, granularity, start, end)
 
-    # Check if existing data covers the requested range
+    # If we have any bars in the requested range, use them.
+    # Don't second-guess market-hours gaps (weekends, holidays).
     if bars:
-        range_covered = True
-        if start and bars[0].timestamp > start:
-            range_covered = False
-        if end and bars[-1].timestamp < end:
-            range_covered = False
-        if range_covered:
-            return bars
+        return bars
 
     # Cannot download without concrete date range
     if start is None or end is None:
