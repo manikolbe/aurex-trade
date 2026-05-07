@@ -255,12 +255,19 @@ class WalkForwardValidator:
                         [scale] * total_wins + [-scale] * total_losses
                     )
                 else:
-                    # Equal wins/losses — split symmetrically
-                    half = abs(total_pnl) / total_trades
-                    sign = 1.0 if total_pnl >= 0 else -1.0
+                    # Equal wins/losses — distribute asymmetrically
+                    # so sum equals total_pnl and signs stay correct
+                    # (wins positive, losses negative).
+                    # Constraint: n*avg_win - n*avg_loss = total_pnl
+                    n = total_wins  # == total_losses
+                    if total_pnl >= 0:
+                        avg_loss = 1.0
+                        avg_win = 1.0 + total_pnl / n
+                    else:
+                        avg_win = 1.0
+                        avg_loss = 1.0 + abs(total_pnl) / n
                     combined_pnls = (
-                        [half * sign] * total_wins
-                        + [-half * sign] * total_losses
+                        [avg_win] * total_wins + [-avg_loss] * total_losses
                     )
             elif total_wins > 0:
                 combined_pnls = [total_pnl / total_wins] * total_wins

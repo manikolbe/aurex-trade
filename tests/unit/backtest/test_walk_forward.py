@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.walk_forward import WalkForwardValidator
 from aurex_trade.domain.models import BarData
@@ -69,6 +71,39 @@ def _sma_factory(params: dict[str, int]) -> SMACrossover:
     return SMACrossover(
         short_window=params["short_window"], long_window=params["long_window"]
     )
+
+
+class TestAggregateMetricsEqualWinsLosses:
+    """Regression test for #42: metrics incorrect when wins == losses."""
+
+    def test_pnl_preserved_when_wins_equal_losses(self) -> None:
+        """Aggregate total_pnl must reflect actual P&L, not collapse to zero."""
+        # Use enough bars and cycles so SMA crossover generates equal wins/losses
+        # We test indirectly via the synthetic PnL logic by using a large dataset
+        # where it's likely wins ~= losses in some windows.
+        # Direct unit test of the branch: create a validator, run it, check
+        # that aggregate total_pnl == sum of window test_pnl values.
+        bars = _make_trending_bars(400)
+
+        validator = WalkForwardValidator(
+            strategy_factory=_sma_factory,
+            param_grid={"short_window": [5, 10], "long_window": [20, 30]},
+            bars=bars,
+            config=_config(),
+            risk_engine=_risk_engine(),
+            train_bars=100,
+            test_bars=100,
+            param_validator=lambda p: p["short_window"] < p["long_window"],
+        )
+        result = validator.run()
+
+        # The aggregate total_pnl must equal the sum of per-window test PnLs
+        expected_pnl = sum(
+            w.test_result.metrics.total_pnl for w in result.windows
+        )
+        assert result.aggregate_test_metrics.total_pnl == pytest.approx(
+            expected_pnl, abs=0.01
+        )
 
 
 class TestWalkForwardValidator:
