@@ -1,8 +1,8 @@
-# CLAUDE.md — aurexTrade LLM Onboarding
+# CLAUDE.md — AurexTrade LLM Onboarding
 
 Read this fully before making any changes.
 
-## What is aurexTrade?
+## What is AurexTrade?
 
 An automated gold trading bot that connects to OANDA for forex/CFD trading.
 Single-user, single-process Python application. Currently targeting paper trading

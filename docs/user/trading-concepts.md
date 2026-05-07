@@ -1,6 +1,6 @@
 # Trading Concepts
 
-This page explains the core ideas behind aurexTrade in plain language.
+This page explains the core ideas behind AurexTrade in plain language.
 No prior trading experience needed.
 
 ## What Is a Trading Strategy?
@@ -14,7 +14,7 @@ steps, and you get a specific output (a buy or sell decision).
 
 ## The Two Strategies
 
-aurexTrade currently offers two strategies. They work in opposite ways, which means
+AurexTrade currently offers two strategies. They work in opposite ways, which means
 they perform best in different market conditions.
 
 ### SMA Crossover (Trend-Following)
@@ -94,7 +94,7 @@ Think of it as a co-pilot that can override the autopilot when things look dange
 
 ## The 3-Step Validation Workflow
 
-Before you trust a strategy with real money, you need to validate it. aurexTrade
+Before you trust a strategy with real money, you need to validate it. AurexTrade
 provides three tools for this:
 
 ### Step 1: Backtest

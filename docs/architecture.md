@@ -1,8 +1,8 @@
-# aurexTrade — Architecture Reference
+# AurexTrade — Architecture Reference
 
 ## Hexagonal Architecture (Ports & Adapters)
 
-aurexTrade uses hexagonal architecture to keep business logic independent of
+AurexTrade uses hexagonal architecture to keep business logic independent of
 infrastructure concerns. This means the trading strategy and risk engine know
 nothing about OANDA, SQLite, or any other external system.
 

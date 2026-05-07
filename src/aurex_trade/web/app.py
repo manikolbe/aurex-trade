@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
-        title="aurexTrade",
+        title="AurexTrade",
         version="0.1.0",
         lifespan=lifespan,
     )

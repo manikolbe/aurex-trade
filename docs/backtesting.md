@@ -1,4 +1,4 @@
-# aurexTrade — Backtesting
+# AurexTrade — Backtesting
 
 ## Architecture
 

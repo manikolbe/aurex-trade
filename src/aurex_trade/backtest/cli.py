@@ -65,7 +65,7 @@ def main() -> None:
     """Entry point for the backtest CLI."""
     parser = argparse.ArgumentParser(
         prog="aurex_trade.backtest",
-        description="aurexTrade Backtesting Framework",
+        description="AurexTrade Backtesting Framework",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

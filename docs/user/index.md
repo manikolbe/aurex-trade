@@ -1,6 +1,6 @@
-# Welcome to aurexTrade
+# Welcome to AurexTrade
 
-aurexTrade is a tool that helps you test and run automated gold trading strategies.
+AurexTrade is a tool that helps you test and run automated gold trading strategies.
 It watches the gold market, looks for patterns, and can place trades on your behalf
 based on rules you choose — no guesswork, no emotions.
 

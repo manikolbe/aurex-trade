@@ -1,4 +1,4 @@
-# aurexTrade
+# AurexTrade
 
 Automated gold trading bot using OANDA for forex/CFD trading. Rule-based strategies
 with risk management, paper trading, and a path to live trading.

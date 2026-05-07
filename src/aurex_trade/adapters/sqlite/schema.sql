@@ -1,4 +1,4 @@
--- aurexTrade SQLite schema
+-- AurexTrade SQLite schema
 -- Auto-applied on first run by SQLiteRepository.
 
 PRAGMA journal_mode = WAL;

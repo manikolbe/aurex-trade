@@ -1,4 +1,4 @@
-# aurexTrade — Strategies
+# AurexTrade — Strategies
 
 ## Strategy Protocol
 

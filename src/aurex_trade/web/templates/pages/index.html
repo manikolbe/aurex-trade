@@ -1,63 +1,69 @@
 {% extends "base.html" %}
-{% block title %}aurexTrade{% endblock %}
+{% block title %}AurexTrade{% endblock %}
 {% block content %}
 
-<!-- Strategy Testing Workflow -->
-<div class="card bg-base-100 shadow-md">
-  <div class="card-body">
-    <h2 class="card-title text-xl">Strategy Testing</h2>
-    <p class="text-sm text-base-content/70 mb-3">Trading strategies are just rules that decide when to buy and sell. But how do you know if those rules actually work? You test them — carefully, in stages — before risking real money. Here's the process:</p>
+<!-- Welcome -->
+<div class="mb-6">
+  <h1 class="text-2xl font-bold">Welcome to AurexTrade</h1>
+  <p class="text-base-content/70 mt-2">An automated gold trading tool that helps you test strategies on historical data, find the best settings, and run a trading bot — all without guesswork or emotion.</p>
+</div>
 
-    <div class="bg-base-200 rounded-lg p-3 mb-4 text-sm">
-      <p class="font-medium mb-2">Example — SMA Crossover on Gold</p>
-      <p class="text-base-content/70">This strategy watches two moving averages of the gold price — a "fast" one (say, the last 10 prices) and a "slow" one (say, the last 30 prices). When the fast average crosses <em>above</em> the slow one, it means prices are picking up momentum → buy. When it crosses <em>below</em> → sell. The numbers 10 and 30 are the "settings" you'll tune in the steps below.</p>
+<!-- Quick Navigation -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+  <a href="/backtest" class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+    <div class="card-body p-4">
+      <h2 class="card-title text-base">Strategy Testing</h2>
+      <p class="text-sm text-base-content/70">Test and validate trading strategies on past market data before risking real money.</p>
     </div>
+  </a>
+  <a href="/bot" class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+    <div class="card-body p-4">
+      <h2 class="card-title text-base">Trading Bot</h2>
+      <p class="text-sm text-base-content/70">Start, stop, and monitor the automated trading engine.</p>
+    </div>
+  </a>
+  <a href="/settings" class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+    <div class="card-body p-4">
+      <h2 class="card-title text-base">Settings</h2>
+      <p class="text-sm text-base-content/70">View and manage your trading configuration and risk limits.</p>
+    </div>
+  </a>
+  <a href="/guide/" class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+    <div class="card-body p-4">
+      <h2 class="card-title text-base">Guide</h2>
+      <p class="text-sm text-base-content/70">New to trading? Learn the concepts, strategies, and how to read your results.</p>
+    </div>
+  </a>
+</div>
+
+<!-- How It Works -->
+<div class="card bg-base-100 shadow-md mt-6">
+  <div class="card-body">
+    <h2 class="card-title text-xl">How It Works</h2>
+    <p class="text-sm text-base-content/70 mb-3">Before you trade with real money, you validate your strategy in three stages:</p>
 
     <ul class="steps steps-vertical text-sm">
       <li class="step step-primary">
         <div class="text-left ml-2">
           <strong><a href="/backtest" class="link link-primary">1. Backtest</a></strong>
-          <p class="text-base-content/70 mt-1">Replay past price data and pretend you were trading with your strategy. Did it make money? How much did it lose at its worst? How often did it win? Think of it like watching a recording of a football match and seeing how your game plan would have played out. This is your first sanity check — if it doesn't work on old data, it won't work on new data either.</p>
-          <p class="text-base-content/50 mt-1 italic">e.g. "Run SMA Crossover with fast=10, slow=30 on last week's gold prices → it made $420 with a 58% win rate. Okay, the idea has legs."</p>
+          <p class="text-base-content/70 mt-1">Replay past price data through your strategy. Did it make money? This is your first sanity check.</p>
         </div>
       </li>
       <li class="step step-primary">
         <div class="text-left ml-2">
           <strong><a href="/sweep" class="link link-primary">2. Parameter Sweep</a></strong>
-          <p class="text-base-content/70 mt-1">Every strategy has settings you can tweak (like how sensitive it is to price changes). A sweep tests <em>every</em> combination of settings and ranks the results — so instead of guessing, you find out which settings actually performed best. It's like trying every dial position on a radio to find the clearest signal.</p>
-          <p class="text-base-content/50 mt-1 italic">e.g. "Try fast=5,10,15,20 and slow=20,30,40,50 — that's 16 combinations. The sweep tells you fast=15, slow=40 scored best."</p>
+          <p class="text-base-content/70 mt-1">Test every combination of strategy settings and find which ones perform best.</p>
         </div>
       </li>
       <li class="step step-primary">
         <div class="text-left ml-2">
           <strong><a href="/walk-forward" class="link link-primary">3. Walk-Forward Validation</a></strong>
-          <p class="text-base-content/70 mt-1">Here's the catch: the "best" settings from a sweep might just be lucky — they fit the past perfectly but fall apart on new data (like memorizing answers to a specific test instead of actually learning the subject). Walk-forward solves this by repeatedly finding the best settings on one chunk of data, then testing them on the <em>next</em> chunk they've never seen. If performance holds up across multiple unseen chunks, the strategy is genuinely robust — not just a fluke. If it fails here, go back to step 2 and try different ranges.</p>
-          <p class="text-base-content/50 mt-1 italic">e.g. "Week 1 data picks fast=15, slow=40 as best → test on Week 2 (unseen) → still profitable? Week 3 picks best → test on Week 4 → still works? Great, you can trust these settings."</p>
+          <p class="text-base-content/70 mt-1">Prove the best settings aren't just luck by testing them on data the system has never seen.</p>
         </div>
       </li>
     </ul>
-  </div>
-</div>
 
-<!-- Operations -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-  <div class="card bg-base-100 shadow-md">
-    <div class="card-body">
-      <h2 class="card-title">Trading Bot</h2>
-      <p class="text-sm text-base-content/70">Start, stop, and monitor the live trading engine.</p>
-      <div class="card-actions justify-end mt-2">
-        <a href="/bot" class="btn btn-primary btn-sm">Open</a>
-      </div>
-    </div>
-  </div>
-  <div class="card bg-base-100 shadow-md">
-    <div class="card-body">
-      <h2 class="card-title">Settings</h2>
-      <p class="text-sm text-base-content/70">View and manage application configuration.</p>
-      <div class="card-actions justify-end mt-2">
-        <a href="/settings" class="btn btn-primary btn-sm">Open</a>
-      </div>
-    </div>
+    <p class="text-sm text-base-content/50 mt-3">Want to understand each step in detail? <a href="/guide/getting-started/" class="link link-primary">Read the Getting Started guide</a>.</p>
   </div>
 </div>
 

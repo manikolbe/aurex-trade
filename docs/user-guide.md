@@ -1,8 +1,8 @@
-# aurexTrade — User Guide
+# AurexTrade — User Guide
 
 ## Overview
 
-aurexTrade is an automated gold trading bot that connects to OANDA for forex/CFD trading.
+AurexTrade is an automated gold trading bot that connects to OANDA for forex/CFD trading.
 It uses rule-based strategies to generate trading signals, applies risk management checks,
 and executes trades on your behalf.
 

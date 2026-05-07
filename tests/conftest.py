@@ -1,4 +1,4 @@
-"""Shared test fixtures for aurexTrade."""
+"""Shared test fixtures for AurexTrade."""
 
 from datetime import UTC, datetime
 

@@ -1,4 +1,4 @@
-# aurexTrade — Task Runner
+# AurexTrade — Task Runner
 # Run `just --list` to see all available commands.
 
 # Default: run all checks

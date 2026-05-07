@@ -1,6 +1,6 @@
 # Glossary
 
-Quick definitions of terms you'll encounter in aurexTrade.
+Quick definitions of terms you'll encounter in AurexTrade.
 
 ---
 

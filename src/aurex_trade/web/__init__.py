@@ -1,1 +1,1 @@
-"""aurexTrade web interface — FastAPI composition root."""
+"""AurexTrade web interface — FastAPI composition root."""
