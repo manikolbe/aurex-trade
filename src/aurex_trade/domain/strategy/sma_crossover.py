@@ -2,6 +2,7 @@
 
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData, Signal
+from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
 
 
 class SMACrossover:
@@ -30,6 +31,71 @@ class SMACrossover:
     @property
     def name(self) -> str:
         return "sma_crossover"
+
+    @classmethod
+    def metadata(cls) -> StrategyMetadata:
+        return StrategyMetadata(
+            display_name="SMA Crossover",
+            description=(
+                "A trend-following strategy that uses two Simple Moving Averages "
+                "(SMAs) of different lengths. The 'fast' average tracks recent price "
+                "action while the 'slow' average captures the longer-term trend. "
+                "When the fast average crosses above the slow average, it signals "
+                "that upward momentum is building (buy). When it crosses below, "
+                "downward momentum is building (sell). Works best in trending "
+                "markets; may generate false signals in sideways/choppy conditions."
+            ),
+            params=(
+                ParamMeta(
+                    key="short_window",
+                    label="Fast MA Window",
+                    tooltip=(
+                        "Number of bars the fast moving average looks back. "
+                        "Smaller values react quicker to price changes but "
+                        "produce more noise."
+                    ),
+                    default=10,
+                    min_value=2,
+                    max_value=100,
+                ),
+                ParamMeta(
+                    key="long_window",
+                    label="Slow MA Window",
+                    tooltip=(
+                        "Number of bars the slow moving average looks back. "
+                        "Must be larger than the fast window. Larger values "
+                        "give smoother signals but react slower to trend changes."
+                    ),
+                    default=30,
+                    min_value=5,
+                    max_value=500,
+                ),
+                ParamMeta(
+                    key="atr_multiplier",
+                    label="ATR Multiplier",
+                    tooltip=(
+                        "How many ATR units away to place the stop-loss. "
+                        "Higher values give trades more room to breathe but "
+                        "risk larger losses per trade."
+                    ),
+                    default=2.0,
+                    min_value=0.5,
+                    max_value=5.0,
+                ),
+                ParamMeta(
+                    key="atr_period",
+                    label="ATR Period",
+                    tooltip=(
+                        "Number of bars used to calculate Average True Range "
+                        "(volatility). Longer periods smooth out volatility "
+                        "spikes; shorter periods react faster."
+                    ),
+                    default=14,
+                    min_value=2,
+                    max_value=50,
+                ),
+            ),
+        )
 
     def generate(self, bars: list[BarData]) -> Signal | None:
         # Need at least long_window + 1 bars to detect a crossover

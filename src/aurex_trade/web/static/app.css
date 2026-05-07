@@ -1,1 +1,11 @@
 /* aurexTrade custom styles — extend DaisyUI as needed */
+
+/* Allow tooltips inside open collapse sections to overflow.
+   DaisyUI v4 collapse sets overflow:hidden on both .collapse
+   and .collapse-content — override both when open. */
+.collapse:has(> input:checked) {
+  overflow: visible !important;
+}
+.collapse:has(> input:checked) > .collapse-content {
+  overflow: visible !important;
+}
