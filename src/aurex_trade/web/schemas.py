@@ -10,7 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from aurex_trade.backtest.results import BacktestResult, SweepResult, WalkForwardResult
-from aurex_trade.metrics import PerformanceMetrics
+from aurex_trade.metrics import RANKABLE_METRICS, PerformanceMetrics
 from aurex_trade.web.tasks import TaskInfo, TaskStatus
 
 # Constrained types for safe string inputs
@@ -196,6 +196,15 @@ class SweepRequest(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("rank_by")
+    @classmethod
+    def validate_rank_by(cls, v: str) -> str:
+        """Validate rank_by is a known PerformanceMetrics field."""
+        if v not in RANKABLE_METRICS:
+            msg = f"Invalid rank_by metric: {v!r}. Valid options: {', '.join(RANKABLE_METRICS)}"
+            raise ValueError(msg)
+        return v
+
 
 class SweepResultResponse(BaseModel):
     """Sweep result response."""
@@ -267,6 +276,16 @@ class WalkForwardRequest(BaseModel):
             msg = f"Total parameter combinations ({total_combos}) exceeds limit of 1000"
             raise ValueError(msg)
         return v
+
+    @field_validator("rank_by")
+    @classmethod
+    def validate_rank_by(cls, v: str) -> str:
+        """Validate rank_by is a known PerformanceMetrics field."""
+        if v not in RANKABLE_METRICS:
+            msg = f"Invalid rank_by metric: {v!r}. Valid options: {', '.join(RANKABLE_METRICS)}"
+            raise ValueError(msg)
+        return v
+
     train_bars: int = Field(default=7200, gt=0)
     test_bars: int = Field(default=7200, gt=0)
 

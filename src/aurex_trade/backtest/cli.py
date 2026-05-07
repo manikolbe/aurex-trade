@@ -19,6 +19,7 @@ from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
 from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
+from aurex_trade.metrics import RANKABLE_METRICS
 
 # Strategy factory registry — maps name to (params → Strategy) callable
 STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
@@ -181,7 +182,8 @@ def main() -> None:
     sweep_parser.add_argument(
         "--rank-by",
         default="sharpe_ratio",
-        help="Metric to rank by (sharpe_ratio, total_pnl, profit_factor)",
+        choices=RANKABLE_METRICS,
+        help="Metric to rank by",
     )
 
     # walk-forward subcommand
@@ -222,7 +224,8 @@ def main() -> None:
     wf_parser.add_argument(
         "--rank-by",
         default="sharpe_ratio",
-        help="Metric to rank by (sharpe_ratio, total_pnl, profit_factor)",
+        choices=RANKABLE_METRICS,
+        help="Metric to rank by",
     )
     wf_parser.add_argument(
         "--train-bars",

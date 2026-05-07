@@ -29,6 +29,11 @@ class PerformanceMetrics:
     total_commission: float
 
 
+RANKABLE_METRICS: tuple[str, ...] = tuple(
+    f.name for f in PerformanceMetrics.__dataclass_fields__.values()
+)
+
+
 def calculate_metrics(
     equity_curve: list[float],
     trade_pnls: list[float],
