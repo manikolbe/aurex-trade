@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Access Denied — AurexTrade{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-[70vh]">
+  <div class="card bg-base-100 shadow-xl w-full max-w-sm">
+    <div class="card-body items-center text-center">
+      <div class="text-error mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
+      </div>
+      <h1 class="card-title text-xl">Access Denied</h1>
+      <p class="text-base-content/70 mt-2">
+        The account <span class="font-mono text-sm">{{ attempted_email }}</span> is not authorized to access this application.
+      </p>
+      <div class="card-actions mt-6">
+        <a href="/auth/google" class="btn btn-neutral btn-sm">Try a different account</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -4,23 +4,11 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Generator
 from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
-
-from aurex_trade.web.app import create_app
-
-
-@pytest.fixture
-def client() -> Generator[TestClient]:
-    """Create test client with lifespan (starts TaskRegistry)."""
-    app = create_app()
-    with TestClient(app) as c:
-        yield c
 
 
 class TestHtmxBacktest:

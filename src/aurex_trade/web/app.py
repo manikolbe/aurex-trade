@@ -13,7 +13,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from aurex_trade.adapters.google.oauth import GoogleOAuthAdapter
+from aurex_trade.adapters.sqlite.session_store import SQLiteSessionStore
 from aurex_trade.logging import setup_logging
+from aurex_trade.web.auth.config import AuthConfig
+from aurex_trade.web.auth.middleware import AuthMiddleware
+from aurex_trade.web.auth.router import create_auth_router
 from aurex_trade.web.config import WebConfig
 from aurex_trade.web.errors import register_error_handlers
 from aurex_trade.web.routers import health
@@ -53,13 +58,27 @@ def _get_strategies_context() -> dict[str, dict[str, str | list[dict[str, str | 
     return result
 
 
+_DB_PATH = Path("data/aurex_trade.db")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
     registry = TaskRegistry(max_workers=2)
     app.state.task_registry = registry
+
+    # Session store (shared DB)
+    session_store = SQLiteSessionStore(db_path=_DB_PATH)
+    app.state.session_store = session_store
+
+    # Cleanup expired sessions on startup
+    expired = session_store.cleanup_expired()
+    if expired:
+        logger.info("web.session_cleanup", deleted=expired)
+
     logger.info("web.startup", workers=2)
     yield
+    session_store.close()
     registry.shutdown()
     logger.info("web.shutdown")
 
@@ -88,6 +107,22 @@ def create_app() -> FastAPI:
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     app.state.templates = templates
 
+    # Authentication
+    auth_config = AuthConfig()
+    session_store = SQLiteSessionStore(db_path=_DB_PATH)
+    oauth_adapter = GoogleOAuthAdapter(
+        client_id=auth_config.google_client_id,
+        client_secret=auth_config.google_client_secret,
+        redirect_uri=auth_config.redirect_uri,
+    )
+    auth_router = create_auth_router(auth_config, session_store, oauth_adapter)
+    app.include_router(auth_router)
+    app.add_middleware(
+        AuthMiddleware,
+        session_store=session_store,
+        expiry_hours=auth_config.session_expiry_hours,
+    )
+
     # Routers
     app.include_router(health.router)
 
@@ -100,35 +135,36 @@ def create_app() -> FastAPI:
     app.include_router(htmx.router)
 
     # Page routes (serve HTML templates)
+    def _user_context(request: Request) -> dict[str, object]:
+        """Extract user from request state for template context."""
+        return {"user": getattr(request.state, "user", None)}
+
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/index.html")
+        return templates.TemplateResponse(request, "pages/index.html", _user_context(request))
 
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request, "pages/backtest.html", {"strategies": _get_strategies_context()}
-        )
+        ctx = {**_user_context(request), "strategies": _get_strategies_context()}
+        return templates.TemplateResponse(request, "pages/backtest.html", ctx)
 
     @app.get("/sweep", response_class=HTMLResponse)
     def sweep_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request, "pages/sweep.html", {"strategies": _get_strategies_context()}
-        )
+        ctx = {**_user_context(request), "strategies": _get_strategies_context()}
+        return templates.TemplateResponse(request, "pages/sweep.html", ctx)
 
     @app.get("/walk-forward", response_class=HTMLResponse)
     def walk_forward_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request, "pages/walk_forward.html", {"strategies": _get_strategies_context()}
-        )
+        ctx = {**_user_context(request), "strategies": _get_strategies_context()}
+        return templates.TemplateResponse(request, "pages/walk_forward.html", ctx)
 
     @app.get("/bot", response_class=HTMLResponse)
     def bot_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/bot.html")
+        return templates.TemplateResponse(request, "pages/bot.html", _user_context(request))
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/settings.html")
+        return templates.TemplateResponse(request, "pages/settings.html", _user_context(request))
 
     return app
 

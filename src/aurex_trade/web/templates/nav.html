@@ -20,7 +20,33 @@
       <li><a href="/guide/" class="{% if request.url.path.startswith('/guide') %}active{% endif %}">Guide</a></li>
     </ul>
   </div>
-  <div class="navbar-end">
+  <div class="navbar-end gap-2">
+    {% if user %}
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+        {% if user.avatar_url %}
+        <div class="w-8 rounded-full">
+          <img alt="Avatar" src="{{ user.avatar_url }}" referrerpolicy="no-referrer" />
+        </div>
+        {% else %}
+        <div class="avatar placeholder">
+          <div class="bg-neutral text-neutral-content rounded-full w-8">
+            <span class="text-xs">{{ user.name[:2]|upper }}</span>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+        <li class="disabled"><a class="text-base-content/60">{{ user.name }}</a></li>
+        <li class="disabled"><a class="text-base-content/40 text-xs">{{ user.email }}</a></li>
+        <li class="mt-1">
+          <form method="post" action="/auth/logout">
+            <button type="submit" class="w-full text-left">Logout</button>
+          </form>
+        </li>
+      </ul>
+    </div>
+    {% endif %}
     <div class="badge badge-outline badge-sm">v0.1.0</div>
   </div>
 </div>

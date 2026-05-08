@@ -125,3 +125,33 @@ class AccountState:
 
     equity: float = 0.0
     peak_equity: float = 0.0
+
+
+@dataclass(frozen=True)
+class User:
+    """Authenticated user identity."""
+
+    id: str
+    email: str
+    name: str
+    avatar_url: str = ""
+
+
+@dataclass(frozen=True)
+class OAuthUserInfo:
+    """User info returned by an OAuth provider."""
+
+    sub: str
+    email: str
+    name: str
+    picture: str = ""
+
+
+@dataclass(frozen=True)
+class SessionData:
+    """An active user session."""
+
+    session_id: str
+    user_id: str
+    created_at: datetime
+    expires_at: datetime

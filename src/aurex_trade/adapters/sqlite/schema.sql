@@ -46,3 +46,24 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol_timestamp
 
 CREATE INDEX IF NOT EXISTS idx_signals_symbol_timestamp
     ON signals (symbol, timestamp);
+
+-- Authentication tables
+
+CREATE TABLE IF NOT EXISTS users (
+    id          TEXT PRIMARY KEY,
+    email       TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    avatar_url  TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    last_login  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id),
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
