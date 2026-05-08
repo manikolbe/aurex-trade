@@ -67,18 +67,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     registry = TaskRegistry(max_workers=2)
     app.state.task_registry = registry
 
-    # Session store (shared DB)
-    session_store = SQLiteSessionStore(db_path=_DB_PATH)
-    app.state.session_store = session_store
-
-    # Cleanup expired sessions on startup
-    expired = session_store.cleanup_expired()
-    if expired:
-        logger.info("web.session_cleanup", deleted=expired)
+    # Cleanup expired sessions on startup (store is created in create_app)
+    session_store: SQLiteSessionStore | None = getattr(app.state, "session_store", None)
+    if session_store:
+        expired = session_store.cleanup_expired()
+        if expired:
+            logger.info("web.session_cleanup", deleted=expired)
 
     logger.info("web.startup", workers=2)
     yield
-    session_store.close()
+    if session_store:
+        session_store.close()
     registry.shutdown()
     logger.info("web.shutdown")
 
@@ -110,6 +109,7 @@ def create_app() -> FastAPI:
     # Authentication
     auth_config = AuthConfig()
     session_store = SQLiteSessionStore(db_path=_DB_PATH)
+    app.state.session_store = session_store
     oauth_adapter = GoogleOAuthAdapter(
         client_id=auth_config.google_client_id,
         client_secret=auth_config.google_client_secret,

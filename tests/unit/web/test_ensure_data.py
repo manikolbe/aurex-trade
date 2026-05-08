@@ -89,7 +89,7 @@ class TestAutoDownload:
             ) as mock_dl_cls,
         ):
             mock_config = MagicMock()
-            mock_config.access_token = "test-token"  # noqa: S105
+            mock_config.access_token = "test-token"
             mock_config.account_id = "test-account"
             mock_config_cls.return_value = mock_config
 
@@ -151,7 +151,7 @@ class TestAutoDownload:
             ) as mock_dl_cls,
         ):
             mock_config = MagicMock()
-            mock_config.access_token = "test-token"  # noqa: S105
+            mock_config.access_token = "test-token"
             mock_config.account_id = "test-account"
             mock_config_cls.return_value = mock_config
 
@@ -252,7 +252,7 @@ class TestDownloadError:
             ) as mock_dl_cls,
         ):
             mock_config = MagicMock()
-            mock_config.access_token = "test-token"  # noqa: S105
+            mock_config.access_token = "test-token"
             mock_config.account_id = "test-account"
             mock_config_cls.return_value = mock_config
 

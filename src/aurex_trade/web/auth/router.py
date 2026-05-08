@@ -6,7 +6,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from aurex_trade.adapters.google.oauth import GoogleOAuthAdapter
@@ -59,24 +59,25 @@ def create_auth_router(
     """Create auth router with injected dependencies."""
 
     @router.get("/login", response_class=HTMLResponse)
-    def login_page(request: Request) -> HTMLResponse:
+    def login_page(
+        request: Request, redirect_to: str = Query("/", alias="next")
+    ) -> HTMLResponse:
         templates = request.app.state.templates
-        response: HTMLResponse = templates.TemplateResponse(request, "pages/login.html")
+        response: HTMLResponse = templates.TemplateResponse(
+            request, "pages/login.html", {"next_path": redirect_to}
+        )
         return response
 
     @router.get("/google")
-    def google_redirect(request: Request) -> RedirectResponse:
+    def google_redirect(
+        request: Request, redirect_to: str = Query("/", alias="next")
+    ) -> RedirectResponse:
         """Redirect to Google OAuth consent screen."""
-        # Capture the page user was trying to access (from referer or default /)
-        referer = request.headers.get("referer", "")
-        next_path = "/"
-        hostname = request.base_url.hostname or ""
-        if referer and hostname in referer:
-            from urllib.parse import urlparse
+        # Validate redirect path is relative (prevent open redirect)
+        if not redirect_to.startswith("/") or redirect_to.startswith("//"):
+            redirect_to = "/"
 
-            next_path = urlparse(referer).path or "/"
-
-        state = _make_state(auth_config.secret_key, next_path)
+        state = _make_state(auth_config.secret_key, redirect_to)
         url = oauth_adapter.get_authorization_url(state=state)
         return RedirectResponse(url=url, status_code=302)
 
@@ -87,12 +88,15 @@ def create_auth_router(
         """Handle Google OAuth callback — exchange code, validate email, create session."""
         templates = request.app.state.templates
 
-        # Validate state (CSRF protection)
-        if not state or not auth_config.secret_key:
-            next_path = "/"
-        else:
-            verified_path = _verify_state(auth_config.secret_key, state)
-            next_path = verified_path if verified_path else "/"
+        # Validate state (CSRF protection — secret_key is always set)
+        if not state:
+            logger.warning("auth.callback_missing_state")
+            return RedirectResponse(url="/auth/login", status_code=302)
+        verified_path = _verify_state(auth_config.secret_key, state)
+        if verified_path is None:
+            logger.warning("auth.callback_invalid_state")
+            return RedirectResponse(url="/auth/login", status_code=302)
+        next_path = verified_path
 
         if not code:
             logger.warning("auth.callback_missing_code")
@@ -105,9 +109,9 @@ def create_auth_router(
             logger.exception("auth.token_exchange_failed")
             return RedirectResponse(url="/auth/login", status_code=302)
 
-        # Check email whitelist
-        if user_info.email.lower() not in [e.lower() for e in auth_config.allowed_emails]:
-            logger.warning("auth.denied", email=user_info.email)
+        # Check email whitelist (allowed_emails is pre-normalized to lowercase)
+        if user_info.email.lower() not in auth_config.allowed_emails:
+            logger.warning("auth.denied", email=user_info.email, sub=user_info.sub)
             denied: HTMLResponse = templates.TemplateResponse(
                 request, "pages/denied.html", {"attempted_email": user_info.email}, status_code=403
             )

@@ -88,7 +88,7 @@ class TestUnauthenticatedRequests:
 
         response = client.get("/")
         assert response.status_code == 302
-        assert response.headers["location"] == "/auth/login"
+        assert response.headers["location"] == "/auth/login?next=/"
 
     def test_api_request_returns_401_json(self, tmp_path: Path) -> None:
         store = SQLiteSessionStore(db_path=tmp_path / "test.db")
@@ -129,7 +129,7 @@ class TestAuthenticatedRequests:
 
         response = client.get("/", cookies={"session_id": session_id})
         assert response.status_code == 302
-        assert response.headers["location"] == "/auth/login"
+        assert response.headers["location"] == "/auth/login?next=/"
 
     def test_invalid_session_id_redirects(self, tmp_path: Path) -> None:
         store = SQLiteSessionStore(db_path=tmp_path / "test.db")

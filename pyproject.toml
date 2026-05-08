@@ -61,7 +61,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S106"]
+"tests/**/*.py" = ["S101", "S105", "S106"]
 "src/aurex_trade/backtest/cli.py" = ["T201"]
 "src/aurex_trade/web/routers/*.py" = ["B008"]
 

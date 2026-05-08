@@ -1,6 +1,7 @@
 """Authentication middleware — validates sessions on every request."""
 
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -86,5 +87,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"error": "Not authenticated", "detail": None, "status_code": 401},
             )
 
-        # Page requests: redirect to login
-        return RedirectResponse(url="/auth/login", status_code=302)
+        # Page requests: redirect to login with next parameter
+        login_url = f"/auth/login?next={quote(path, safe='/')}"
+        return RedirectResponse(url=login_url, status_code=302)
