@@ -43,6 +43,7 @@ class TestGoogleOAuthAdapter:
         mock_response.json.return_value = {
             "sub": "google-123456",
             "email": "user@gmail.com",
+            "email_verified": True,
             "name": "Test User",
             "picture": "https://lh3.googleusercontent.com/photo.jpg",
         }
@@ -78,6 +79,7 @@ class TestGoogleOAuthAdapter:
         mock_response.json.return_value = {
             "sub": "google-789",
             "email": "minimal@gmail.com",
+            "email_verified": True,
             # No 'name' or 'picture' fields
         }
         mock_response.raise_for_status = MagicMock()
@@ -88,3 +90,27 @@ class TestGoogleOAuthAdapter:
 
         assert user_info.name == "minimal@gmail.com"  # Falls back to email
         assert user_info.picture == ""
+
+    @patch("aurex_trade.adapters.google.oauth.httpx.get")
+    @patch("aurex_trade.adapters.google.oauth.OAuth2Client")
+    def test_exchange_code_rejects_unverified_email(
+        self, mock_oauth_client_cls: MagicMock, mock_httpx_get: MagicMock
+    ) -> None:
+        mock_client = MagicMock()
+        mock_oauth_client_cls.return_value = mock_client
+        mock_client.fetch_token.return_value = {"access_token": "token"}
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "sub": "google-999",
+            "email": "unverified@gmail.com",
+            "email_verified": False,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_get.return_value = mock_response
+
+        import pytest
+
+        adapter = self._make_adapter()
+        with pytest.raises(ValueError, match="not verified"):
+            adapter.exchange_code("code")

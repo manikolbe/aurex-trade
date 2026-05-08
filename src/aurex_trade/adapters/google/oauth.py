@@ -62,6 +62,10 @@ class GoogleOAuthAdapter:
         response.raise_for_status()
         data = response.json()
 
+        if not data.get("email_verified", False):
+            msg = f"Email {data.get('email', '?')} is not verified by Google"
+            raise ValueError(msg)
+
         return OAuthUserInfo(
             sub=data["sub"],
             email=data["email"],
