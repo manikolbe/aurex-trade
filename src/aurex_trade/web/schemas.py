@@ -458,3 +458,52 @@ def task_info_to_response(info: TaskInfo) -> TaskStatusResponse:
         error=info.error,
         message=info.message,
     )
+
+
+# --- User Defaults ---
+
+
+class StrategyDefaultsRequest(BaseModel):
+    """Request to save strategy params for a specific strategy."""
+
+    params: dict[str, int | float]
+    is_preferred: bool = False
+
+
+class StrategyDefaultsResponse(BaseModel):
+    """All saved strategy defaults for a user."""
+
+    preferred_strategy: str | None
+    strategies: dict[str, dict[str, int | float]]
+
+
+class RiskDefaultsRequest(BaseModel):
+    """Request to save risk/cost defaults."""
+
+    max_position: int = Field(default=10, gt=0)
+    max_daily_loss: float = Field(default=500.0, gt=0)
+    risk_per_trade: float = Field(default=0.02, gt=0, le=1.0)
+    max_drawdown_pct: float = Field(default=0.20, gt=0, le=1.0)
+    max_trades_per_day: int = Field(default=100, gt=0)
+    max_consecutive_losses: int = Field(default=5, gt=0)
+    require_stop_loss: bool = True
+    capital: float = Field(default=100_000.0, gt=0)
+    position_size: float = Field(default=1.0, gt=0)
+    spread: float = Field(default=0.6, ge=0)
+    slippage: float = Field(default=0.2, ge=0)
+    commission: float = Field(default=0.0, ge=0)
+    seed: int = 42
+
+
+class RiskDefaultsResponse(BaseModel):
+    """Saved risk/cost defaults for a user."""
+
+    settings: dict[str, int | float | bool] | None
+
+
+class AllDefaultsResponse(BaseModel):
+    """Combined strategy + risk defaults for form pre-population."""
+
+    preferred_strategy: str | None
+    strategy_params: dict[str, dict[str, int | float]]
+    risk_settings: dict[str, int | float | bool] | None

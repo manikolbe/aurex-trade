@@ -102,3 +102,20 @@ CREATE TABLE IF NOT EXISTS user_data_preferences (
     updated_at  TEXT NOT NULL,
     PRIMARY KEY (user_id, symbol, granularity)
 );
+
+-- Per-user backtest defaults
+
+CREATE TABLE IF NOT EXISTS user_strategy_defaults (
+    user_id         TEXT NOT NULL,
+    strategy_name   TEXT NOT NULL,
+    params_json     TEXT NOT NULL DEFAULT '{}',
+    is_preferred    INTEGER NOT NULL DEFAULT 0,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY (user_id, strategy_name)
+);
+
+CREATE TABLE IF NOT EXISTS user_risk_defaults (
+    user_id         TEXT PRIMARY KEY,
+    settings_json   TEXT NOT NULL DEFAULT '{}',
+    updated_at      TEXT NOT NULL
+);

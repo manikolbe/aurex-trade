@@ -19,6 +19,7 @@ from aurex_trade.adapters.sqlite.market_data_store import (
     UserDataPreferencesStore,
 )
 from aurex_trade.adapters.sqlite.session_store import SQLiteSessionStore
+from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.logging import setup_logging
 from aurex_trade.web.auth.config import AuthConfig
 from aurex_trade.web.auth.middleware import AuthMiddleware
@@ -127,6 +128,8 @@ def create_app() -> FastAPI:
     app.state.market_data_store = market_data_store
     preferences_store = UserDataPreferencesStore(db_path=_DB_PATH)
     app.state.preferences_store = preferences_store
+    user_defaults_store = UserDefaultsStore(db_path=_DB_PATH)
+    app.state.user_defaults_store = user_defaults_store
 
     # Authentication
     auth_config = AuthConfig()
@@ -149,12 +152,13 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
 
     # Import and include additional routers (lazy to avoid circular imports)
-    from aurex_trade.web.routers import backtest, bot, htmx, settings
+    from aurex_trade.web.routers import backtest, bot, htmx, settings, user_defaults
 
     app.include_router(backtest.router)
     app.include_router(bot.router)
     app.include_router(settings.router)
     app.include_router(htmx.router)
+    app.include_router(user_defaults.router)
 
     # Page routes (serve HTML templates)
     def _user_context(request: Request) -> dict[str, object]:
@@ -186,7 +190,8 @@ def create_app() -> FastAPI:
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/settings.html", _user_context(request))
+        ctx = {**_user_context(request), "strategies": _get_strategies_context()}
+        return templates.TemplateResponse(request, "pages/settings.html", ctx)
 
     return app
 

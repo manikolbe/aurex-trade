@@ -11,6 +11,7 @@ if TYPE_CHECKING:
         SQLiteMarketDataStore,
         UserDataPreferencesStore,
     )
+    from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
     from aurex_trade.web.tasks import TaskRegistry
 
 
@@ -29,4 +30,10 @@ def get_market_data_store(request: Request) -> SQLiteMarketDataStore:
 def get_preferences_store(request: Request) -> UserDataPreferencesStore:
     """Retrieve the UserDataPreferencesStore singleton from app state."""
     store: UserDataPreferencesStore = request.app.state.preferences_store
+    return store
+
+
+def get_user_defaults_store(request: Request) -> UserDefaultsStore:
+    """Retrieve the UserDefaultsStore singleton from app state."""
+    store: UserDefaultsStore = request.app.state.user_defaults_store
     return store

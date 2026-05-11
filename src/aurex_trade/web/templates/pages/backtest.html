@@ -207,11 +207,45 @@ function loadDateRange() {
     });
 }
 
+// Load user defaults and pre-fill form
+function loadUserDefaults() {
+  fetch('/api/user-defaults/all')
+    .then(r => r.json())
+    .then(function(data) {
+      const sel = document.getElementById('strategy-select');
+      if (data.preferred_strategy && STRATEGIES[data.preferred_strategy]) {
+        sel.value = data.preferred_strategy;
+        renderParams(data.preferred_strategy);
+        updateDescription(data.preferred_strategy);
+      }
+      const currentStrategy = sel.value;
+      if (data.strategy_params && data.strategy_params[currentStrategy]) {
+        Object.entries(data.strategy_params[currentStrategy]).forEach(function([key, val]) {
+          const input = document.querySelector('[name="param__' + key + '"]');
+          if (input) input.value = val;
+        });
+      }
+      if (data.risk_settings) {
+        Object.entries(data.risk_settings).forEach(function([key, val]) {
+          if (key === 'require_stop_loss') {
+            document.getElementById('require-stop-loss-cb').checked = val;
+            document.getElementById('require-stop-loss-val').value = val ? 'true' : 'false';
+          } else {
+            const input = document.querySelector('[name="' + key + '"]');
+            if (input) input.value = val;
+          }
+        });
+      }
+    })
+    .catch(function() {});
+}
+
 // Initial render
 const initialStrategy = document.getElementById('strategy-select').value;
 renderParams(initialStrategy);
 updateDescription(initialStrategy);
 loadDateRange();
+loadUserDefaults();
 
 // Re-render on strategy change
 document.getElementById('strategy-select').addEventListener('change', function() {

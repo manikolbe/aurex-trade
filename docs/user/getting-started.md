@@ -85,3 +85,19 @@ Each step builds on the previous one:
     It's tempting to take the best sweep result and start trading immediately.
     But the best settings in a sweep are often **overfit** — they worked perfectly
     on that specific data but will fail on new data. Walk-Forward catches this.
+
+## Saving Your Defaults
+
+Once you've found settings you like, you can save them so all backtest forms
+pre-fill automatically on your next visit.
+
+1. Go to **Settings** in the top menu
+2. Under **Strategy Defaults**, pick a strategy, adjust the parameters, and click **Save Strategy Defaults**
+3. Under **Risk & Cost Defaults**, set your preferred risk/cost values and click **Save Risk Defaults**
+
+Next time you open any backtest form (Backtest, Sweep, or Walk-Forward), your
+saved parameters will be pre-filled.
+
+!!! tip "Reset to Defaults"
+    Made a mess of the settings? Click **Reset to Defaults** to restore the
+    original application defaults instantly.
