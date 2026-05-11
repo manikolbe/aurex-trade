@@ -7,11 +7,13 @@ from uuid import UUID, uuid4
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 
+from aurex_trade.domain.models import User
 from aurex_trade.web._run_helpers import (
     create_backtest_runner,
     create_sweep_runner,
     create_walk_forward_runner,
 )
+from aurex_trade.web.auth.dependencies import get_current_user
 from aurex_trade.web.dependencies import get_task_registry
 from aurex_trade.web.schemas import (
     BacktestRequest,
@@ -40,11 +42,12 @@ router = APIRouter(prefix="/api", tags=["backtest"])
 @router.post("/backtest", status_code=202)
 def submit_backtest(
     req: BacktestRequest,
+    user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> TaskSubmittedResponse:
     """Submit a backtest for background execution."""
     task_id = uuid4()
-    runner = create_backtest_runner(req, task_id=task_id, registry=registry)
+    runner = create_backtest_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="backtest", task_id=task_id)
     logger.info("backtest.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="backtest", status=TaskStatus.RUNNING)
@@ -72,11 +75,12 @@ def get_backtest_status(
 @router.post("/sweep", status_code=202)
 def submit_sweep(
     req: SweepRequest,
+    user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> TaskSubmittedResponse:
     """Submit a parameter sweep for background execution."""
     task_id = uuid4()
-    runner = create_sweep_runner(req, task_id=task_id, registry=registry)
+    runner = create_sweep_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="sweep", task_id=task_id)
     logger.info("sweep.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="sweep", status=TaskStatus.RUNNING)
@@ -104,11 +108,12 @@ def get_sweep_status(
 @router.post("/walk-forward", status_code=202)
 def submit_walk_forward(
     req: WalkForwardRequest,
+    user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> TaskSubmittedResponse:
     """Submit a walk-forward validation for background execution."""
     task_id = uuid4()
-    runner = create_walk_forward_runner(req, task_id=task_id, registry=registry)
+    runner = create_walk_forward_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="walk_forward", task_id=task_id)
     logger.info("walk_forward.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(

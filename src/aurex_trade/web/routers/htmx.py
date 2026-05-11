@@ -9,11 +9,13 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from aurex_trade.domain.models import User
 from aurex_trade.web._run_helpers import (
     create_backtest_runner,
     create_sweep_runner,
     create_walk_forward_runner,
 )
+from aurex_trade.web.auth.dependencies import get_current_user
 from aurex_trade.web.dependencies import get_task_registry
 from aurex_trade.web.schemas import (
     BacktestRequest,
@@ -41,11 +43,12 @@ def _get_templates(request: Request) -> Jinja2Templates:
 def htmx_submit_backtest(
     request: Request,
     req: BacktestRequest,
+    user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> HTMLResponse:
     """Submit a backtest and return a loading fragment that polls for results."""
     task_id = uuid4()
-    runner = create_backtest_runner(req, task_id=task_id, registry=registry)
+    runner = create_backtest_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="backtest", task_id=task_id)
     logger.info("htmx.backtest.submitted", task_id=str(task_id))
     templates = _get_templates(request)
@@ -95,11 +98,12 @@ def htmx_poll_backtest(
 def htmx_submit_sweep(
     request: Request,
     req: SweepRequest,
+    user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> HTMLResponse:
     """Submit a sweep and return a loading fragment that polls for results."""
     task_id = uuid4()
-    runner = create_sweep_runner(req, task_id=task_id, registry=registry)
+    runner = create_sweep_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="sweep", task_id=task_id)
     logger.info("htmx.sweep.submitted", task_id=str(task_id))
     templates = _get_templates(request)
@@ -149,11 +153,12 @@ def htmx_poll_sweep(
 def htmx_submit_walk_forward(
     request: Request,
     req: WalkForwardRequest,
+    user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> HTMLResponse:
     """Submit walk-forward validation and return a loading fragment."""
     task_id = uuid4()
-    runner = create_walk_forward_runner(req, task_id=task_id, registry=registry)
+    runner = create_walk_forward_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="walk_forward", task_id=task_id)
     logger.info("htmx.walk_forward.submitted", task_id=str(task_id))
     templates = _get_templates(request)

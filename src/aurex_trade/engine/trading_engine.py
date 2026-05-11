@@ -39,6 +39,8 @@ class TradingEngine:
         interval_seconds: int,
         bar_count: int = 50,
         fallback_position_size: float = 1.0,
+        *,
+        user_id: str,
     ) -> None:
         self._strategy = strategy
         self._risk_engine = risk_engine
@@ -49,6 +51,7 @@ class TradingEngine:
         self._interval_seconds = interval_seconds
         self._bar_count = bar_count
         self._fallback_position_size = fallback_position_size
+        self._user_id = user_id
         self._running = False
         # Session stats for periodic summary
         self._session_signals = 0
@@ -151,11 +154,15 @@ class TradingEngine:
             trigger_price=latest_close,
             stop_loss=signal.stop_loss,
         )
-        self._repository.save_signal(signal)
+        self._repository.save_signal(signal, user_id=self._user_id)
 
         # Step 3: Risk evaluation
-        position = self._repository.get_current_position(self._symbol)
-        trades_today = self._repository.get_trades_today(self._symbol)
+        position = self._repository.get_current_position(
+            self._symbol, user_id=self._user_id
+        )
+        trades_today = self._repository.get_trades_today(
+            self._symbol, user_id=self._user_id
+        )
 
         # Assemble account state for risk engine
         current_equity = self._broker.equity
@@ -187,7 +194,7 @@ class TradingEngine:
             action=decision.action.value,
             reason=decision.reason,
         )
-        self._repository.save_decision(decision)
+        self._repository.save_decision(decision, user_id=self._user_id)
 
         if decision.action != RiskAction.APPROVED:
             self._session_rejections += 1
@@ -224,7 +231,7 @@ class TradingEngine:
             trigger_price=latest_close,
             slippage=round(slippage, 4),
         )
-        self._repository.save_trade(trade)
+        self._repository.save_trade(trade, user_id=self._user_id)
 
         # Step 5: Update position and track P&L
         prev_position = position
@@ -243,7 +250,7 @@ class TradingEngine:
             self._peak_equity = current_equity
 
         if updated_position:
-            self._repository.save_position(updated_position)
+            self._repository.save_position(updated_position, user_id=self._user_id)
             log.info(
                 "position_updated",
                 quantity=updated_position.quantity,

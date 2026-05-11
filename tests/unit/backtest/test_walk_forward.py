@@ -94,6 +94,7 @@ class TestAggregateMetricsEqualWinsLosses:
             train_bars=100,
             test_bars=100,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result = validator.run()
 
@@ -121,6 +122,7 @@ class TestWalkForwardValidator:
             train_bars=100,
             test_bars=100,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result = validator.run()
 
@@ -138,6 +140,7 @@ class TestWalkForwardValidator:
             risk_engine=_risk_engine(),
             train_bars=100,
             test_bars=100,
+            user_id="test",
         )
         result = validator.run()
 
@@ -159,6 +162,7 @@ class TestWalkForwardValidator:
             train_bars=200,
             test_bars=200,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result = validator.run()
 
@@ -182,6 +186,7 @@ class TestWalkForwardValidator:
             train_bars=100,
             test_bars=100,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result = validator.run()
 
@@ -203,6 +208,7 @@ class TestWalkForwardValidator:
             train_bars=100,
             test_bars=100,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result = validator.run()
 
@@ -225,6 +231,7 @@ class TestWalkForwardValidator:
                 train_bars=100,
                 test_bars=100,
                 param_validator=lambda p: p["short_window"] < p["long_window"],
+                user_id="test",
             )
             return validator.run().aggregate_test_metrics.total_pnl
 
@@ -243,6 +250,7 @@ class TestWalkForwardValidator:
             risk_engine=_risk_engine(),
             train_bars=200,
             test_bars=100,
+            user_id="test",
         )
         result = validator.run()
 

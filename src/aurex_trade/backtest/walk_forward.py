@@ -47,6 +47,8 @@ class WalkForwardValidator:
         test_bars: int = 7200,
         rank_by: str = "sharpe_ratio",
         param_validator: Callable[[dict[str, int | float]], bool] | None = None,
+        *,
+        user_id: str,
     ) -> None:
         self._strategy_factory = strategy_factory
         self._param_grid = param_grid
@@ -57,6 +59,7 @@ class WalkForwardValidator:
         self._test_bars = test_bars
         self._rank_by = rank_by
         self._param_validator = param_validator
+        self._user_id = user_id
 
     def run(self) -> WalkForwardResult:
         """Run walk-forward validation across non-overlapping windows."""
@@ -96,6 +99,7 @@ class WalkForwardValidator:
                 risk_engine=self._risk_engine,
                 rank_by=self._rank_by,
                 param_validator=self._param_validator,
+                user_id=self._user_id,
             )
             sweep_result = sweep.run()
 
@@ -194,6 +198,7 @@ class WalkForwardValidator:
             broker=broker,
             repository=repository,
             config=config,
+            user_id=self._user_id,
         )
 
         result = runner.run()

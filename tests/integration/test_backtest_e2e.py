@@ -82,6 +82,7 @@ class TestBacktestEndToEnd:
             broker=broker,
             repository=repository,
             config=config,
+            user_id="test",
         )
 
         result = runner.run()
@@ -110,6 +111,7 @@ class TestBacktestEndToEnd:
             broker=broker2,
             repository=repository2,
             config=config,
+            user_id="test",
         )
         result2 = runner2.run()
 

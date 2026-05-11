@@ -338,6 +338,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         broker=broker,
         repository=repository,
         config=config,
+        user_id="cli",
     )
 
     print(f"Running backtest: {strategy.name} on {config.symbol}...")
@@ -469,6 +470,7 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
         risk_engine=risk_engine,
         rank_by=args.rank_by,
         param_validator=PARAM_VALIDATORS.get(strategy_name),
+        user_id="cli",
     )
 
     print(f"\nRunning parameter sweep: {strategy_name}")
@@ -526,6 +528,7 @@ def _cmd_walk_forward(args: argparse.Namespace) -> None:
         test_bars=args.test_bars,
         rank_by=args.rank_by,
         param_validator=PARAM_VALIDATORS.get(strategy_name),
+        user_id="cli",
     )
 
     window_size = args.train_bars + args.test_bars

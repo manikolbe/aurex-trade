@@ -40,6 +40,8 @@ class ParameterSweep:
         risk_engine: RiskEngine,
         rank_by: str = "sharpe_ratio",
         param_validator: Callable[[dict[str, int | float]], bool] | None = None,
+        *,
+        user_id: str,
     ) -> None:
         self._strategy_factory = strategy_factory
         self._param_grid = param_grid
@@ -48,6 +50,7 @@ class ParameterSweep:
         self._risk_engine = risk_engine
         self._rank_by = rank_by
         self._param_validator = param_validator
+        self._user_id = user_id
 
     def run(self) -> SweepResult:
         """Run backtest for every valid parameter combination, return ranked."""
@@ -140,6 +143,7 @@ class ParameterSweep:
             broker=broker,
             repository=repository,
             config=config,
+            user_id=self._user_id,
         )
 
         result = runner.run()

@@ -13,30 +13,45 @@ class InMemoryRepository:
     """RepositoryPort implementation backed by in-memory dicts and lists."""
 
     def __init__(self) -> None:
-        self._signals: list[Signal] = []
-        self._decisions: list[RiskDecision] = []
-        self._trades: list[Trade] = []
-        self._positions: dict[str, Position] = {}
+        self._signals: list[tuple[str, Signal]] = []
+        self._decisions: list[tuple[str, RiskDecision]] = []
+        self._trades: list[tuple[str, Trade]] = []
+        self._positions: dict[tuple[str, str], Position] = {}
 
-    def save_signal(self, signal: Signal) -> None:
-        self._signals.append(signal)
+    @property
+    def signal_count(self) -> int:
+        """Total number of stored signals (all users)."""
+        return len(self._signals)
 
-    def save_decision(self, decision: RiskDecision) -> None:
-        self._decisions.append(decision)
+    @property
+    def decision_count(self) -> int:
+        """Total number of stored decisions (all users)."""
+        return len(self._decisions)
 
-    def save_trade(self, trade: Trade) -> None:
-        self._trades.append(trade)
+    @property
+    def trade_count(self) -> int:
+        """Total number of stored trades (all users)."""
+        return len(self._trades)
 
-    def save_position(self, position: Position) -> None:
-        self._positions[position.symbol] = position
+    def save_signal(self, signal: Signal, *, user_id: str) -> None:
+        self._signals.append((user_id, signal))
 
-    def get_trades_today(self, symbol: str) -> list[Trade]:
+    def save_decision(self, decision: RiskDecision, *, user_id: str) -> None:
+        self._decisions.append((user_id, decision))
+
+    def save_trade(self, trade: Trade, *, user_id: str) -> None:
+        self._trades.append((user_id, trade))
+
+    def save_position(self, position: Position, *, user_id: str) -> None:
+        self._positions[(user_id, position.symbol)] = position
+
+    def get_trades_today(self, symbol: str, *, user_id: str) -> list[Trade]:
         today = datetime.now(UTC).date()
         return [
             t
-            for t in self._trades
-            if t.symbol == symbol and t.timestamp.date() == today
+            for uid, t in self._trades
+            if uid == user_id and t.symbol == symbol and t.timestamp.date() == today
         ]
 
-    def get_current_position(self, symbol: str) -> Position | None:
-        return self._positions.get(symbol)
+    def get_current_position(self, symbol: str, *, user_id: str) -> Position | None:
+        return self._positions.get((user_id, symbol))

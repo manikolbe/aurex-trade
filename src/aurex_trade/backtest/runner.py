@@ -33,6 +33,8 @@ class BacktestRunner:
         broker: SimulatedBrokerAdapter,
         repository: RepositoryPort,
         config: BacktestConfig,
+        *,
+        user_id: str,
     ) -> None:
         self._strategy = strategy
         self._risk_engine = risk_engine
@@ -40,6 +42,7 @@ class BacktestRunner:
         self._broker = broker
         self._repository = repository
         self._config = config
+        self._user_id = user_id
         self._peak_equity: float = config.initial_capital
         self._trade_pnls: list[float] = []
 
@@ -111,11 +114,15 @@ class BacktestRunner:
         if signal is None:
             return None
 
-        self._repository.save_signal(signal)
+        self._repository.save_signal(signal, user_id=self._user_id)
 
         # Step 3: Risk evaluation with account state
-        position = self._repository.get_current_position(self._config.symbol)
-        trades_today = self._repository.get_trades_today(self._config.symbol)
+        position = self._repository.get_current_position(
+            self._config.symbol, user_id=self._user_id
+        )
+        trades_today = self._repository.get_trades_today(
+            self._config.symbol, user_id=self._user_id
+        )
 
         current_equity = self._broker.equity
         account_state = AccountState(
@@ -129,7 +136,7 @@ class BacktestRunner:
             account_state=account_state,
             recent_trade_pnls=self._trade_pnls,
         )
-        self._repository.save_decision(decision)
+        self._repository.save_decision(decision, user_id=self._user_id)
 
         if decision.action != RiskAction.APPROVED:
             return None
@@ -156,12 +163,12 @@ class BacktestRunner:
         )
 
         trade = self._broker.place_order(order)
-        self._repository.save_trade(trade)
+        self._repository.save_trade(trade, user_id=self._user_id)
 
         # Step 5: Update position
         updated_position = self._broker.get_positions(self._config.symbol)
         if updated_position:
-            self._repository.save_position(updated_position)
+            self._repository.save_position(updated_position, user_id=self._user_id)
 
         return BacktestTradeRecord(
             trade=trade,

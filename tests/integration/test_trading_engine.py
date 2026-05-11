@@ -6,6 +6,8 @@ from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 from aurex_trade.engine.trading_engine import TradingEngine
 
+_TEST_USER_ID = "test-user"
+
 
 def _build_engine(
     seed: int = 42,
@@ -35,6 +37,7 @@ def _build_engine(
         symbol="GLD",
         interval_seconds=0,
         bar_count=10,
+        user_id=_TEST_USER_ID,
     )
     return engine, repository, broker
 
@@ -51,20 +54,20 @@ class TestTradingEngineIntegration:
         engine.run(max_cycles=10)
         # With random walk data, we may or may not get signals — but the
         # pipeline should run cleanly either way
-        assert isinstance(repo._signals, list)
+        assert repo.signal_count >= 0
 
     def test_decisions_are_persisted(self) -> None:
         """Risk decisions should be saved alongside signals."""
         engine, repo, _ = _build_engine()
         engine.run(max_cycles=10)
         # Every signal should have a corresponding decision
-        assert len(repo._decisions) == len(repo._signals)
+        assert repo.decision_count == repo.signal_count
 
     def test_kill_switch_blocks_all_trades(self) -> None:
         """With kill switch on, no trades should be executed."""
         engine, repo, _ = _build_engine(kill_switch=True)
         engine.run(max_cycles=10)
-        assert len(repo._trades) == 0
+        assert repo.trade_count == 0
 
     def test_stop_halts_engine(self) -> None:
         """Calling stop() should terminate the run loop."""
@@ -78,6 +81,6 @@ class TestTradingEngineIntegration:
         engine, repo, _ = _build_engine(max_position_size=1)
         engine.run(max_cycles=20)
         # Should never exceed max position size
-        position = repo.get_current_position("GLD")
+        position = repo.get_current_position("GLD", user_id=_TEST_USER_ID)
         if position:
             assert abs(position.quantity) <= 2  # at most 1 buy + 1 sell cycle

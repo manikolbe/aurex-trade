@@ -84,7 +84,7 @@ class SMACrossover:
                         "risk larger losses per trade."
                     ),
                     default=2.0,
-                    min_value=0.5,
+                    min_value=1.0,
                     max_value=5.0,
                 ),
                 ParamMeta(

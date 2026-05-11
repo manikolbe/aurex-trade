@@ -123,6 +123,7 @@ def main() -> None:
         repository=repository,
         symbol=config.symbol,
         interval_seconds=config.interval_seconds,
+        user_id="cli",
     )
 
     log.info("engine_wired", strategy=strategy.name)

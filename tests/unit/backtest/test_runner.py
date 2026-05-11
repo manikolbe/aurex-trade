@@ -93,6 +93,7 @@ class TestBacktestRunner:
             broker=broker,
             repository=repo,
             config=config,
+            user_id="test",
         )
         result = runner.run()
 
@@ -119,6 +120,7 @@ class TestBacktestRunner:
             broker=broker,
             repository=repo,
             config=config,
+            user_id="test",
         )
         result = runner.run()
 
@@ -159,6 +161,7 @@ class TestBacktestRunner:
                 broker=broker,
                 repository=repo,
                 config=config,
+                user_id="test",
             )
             return runner.run().metrics.final_capital
 
@@ -185,6 +188,7 @@ class TestBacktestRunner:
             broker=broker,
             repository=repo,
             config=config,
+            user_id="test",
         )
         result = runner.run()
 

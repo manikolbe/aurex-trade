@@ -25,6 +25,7 @@ class SQLiteRepository:
         self._conn = sqlite3.connect(str(db_path))
         self._conn.row_factory = sqlite3.Row
         self._apply_schema()
+        self._verify_schema()
 
     def _apply_schema(self) -> None:
         schema_sql = (
@@ -34,20 +35,36 @@ class SQLiteRepository:
         )
         self._conn.executescript(schema_sql)
 
+    def _verify_schema(self) -> None:
+        """Check that trading tables have the required user_id column.
+
+        Raises RuntimeError with a clear message if the DB has a stale schema
+        (e.g. created before account isolation was added).
+        """
+        cursor = self._conn.execute("PRAGMA table_info(trades)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "user_id" not in columns:
+            msg = (
+                f"Database at {self._db_path} has an outdated schema "
+                "(missing user_id column). Delete the file and restart."
+            )
+            raise RuntimeError(msg)
+
     def close(self) -> None:
         self._conn.close()
 
     # -- Saves --
 
-    def save_signal(self, signal: Signal) -> None:
+    def save_signal(self, signal: Signal, *, user_id: str) -> None:
         self._conn.execute(
             """
             INSERT OR REPLACE INTO signals
-                (id, timestamp, symbol, signal_type, strategy_name, strength, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (id, user_id, timestamp, symbol, signal_type, strategy_name, strength, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(signal.id),
+                user_id,
                 signal.timestamp.isoformat(),
                 signal.symbol,
                 signal.signal_type.value,
@@ -58,15 +75,16 @@ class SQLiteRepository:
         )
         self._conn.commit()
 
-    def save_decision(self, decision: RiskDecision) -> None:
+    def save_decision(self, decision: RiskDecision, *, user_id: str) -> None:
         self._conn.execute(
             """
             INSERT OR REPLACE INTO decisions
-                (signal_id, action, reason, timestamp)
-            VALUES (?, ?, ?, ?)
+                (signal_id, user_id, action, reason, timestamp)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 str(decision.signal_id),
+                user_id,
                 decision.action.value,
                 decision.reason,
                 decision.timestamp.isoformat(),
@@ -74,15 +92,16 @@ class SQLiteRepository:
         )
         self._conn.commit()
 
-    def save_trade(self, trade: Trade) -> None:
+    def save_trade(self, trade: Trade, *, user_id: str) -> None:
         self._conn.execute(
             """
             INSERT OR REPLACE INTO trades
-                (id, order_id, symbol, side, quantity, price, commission, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, user_id, order_id, symbol, side, quantity, price, commission, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(trade.id),
+                user_id,
                 str(trade.order_id),
                 trade.symbol,
                 trade.side.value,
@@ -94,15 +113,16 @@ class SQLiteRepository:
         )
         self._conn.commit()
 
-    def save_position(self, position: Position) -> None:
+    def save_position(self, position: Position, *, user_id: str) -> None:
         self._conn.execute(
             """
             INSERT OR REPLACE INTO positions
-                (symbol, quantity, average_cost, market_value,
+                (user_id, symbol, quantity, average_cost, market_value,
                  unrealized_pnl, realized_pnl, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                user_id,
                 position.symbol,
                 position.quantity,
                 position.average_cost,
@@ -116,23 +136,23 @@ class SQLiteRepository:
 
     # -- Queries --
 
-    def get_trades_today(self, symbol: str) -> list[Trade]:
+    def get_trades_today(self, symbol: str, *, user_id: str) -> list[Trade]:
         today = datetime.now(UTC).date().isoformat()
         cursor = self._conn.execute(
             """
             SELECT id, order_id, symbol, side, quantity, price, commission, timestamp
             FROM trades
-            WHERE symbol = ? AND timestamp >= ?
+            WHERE user_id = ? AND symbol = ? AND timestamp >= ?
             ORDER BY timestamp
             """,
-            (symbol, today),
+            (user_id, symbol, today),
         )
         return [self._row_to_trade(row) for row in cursor.fetchall()]
 
-    def get_current_position(self, symbol: str) -> Position | None:
+    def get_current_position(self, symbol: str, *, user_id: str) -> Position | None:
         cursor = self._conn.execute(
-            "SELECT * FROM positions WHERE symbol = ?",
-            (symbol,),
+            "SELECT * FROM positions WHERE user_id = ? AND symbol = ?",
+            (user_id, symbol),
         )
         row = cursor.fetchone()
         if row is None:

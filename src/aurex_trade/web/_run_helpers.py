@@ -97,6 +97,8 @@ def create_backtest_runner(
     req: BacktestRequest,
     task_id: UUID | None = None,
     registry: TaskRegistry | None = None,
+    *,
+    user_id: str,
 ) -> Callable[[], object]:
     """Create a callable that runs a single backtest with the given parameters."""
 
@@ -192,6 +194,7 @@ def create_backtest_runner(
             broker=broker,
             repository=repository,
             config=config,
+            user_id=user_id,
         )
         result = runner.run()
 
@@ -216,6 +219,8 @@ def create_sweep_runner(
     req: SweepRequest,
     task_id: UUID | None = None,
     registry: TaskRegistry | None = None,
+    *,
+    user_id: str,
 ) -> Callable[[], object]:
     """Create a callable that runs a parameter sweep with the given parameters."""
 
@@ -281,6 +286,7 @@ def create_sweep_runner(
             risk_engine=risk_engine,
             rank_by=req.rank_by,
             param_validator=PARAM_VALIDATORS.get(req.strategy),
+            user_id=user_id,
         )
         return sweep.run()
 
@@ -291,6 +297,8 @@ def create_walk_forward_runner(
     req: WalkForwardRequest,
     task_id: UUID | None = None,
     registry: TaskRegistry | None = None,
+    *,
+    user_id: str,
 ) -> Callable[[], object]:
     """Create a callable that runs walk-forward validation with the given parameters."""
 
@@ -358,6 +366,7 @@ def create_walk_forward_runner(
             test_bars=req.test_bars,
             rank_by=req.rank_by,
             param_validator=PARAM_VALIDATORS.get(req.strategy),
+            user_id=user_id,
         )
         return validator.run()
 

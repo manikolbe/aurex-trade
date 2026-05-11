@@ -69,6 +69,7 @@ class TestParameterSweep:
             bars=bars,
             config=_config(),
             risk_engine=_risk_engine(),
+            user_id="test",
         )
         result = sweep.run()
 
@@ -86,6 +87,7 @@ class TestParameterSweep:
             config=_config(),
             risk_engine=_risk_engine(),
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result = sweep.run()
 
@@ -104,6 +106,7 @@ class TestParameterSweep:
             config=_config(),
             risk_engine=_risk_engine(),
             rank_by="sharpe_ratio",
+            user_id="test",
         )
         result = sweep.run()
 
@@ -121,6 +124,7 @@ class TestParameterSweep:
             config=_config(),
             risk_engine=_risk_engine(),
             rank_by="total_pnl",
+            user_id="test",
         )
         result = sweep.run()
 
@@ -139,6 +143,7 @@ class TestParameterSweep:
                 bars=bars,
                 config=_config(),
                 risk_engine=_risk_engine(),
+                user_id="test",
             )
             return [r.metrics.final_capital for r in sweep.run().results]
 
@@ -154,6 +159,7 @@ class TestParameterSweep:
             bars=bars,
             config=_config(),
             risk_engine=_risk_engine(),
+            user_id="test",
         )
         result = sweep.run()
 

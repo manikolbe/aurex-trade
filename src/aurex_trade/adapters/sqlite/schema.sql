@@ -5,6 +5,7 @@ PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS signals (
     id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
     timestamp   TEXT NOT NULL,
     symbol      TEXT NOT NULL,
     signal_type TEXT NOT NULL,
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS signals (
 
 CREATE TABLE IF NOT EXISTS decisions (
     signal_id   TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
     action      TEXT NOT NULL,
     reason      TEXT NOT NULL,
     timestamp   TEXT NOT NULL
@@ -22,6 +24,7 @@ CREATE TABLE IF NOT EXISTS decisions (
 
 CREATE TABLE IF NOT EXISTS trades (
     id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
     order_id    TEXT NOT NULL,
     symbol      TEXT NOT NULL,
     side        TEXT NOT NULL,
@@ -32,20 +35,28 @@ CREATE TABLE IF NOT EXISTS trades (
 );
 
 CREATE TABLE IF NOT EXISTS positions (
-    symbol          TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL,
+    symbol          TEXT NOT NULL,
     quantity        REAL NOT NULL,
     average_cost    REAL NOT NULL,
     market_value    REAL NOT NULL,
     unrealized_pnl  REAL NOT NULL,
     realized_pnl    REAL NOT NULL,
-    timestamp       TEXT NOT NULL
+    timestamp       TEXT NOT NULL,
+    PRIMARY KEY (user_id, symbol)
 );
 
-CREATE INDEX IF NOT EXISTS idx_trades_symbol_timestamp
-    ON trades (symbol, timestamp);
+CREATE INDEX IF NOT EXISTS idx_signals_user_symbol_timestamp
+    ON signals (user_id, symbol, timestamp);
 
-CREATE INDEX IF NOT EXISTS idx_signals_symbol_timestamp
-    ON signals (symbol, timestamp);
+CREATE INDEX IF NOT EXISTS idx_trades_user_symbol_timestamp
+    ON trades (user_id, symbol, timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_decisions_user_timestamp
+    ON decisions (user_id, timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_positions_user_symbol
+    ON positions (user_id, symbol);
 
 -- Authentication tables
 

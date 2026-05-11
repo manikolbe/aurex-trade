@@ -72,6 +72,7 @@ class TestSweepEndToEnd:
             risk_engine=risk_engine,
             rank_by="sharpe_ratio",
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
 
         result = sweep.run()
@@ -116,6 +117,7 @@ class TestSweepEndToEnd:
             train_bars=200,
             test_bars=200,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
 
         result = validator.run()
@@ -136,6 +138,7 @@ class TestSweepEndToEnd:
             train_bars=200,
             test_bars=200,
             param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
         )
         result2 = validator2.run()
 
