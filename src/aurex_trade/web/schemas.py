@@ -309,6 +309,17 @@ class WalkForwardResultResponse(BaseModel):
     symbol: str
 
 
+# --- Data Range ---
+
+
+class DataRangeResponse(BaseModel):
+    """Available date range for a symbol/granularity."""
+
+    start_date: str
+    end_date: str
+    source: str  # "existing" or "default"
+
+
 # --- Bot ---
 
 

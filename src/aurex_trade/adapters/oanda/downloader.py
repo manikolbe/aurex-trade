@@ -1,18 +1,21 @@
 """OANDA historical data downloader — paginated candle fetching.
 
 Downloads historical candles from the OANDA v20 API and persists them
-via HistoricalDataStore.
+via any HistoricalDataPort implementation.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import structlog
 
-from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
 from aurex_trade.adapters.oanda.connection import OANDAConnection
 from aurex_trade.domain.models import BarData
+
+if TYPE_CHECKING:
+    from aurex_trade.ports.historical_data import HistoricalDataPort
 
 log = structlog.get_logger()
 
@@ -21,7 +24,7 @@ _MAX_CANDLES_PER_REQUEST = 5000
 
 
 class OANDAHistoricalDownloader:
-    """Downloads historical candles from OANDA and saves to CSV.
+    """Downloads historical candles from OANDA and persists via HistoricalDataPort.
 
     Paginates in chunks of 5000 candles (OANDA API limit).
     Uses the mid-price (average of bid and ask) for OHLC values.
@@ -30,7 +33,7 @@ class OANDAHistoricalDownloader:
     def __init__(
         self,
         connection: OANDAConnection,
-        data_store: HistoricalDataStore,
+        data_store: HistoricalDataPort,
     ) -> None:
         self._connection = connection
         self._data_store = data_store
@@ -42,7 +45,7 @@ class OANDAHistoricalDownloader:
         start: datetime,
         end: datetime,
     ) -> int:
-        """Download historical candles and save to CSV.
+        """Download historical candles and persist via HistoricalDataPort.
 
         Args:
             symbol: Instrument name (e.g., "XAU_USD").
@@ -89,12 +92,12 @@ class OANDAHistoricalDownloader:
                 break
 
         if all_bars:
-            # OANDA instrument names use _ but the API path uses the same format
-            path = self._data_store.save_bars(all_bars, symbol, granularity)
+            self._data_store.save_bars(all_bars, symbol, granularity)
             log.info(
                 "download_complete",
                 total_bars=len(all_bars),
-                file=str(path),
+                symbol=symbol,
+                granularity=granularity,
             )
 
         return len(all_bars)

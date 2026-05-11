@@ -45,13 +45,13 @@ src/aurex_trade/
 │   │   └── rsi_mean_reversion.py  # RSI Mean-Reversion implementation
 │   └── risk/
 │       └── engine.py   # RiskEngine — gates ALL trade decisions
-├── ports/              # Protocol interfaces (BrokerPort, MarketDataPort, RepositoryPort)
+├── ports/              # Protocol interfaces (BrokerPort, MarketDataPort, RepositoryPort, HistoricalDataPort)
 ├── adapters/
 │   ├── oanda/          # OANDA adapter (httpx → v20 REST API)
 │   ├── backtest/       # Backtesting adapters (simulated broker, historical replay)
 │   ├── memory/         # In-memory repository (local mode + tests)
 │   ├── paper/          # Paper trading simulator
-│   └── sqlite/         # SQLite persistence
+│   └── sqlite/         # SQLite persistence (repository, sessions, market data, user prefs)
 ├── backtest/
 │   ├── cli.py          # CLI: download-data, run, sweep, walk-forward
 │   ├── runner.py       # BacktestRunner — core orchestration loop

@@ -145,6 +145,14 @@ class RepositoryPort(Protocol):
     def get_current_position(self, symbol: str) -> Position | None: ...
 ```
 
+### HistoricalDataPort
+```python
+class HistoricalDataPort(Protocol):
+    def save_bars(self, bars: list[BarData], symbol: str, granularity: str) -> None: ...
+    def load_bars(self, symbol: str, granularity: str, start=None, end=None) -> list[BarData]: ...
+    def get_date_range(self, symbol: str, granularity: str) -> tuple[datetime, datetime] | None: ...
+```
+
 ## Adapter Implementations
 
 ### Paper Adapter (`adapters/paper/`)
@@ -176,6 +184,11 @@ class RepositoryPort(Protocol):
 - Schema auto-created on first run via `schema.sql`
 - Used for all trading modes — data persists across restarts
 - DB path configurable via `DB_PATH` (default: `data/aurex_trade.db`)
+- `SQLiteMarketDataStore` — implements `HistoricalDataPort`, stores bars in
+  a shared `bars` table with `INSERT OR IGNORE` for concurrent-safe writes.
+  Used by both CLI and web for historical market data.
+- `UserDataPreferencesStore` — per-user date range preferences for the
+  backtest UI, stored in `user_data_preferences` table.
 
 ## Strategies
 

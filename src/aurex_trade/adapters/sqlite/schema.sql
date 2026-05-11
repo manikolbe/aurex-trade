@@ -78,3 +78,27 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+
+-- Market data tables
+
+CREATE TABLE IF NOT EXISTS bars (
+    symbol      TEXT NOT NULL,
+    granularity TEXT NOT NULL,
+    timestamp   TEXT NOT NULL,
+    open        REAL NOT NULL,
+    high        REAL NOT NULL,
+    low         REAL NOT NULL,
+    close       REAL NOT NULL,
+    volume      REAL NOT NULL,
+    PRIMARY KEY (symbol, granularity, timestamp)
+);
+
+CREATE TABLE IF NOT EXISTS user_data_preferences (
+    user_id     TEXT NOT NULL,
+    symbol      TEXT NOT NULL,
+    granularity TEXT NOT NULL,
+    start_date  TEXT NOT NULL,
+    end_date    TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (user_id, symbol, granularity)
+);

@@ -1,8 +1,5 @@
 """Backtest configuration — validated settings for a backtest run."""
 
-from pathlib import Path
-
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,5 +24,4 @@ class BacktestConfig(BaseSettings):
     slippage_pips: float = 0.5
     commission_per_trade: float = 0.0
     deterministic_seed: int = 42
-    data_dir: Path = Field(default=Path("data/historical"))
     bar_count: int = 50

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -14,14 +13,16 @@ from aurex_trade.web.schemas import BacktestRequest, SweepRequest, WalkForwardRe
 from aurex_trade.web.tasks import TaskRegistry
 
 if TYPE_CHECKING:
-    from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
     from aurex_trade.domain.models import BarData
+    from aurex_trade.ports.historical_data import HistoricalDataPort
 
 _logger = logging.getLogger(__name__)
 
+_DB_PATH = Path("data/aurex_trade.db")
+
 
 def _ensure_data_available(
-    data_store: HistoricalDataStore,
+    data_store: HistoricalDataPort,
     symbol: str,
     granularity: str,
     start: datetime | None,
@@ -31,25 +32,33 @@ def _ensure_data_available(
 ) -> list[BarData]:
     """Load historical bars, auto-downloading from OANDA if missing.
 
-    Returns bars for the requested range. Downloads from OANDA when the local
-    CSV is missing or does not fully cover the requested date range.
+    Uses gap detection: only downloads date ranges not already in the store.
+    Overlapping inserts are harmless (INSERT OR IGNORE).
 
     Raises:
         FileNotFoundError: If data cannot be obtained (no dates or download empty).
         ValueError: If OANDA credentials are not configured.
     """
-    # Attempt to load existing data
-    bars: list[BarData] = []
-    with contextlib.suppress(FileNotFoundError):
-        bars = data_store.load_bars(symbol, granularity, start, end)
+    # Check existing coverage
+    date_range = data_store.get_date_range(symbol, granularity)
 
-    # If we have any bars in the requested range, use them.
-    # Don't second-guess market-hours gaps (weekends, holidays).
-    if bars:
-        return bars
+    # If we have data covering the requested range, just load it
+    if date_range is not None and start is not None and end is not None:
+        stored_min, stored_max = date_range
+        if stored_min <= start and stored_max >= end:
+            bars = data_store.load_bars(symbol, granularity, start, end)
+            if bars:
+                return bars
 
     # Cannot download without concrete date range
     if start is None or end is None:
+        # Try loading whatever exists
+        try:
+            bars = data_store.load_bars(symbol, granularity)
+        except FileNotFoundError:
+            bars = []
+        if bars:
+            return bars
         msg = f"No data found for {symbol} ({granularity})"
         raise FileNotFoundError(msg)
 
@@ -71,7 +80,7 @@ def _ensure_data_available(
             task_id, f"Downloading {symbol} ({granularity}) data..."
         )
 
-    # Download from OANDA
+    # Determine what gaps to download
     from aurex_trade.adapters.oanda.connection import OANDAConnection
     from aurex_trade.adapters.oanda.downloader import OANDAHistoricalDownloader
 
@@ -79,12 +88,31 @@ def _ensure_data_available(
     try:
         connection.connect()
         downloader = OANDAHistoricalDownloader(connection, data_store)
-        count = downloader.download(symbol, granularity, start, end)
-        _logger.info("Downloaded %d candles for %s (%s)", count, symbol, granularity)
+
+        if date_range is None:
+            # No existing data — download full range
+            count = downloader.download(symbol, granularity, start, end)
+            _logger.info("Downloaded %d candles for %s (%s)", count, symbol, granularity)
+        else:
+            stored_min, stored_max = date_range
+            total = 0
+            # Download gap before existing data
+            if start < stored_min:
+                count = downloader.download(symbol, granularity, start, stored_min)
+                total += count
+            # Download gap after existing data
+            if end > stored_max:
+                count = downloader.download(symbol, granularity, stored_max, end)
+                total += count
+            if total > 0:
+                _logger.info(
+                    "Downloaded %d candles (gap-fill) for %s (%s)",
+                    total, symbol, granularity,
+                )
     finally:
         connection.disconnect()
 
-    # Reload bars after download
+    # Load bars for the full requested range
     bars = data_store.load_bars(symbol, granularity, start, end)
     if not bars:
         msg = f"No data found for {symbol} ({granularity}) after download"
@@ -104,9 +132,9 @@ def create_backtest_runner(
 
     def run() -> object:
         from aurex_trade.adapters.backtest.broker import SimulatedBrokerAdapter
-        from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
         from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapter
         from aurex_trade.adapters.memory.repository import InMemoryRepository
+        from aurex_trade.adapters.sqlite.market_data_store import SQLiteMarketDataStore
         from aurex_trade.backtest.cli import (
             PARAM_VALIDATORS,
             STRATEGY_METADATA,
@@ -145,25 +173,27 @@ def create_backtest_runner(
             slippage_pips=req.slippage,
             commission_per_trade=req.commission,
             deterministic_seed=req.seed,
-            data_dir=Path("data/historical"),
             bar_count=strategy.min_bars,
         )
 
-        data_store = HistoricalDataStore(config.data_dir)
-        start = (
-            datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            if config.start_date
-            else None
-        )
-        end = (
-            datetime.strptime(config.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            if config.end_date
-            else None
-        )
-        bars = _ensure_data_available(
-            data_store, config.symbol, config.granularity, start, end,
-            task_id=task_id, registry=registry,
-        )
+        data_store = SQLiteMarketDataStore(_DB_PATH)
+        try:
+            start = (
+                datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
+                if config.start_date
+                else None
+            )
+            end = (
+                datetime.strptime(config.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
+                if config.end_date
+                else None
+            )
+            bars = _ensure_data_available(
+                data_store, config.symbol, config.granularity, start, end,
+                task_id=task_id, registry=registry,
+            )
+        finally:
+            data_store.close()
 
         if task_id is not None and registry is not None:
             registry.update_message(task_id, "Running backtest...")
@@ -225,7 +255,7 @@ def create_sweep_runner(
     """Create a callable that runs a parameter sweep with the given parameters."""
 
     def run() -> object:
-        from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
+        from aurex_trade.adapters.sqlite.market_data_store import SQLiteMarketDataStore
         from aurex_trade.backtest.cli import PARAM_VALIDATORS, STRATEGY_REGISTRY
         from aurex_trade.backtest.config import BacktestConfig
         from aurex_trade.backtest.sweep import ParameterSweep
@@ -246,24 +276,26 @@ def create_sweep_runner(
             slippage_pips=req.slippage,
             commission_per_trade=req.commission,
             deterministic_seed=req.seed,
-            data_dir=Path("data/historical"),
         )
 
-        data_store = HistoricalDataStore(config.data_dir)
-        start = (
-            datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            if config.start_date
-            else None
-        )
-        end = (
-            datetime.strptime(config.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            if config.end_date
-            else None
-        )
-        bars = _ensure_data_available(
-            data_store, config.symbol, config.granularity, start, end,
-            task_id=task_id, registry=registry,
-        )
+        data_store = SQLiteMarketDataStore(_DB_PATH)
+        try:
+            start = (
+                datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
+                if config.start_date
+                else None
+            )
+            end = (
+                datetime.strptime(config.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
+                if config.end_date
+                else None
+            )
+            bars = _ensure_data_available(
+                data_store, config.symbol, config.granularity, start, end,
+                task_id=task_id, registry=registry,
+            )
+        finally:
+            data_store.close()
 
         if task_id is not None and registry is not None:
             registry.update_message(task_id, "Running parameter sweep...")
@@ -303,7 +335,7 @@ def create_walk_forward_runner(
     """Create a callable that runs walk-forward validation with the given parameters."""
 
     def run() -> object:
-        from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
+        from aurex_trade.adapters.sqlite.market_data_store import SQLiteMarketDataStore
         from aurex_trade.backtest.cli import PARAM_VALIDATORS, STRATEGY_REGISTRY
         from aurex_trade.backtest.config import BacktestConfig
         from aurex_trade.backtest.walk_forward import WalkForwardValidator
@@ -324,24 +356,26 @@ def create_walk_forward_runner(
             slippage_pips=req.slippage,
             commission_per_trade=req.commission,
             deterministic_seed=req.seed,
-            data_dir=Path("data/historical"),
         )
 
-        data_store = HistoricalDataStore(config.data_dir)
-        start = (
-            datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            if config.start_date
-            else None
-        )
-        end = (
-            datetime.strptime(config.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            if config.end_date
-            else None
-        )
-        bars = _ensure_data_available(
-            data_store, config.symbol, config.granularity, start, end,
-            task_id=task_id, registry=registry,
-        )
+        data_store = SQLiteMarketDataStore(_DB_PATH)
+        try:
+            start = (
+                datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
+                if config.start_date
+                else None
+            )
+            end = (
+                datetime.strptime(config.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
+                if config.end_date
+                else None
+            )
+            bars = _ensure_data_available(
+                data_store, config.symbol, config.granularity, start, end,
+                task_id=task_id, registry=registry,
+            )
+        finally:
+            data_store.close()
 
         if task_id is not None and registry is not None:
             registry.update_message(task_id, "Running walk-forward validation...")

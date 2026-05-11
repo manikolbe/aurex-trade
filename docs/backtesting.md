@@ -147,6 +147,17 @@ configure parameters, and run backtests, sweeps, or walk-forward validation.
 
 ## Data Storage
 
-Historical bars are stored as CSV in `data/historical/{SYMBOL}_{GRANULARITY}.csv`.
-Format: `timestamp,open,high,low,close,volume,symbol`. Re-downloading overwrites
-the existing file for that symbol/granularity pair.
+Historical bars are stored in a shared SQLite database (`data/aurex_trade.db`)
+in the `bars` table, keyed by `(symbol, granularity, timestamp)`.
+
+Key properties:
+- **Concurrent-safe**: WAL mode + `INSERT OR IGNORE` — multiple users can download
+  overlapping ranges simultaneously without data loss or corruption.
+- **Gap-only downloads**: Before fetching from OANDA, the CLI/web checks existing
+  coverage (`MIN/MAX timestamp`). Only missing ranges at the start or end are
+  downloaded. Overlapping inserts are harmless.
+- **Shared across users**: The first user to download a range pays the cost;
+  subsequent users get instant access to the same data.
+- **Per-user preferences**: The `user_data_preferences` table remembers each
+  user's last-used date range per symbol/granularity, pre-filling the UI on
+  next visit.

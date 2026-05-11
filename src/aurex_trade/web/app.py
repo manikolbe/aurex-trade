@@ -14,6 +14,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from aurex_trade.adapters.google.oauth import GoogleOAuthAdapter
+from aurex_trade.adapters.sqlite.market_data_store import (
+    SQLiteMarketDataStore,
+    UserDataPreferencesStore,
+)
 from aurex_trade.adapters.sqlite.session_store import SQLiteSessionStore
 from aurex_trade.logging import setup_logging
 from aurex_trade.web.auth.config import AuthConfig
@@ -76,6 +80,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     logger.info("web.startup", workers=2)
     yield
+
+    # Shutdown: close stores
+    market_data_store: SQLiteMarketDataStore | None = getattr(
+        app.state, "market_data_store", None
+    )
+    if market_data_store:
+        market_data_store.close()
+    preferences_store: UserDataPreferencesStore | None = getattr(
+        app.state, "preferences_store", None
+    )
+    if preferences_store:
+        preferences_store.close()
     if session_store:
         session_store.close()
     registry.shutdown()
@@ -105,6 +121,12 @@ def create_app() -> FastAPI:
     # Templates
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     app.state.templates = templates
+
+    # Market data and user preferences stores
+    market_data_store = SQLiteMarketDataStore(db_path=_DB_PATH)
+    app.state.market_data_store = market_data_store
+    preferences_store = UserDataPreferencesStore(db_path=_DB_PATH)
+    app.state.preferences_store = preferences_store
 
     # Authentication
     auth_config = AuthConfig()

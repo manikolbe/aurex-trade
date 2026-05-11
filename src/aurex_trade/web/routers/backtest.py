@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from aurex_trade.adapters.sqlite.market_data_store import (
+    SQLiteMarketDataStore,
+    UserDataPreferencesStore,
+)
 from aurex_trade.domain.models import User
 from aurex_trade.web._run_helpers import (
     create_backtest_runner,
@@ -14,10 +19,15 @@ from aurex_trade.web._run_helpers import (
     create_walk_forward_runner,
 )
 from aurex_trade.web.auth.dependencies import get_current_user
-from aurex_trade.web.dependencies import get_task_registry
+from aurex_trade.web.dependencies import (
+    get_market_data_store,
+    get_preferences_store,
+    get_task_registry,
+)
 from aurex_trade.web.schemas import (
     BacktestRequest,
     BacktestResultResponse,
+    DataRangeResponse,
     ParamMetaResponse,
     StrategiesResponse,
     StrategyInfoResponse,
@@ -44,11 +54,16 @@ def submit_backtest(
     req: BacktestRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
+    prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
 ) -> TaskSubmittedResponse:
     """Submit a backtest for background execution."""
     task_id = uuid4()
     runner = create_backtest_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="backtest", task_id=task_id)
+    if req.start_date and req.end_date:
+        prefs_store.save_preference(
+            user.id, req.symbol, req.granularity, req.start_date, req.end_date
+        )
     logger.info("backtest.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="backtest", status=TaskStatus.RUNNING)
 
@@ -77,11 +92,16 @@ def submit_sweep(
     req: SweepRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
+    prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
 ) -> TaskSubmittedResponse:
     """Submit a parameter sweep for background execution."""
     task_id = uuid4()
     runner = create_sweep_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="sweep", task_id=task_id)
+    if req.start_date and req.end_date:
+        prefs_store.save_preference(
+            user.id, req.symbol, req.granularity, req.start_date, req.end_date
+        )
     logger.info("sweep.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="sweep", status=TaskStatus.RUNNING)
 
@@ -110,11 +130,16 @@ def submit_walk_forward(
     req: WalkForwardRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
+    prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
 ) -> TaskSubmittedResponse:
     """Submit a walk-forward validation for background execution."""
     task_id = uuid4()
     runner = create_walk_forward_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="walk_forward", task_id=task_id)
+    if req.start_date and req.end_date:
+        prefs_store.save_preference(
+            user.id, req.symbol, req.granularity, req.start_date, req.end_date
+        )
     logger.info("walk_forward.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(
         task_id=task_id, task_type="walk_forward", status=TaskStatus.RUNNING
@@ -138,6 +163,46 @@ def get_walk_forward_status(
         return walk_forward_result_to_response(result)
 
     return task_info_to_response(info)
+
+
+@router.get("/data-range")
+def get_data_range(
+    user: User = Depends(get_current_user),
+    market_data_store: SQLiteMarketDataStore = Depends(get_market_data_store),
+    prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
+    symbol: str = Query(default="XAU_USD", pattern=r"^[A-Z0-9_]{1,20}$"),
+    granularity: str = Query(default="M1", pattern=r"^[A-Z0-9]{1,3}$"),
+) -> DataRangeResponse:
+    """Return the preferred/available date range for a symbol/granularity.
+
+    Priority: user preference > existing data coverage > safe default (2 weeks).
+    """
+    # 1. Check user preference first
+    pref = prefs_store.get_preference(user.id, symbol, granularity)
+    if pref is not None:
+        return DataRangeResponse(
+            start_date=pref[0],
+            end_date=pref[1],
+            source="preference",
+        )
+
+    # 2. Check existing data coverage
+    date_range = market_data_store.get_date_range(symbol, granularity)
+    if date_range is not None:
+        return DataRangeResponse(
+            start_date=date_range[0].strftime("%Y-%m-%d"),
+            end_date=date_range[1].strftime("%Y-%m-%d"),
+            source="existing",
+        )
+
+    # 3. No data — return safe default (last 2 weeks)
+    today = datetime.now(tz=UTC).date()
+    default_start = today - timedelta(days=14)
+    return DataRangeResponse(
+        start_date=default_start.isoformat(),
+        end_date=today.isoformat(),
+        source="default",
+    )
 
 
 @router.get("/strategies")

@@ -30,8 +30,7 @@ class TestHistoricalDataStore:
         store = HistoricalDataStore(tmp_path)
         bars = _make_bars(10)
 
-        path = store.save_bars(bars, "XAU_USD", "M1")
-        assert path.exists()
+        store.save_bars(bars, "XAU_USD", "M1")
 
         loaded = store.load_bars("XAU_USD", "M1")
         assert len(loaded) == 10
@@ -60,8 +59,23 @@ class TestHistoricalDataStore:
         nested = tmp_path / "deep" / "nested" / "dir"
         store = HistoricalDataStore(nested)
         bars = _make_bars(5)
-        path = store.save_bars(bars, "XAU_USD", "M1")
-        assert path.exists()
+        store.save_bars(bars, "XAU_USD", "M1")
+        loaded = store.load_bars("XAU_USD", "M1")
+        assert len(loaded) == 5
+
+    def test_get_date_range(self, tmp_path: Path) -> None:
+        store = HistoricalDataStore(tmp_path)
+        bars = _make_bars(60)
+        store.save_bars(bars, "XAU_USD", "M1")
+
+        result = store.get_date_range("XAU_USD", "M1")
+        assert result is not None
+        assert result[0] == bars[0].timestamp
+        assert result[1] == bars[-1].timestamp
+
+    def test_get_date_range_no_data(self, tmp_path: Path) -> None:
+        store = HistoricalDataStore(tmp_path)
+        assert store.get_date_range("MISSING", "M1") is None
 
     def test_preserves_precision(self, tmp_path: Path) -> None:
         store = HistoricalDataStore(tmp_path)

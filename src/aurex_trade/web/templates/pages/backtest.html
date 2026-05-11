@@ -64,12 +64,12 @@
 
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
-            <label class="label label-text tooltip tooltip-top" data-tip="Start of date range to test (leave empty for all data)">Start Date</label>
-            <input type="date" name="start_date" class="input input-bordered input-sm">
+            <label class="label label-text tooltip tooltip-top" data-tip="Start of date range to test">Start Date</label>
+            <input type="date" id="start-date" name="start_date" class="input input-bordered input-sm" required>
           </div>
           <div class="form-control">
-            <label class="label label-text tooltip tooltip-top" data-tip="End of date range to test (leave empty for all data)">End Date</label>
-            <input type="date" name="end_date" class="input input-bordered input-sm">
+            <label class="label label-text tooltip tooltip-top" data-tip="End of date range to test">End Date</label>
+            <input type="date" id="end-date" name="end_date" class="input input-bordered input-sm" required>
           </div>
         </div>
 
@@ -195,16 +195,33 @@ function updateDescription(strategyKey) {
   document.getElementById('strategy-description').innerHTML = '<strong>How the strategy works:</strong> ' + desc;
 }
 
+// Fetch and populate date range from server
+function loadDateRange() {
+  const symbol = document.querySelector('[name="symbol"]').value;
+  const granularity = document.querySelector('[name="granularity"]').value;
+  fetch('/api/data-range?symbol=' + encodeURIComponent(symbol) + '&granularity=' + encodeURIComponent(granularity))
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('start-date').value = data.start_date;
+      document.getElementById('end-date').value = data.end_date;
+    });
+}
+
 // Initial render
 const initialStrategy = document.getElementById('strategy-select').value;
 renderParams(initialStrategy);
 updateDescription(initialStrategy);
+loadDateRange();
 
 // Re-render on strategy change
 document.getElementById('strategy-select').addEventListener('change', function() {
   renderParams(this.value);
   updateDescription(this.value);
 });
+
+// Reload date range when symbol or granularity changes
+document.querySelector('[name="symbol"]').addEventListener('change', loadDateRange);
+document.querySelector('[name="granularity"]').addEventListener('change', loadDateRange);
 
 document.getElementById('require-stop-loss-cb').addEventListener('change', function() {
   document.getElementById('require-stop-loss-val').value = this.checked ? 'true' : 'false';

@@ -27,12 +27,8 @@ class HistoricalDataStore:
     def __init__(self, data_dir: Path) -> None:
         self._data_dir = data_dir
 
-    def save_bars(self, bars: list[BarData], symbol: str, granularity: str) -> Path:
-        """Save bars to a CSV file. Overwrites if file exists.
-
-        Returns:
-            Path to the written CSV file.
-        """
+    def save_bars(self, bars: list[BarData], symbol: str, granularity: str) -> None:
+        """Save bars to a CSV file. Overwrites if file exists."""
         self._data_dir.mkdir(parents=True, exist_ok=True)
         path = self._file_path(symbol, granularity)
 
@@ -51,8 +47,6 @@ class HistoricalDataStore:
                         "symbol": bar.symbol,
                     }
                 )
-
-        return path
 
     def load_bars(
         self,
@@ -106,6 +100,18 @@ class HistoricalDataStore:
                 )
 
         return bars
+
+    def get_date_range(
+        self, symbol: str, granularity: str
+    ) -> tuple[datetime, datetime] | None:
+        """Return (min, max) timestamps from the CSV, or None if no data."""
+        try:
+            bars = self.load_bars(symbol, granularity)
+        except FileNotFoundError:
+            return None
+        if not bars:
+            return None
+        return (bars[0].timestamp, bars[-1].timestamp)
 
     def _file_path(self, symbol: str, granularity: str) -> Path:
         return self._data_dir / f"{symbol}_{granularity}.csv"

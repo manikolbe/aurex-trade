@@ -8,9 +8,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from aurex_trade.adapters.backtest.data_store import HistoricalDataStore
 from aurex_trade.adapters.oanda.connection import OANDAConnection
 from aurex_trade.adapters.oanda.downloader import OANDAHistoricalDownloader
+from aurex_trade.adapters.sqlite.market_data_store import SQLiteMarketDataStore
 from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.results import BacktestResult, SweepResult, WalkForwardResult
 from aurex_trade.config import OANDAConfig
@@ -79,7 +79,7 @@ def main() -> None:
     dl_parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
     dl_parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
     dl_parser.add_argument(
-        "--data-dir", default="data/historical", help="Output directory"
+        "--db-path", default="data/aurex_trade.db", help="SQLite database path"
     )
 
     # run subcommand
@@ -118,7 +118,7 @@ def main() -> None:
     )
     run_parser.add_argument("--seed", type=int, default=42, help="Random seed")
     run_parser.add_argument(
-        "--data-dir", default="data/historical", help="Data directory"
+        "--db-path", default="data/aurex_trade.db", help="SQLite database path"
     )
     run_parser.add_argument(
         "--max-position", type=int, default=10, help="Max position size (risk)"
@@ -171,7 +171,7 @@ def main() -> None:
     sweep_parser.add_argument("--slippage", type=float, default=0.2)
     sweep_parser.add_argument("--commission", type=float, default=0.0)
     sweep_parser.add_argument("--seed", type=int, default=42)
-    sweep_parser.add_argument("--data-dir", default="data/historical")
+    sweep_parser.add_argument("--db-path", default="data/aurex_trade.db")
     sweep_parser.add_argument("--max-position", type=int, default=10)
     sweep_parser.add_argument("--max-daily-loss", type=float, default=5000.0)
     sweep_parser.add_argument("--max-trades-per-day", type=int, default=100)
@@ -213,7 +213,7 @@ def main() -> None:
     wf_parser.add_argument("--slippage", type=float, default=0.2)
     wf_parser.add_argument("--commission", type=float, default=0.0)
     wf_parser.add_argument("--seed", type=int, default=42)
-    wf_parser.add_argument("--data-dir", default="data/historical")
+    wf_parser.add_argument("--db-path", default="data/aurex_trade.db")
     wf_parser.add_argument("--max-position", type=int, default=10)
     wf_parser.add_argument("--max-daily-loss", type=float, default=5000.0)
     wf_parser.add_argument("--max-trades-per-day", type=int, default=100)
@@ -261,15 +261,16 @@ def _cmd_download_data(args: argparse.Namespace) -> None:
     connection = OANDAConnection(oanda_config)
     connection.connect()
 
-    data_store = HistoricalDataStore(Path(args.data_dir))
+    data_store = SQLiteMarketDataStore(Path(args.db_path))
     downloader = OANDAHistoricalDownloader(connection, data_store)
 
     try:
         count = downloader.download(args.symbol, args.granularity, start, end)
         print(f"Downloaded {count} candles for {args.symbol} ({args.granularity})")
-        print(f"Saved to: {args.data_dir}/{args.symbol}_{args.granularity}.csv")
+        print(f"Stored in: {args.db_path}")
     finally:
         connection.disconnect()
+        data_store.close()
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
@@ -306,11 +307,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         slippage_pips=args.slippage,
         commission_per_trade=args.commission,
         deterministic_seed=args.seed,
-        data_dir=Path(args.data_dir),
         bar_count=strategy.min_bars,
     )
 
-    bars = _load_bars(config)
+    bars = _load_bars(config, Path(args.db_path))
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
@@ -351,9 +351,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
     _print_results(result)
 
 
-def _load_bars(config: BacktestConfig) -> list[BarData]:
-    """Load bars from data store, exit if empty."""
-    data_store = HistoricalDataStore(config.data_dir)
+def _load_bars(config: BacktestConfig, db_path: Path) -> list[BarData]:
+    """Load bars from SQLite data store, exit if empty."""
+    data_store = SQLiteMarketDataStore(db_path)
     start = (
         datetime.strptime(config.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
         if config.start_date
@@ -368,6 +368,7 @@ def _load_bars(config: BacktestConfig) -> list[BarData]:
     bars: list[BarData] = data_store.load_bars(
         config.symbol, config.granularity, start, end
     )
+    data_store.close()
     if not bars:
         print(f"No data found for {config.symbol} ({config.granularity})")
         sys.exit(1)
@@ -447,10 +448,9 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
         slippage_pips=args.slippage,
         commission_per_trade=args.commission,
         deterministic_seed=args.seed,
-        data_dir=Path(args.data_dir),
     )
 
-    bars = _load_bars(config)
+    bars = _load_bars(config, Path(args.db_path))
 
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
@@ -503,10 +503,9 @@ def _cmd_walk_forward(args: argparse.Namespace) -> None:
         slippage_pips=args.slippage,
         commission_per_trade=args.commission,
         deterministic_seed=args.seed,
-        data_dir=Path(args.data_dir),
     )
 
-    bars = _load_bars(config)
+    bars = _load_bars(config, Path(args.db_path))
 
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
@@ -653,3 +652,5 @@ def _print_walk_forward_results(result: WalkForwardResult) -> None:
     print(f"  Trade Count:  {agg.trade_count}")
     print(f"  Max Drawdown: ${agg.max_drawdown:,.2f} ({agg.max_drawdown_pct * 100:.2f}%)")
     print("=" * 80)
+
+
