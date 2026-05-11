@@ -11,7 +11,7 @@
 </div>
 
 <!-- Strategy Defaults Tab -->
-<div id="tab-strategy" class="tab-content">
+<div id="tab-strategy" class="tab-panel">
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title text-lg">Strategy Defaults</h2>
@@ -45,7 +45,7 @@
 </div>
 
 <!-- Risk & Cost Defaults Tab -->
-<div id="tab-risk" class="tab-content hidden">
+<div id="tab-risk" class="tab-panel hidden">
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title text-lg">Risk & Cost Defaults</h2>
@@ -129,7 +129,7 @@
 </div>
 
 <!-- App Config Tab -->
-<div id="tab-app" class="tab-content hidden">
+<div id="tab-app" class="tab-panel hidden">
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title text-lg">Current Configuration</h2>
@@ -154,7 +154,7 @@ const RISK_DEFAULTS = {
 document.querySelectorAll('[data-tab]').forEach(function(tab) {
   tab.addEventListener('click', function() {
     document.querySelectorAll('[data-tab]').forEach(t => t.classList.remove('tab-active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.querySelectorAll('.tab-panel').forEach(c => c.classList.add('hidden'));
     this.classList.add('tab-active');
     document.getElementById('tab-' + this.dataset.tab).classList.remove('hidden');
   });
