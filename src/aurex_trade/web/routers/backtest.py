@@ -75,9 +75,11 @@ def _save_preferred_and_risk(
 
 def _extract_risk_settings(
     req: BacktestRequest | SweepRequest | WalkForwardRequest,
-) -> dict[str, int | float | bool]:
-    """Extract risk/cost fields from a request into a settings dict."""
+) -> dict[str, int | float | bool | str]:
+    """Extract risk/cost fields + symbol/granularity from a request."""
     return {
+        "symbol": req.symbol,
+        "granularity": req.granularity,
         "max_position": req.max_position,
         "max_daily_loss": req.max_daily_loss,
         "risk_per_trade": req.risk_per_trade,

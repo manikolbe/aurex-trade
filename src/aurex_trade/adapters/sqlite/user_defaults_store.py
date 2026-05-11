@@ -120,7 +120,7 @@ class UserDefaultsStore:
     # --- Risk/Cost Defaults ---
 
     def save_risk_defaults(
-        self, user_id: str, settings: dict[str, int | float | bool]
+        self, user_id: str, settings: dict[str, int | float | bool | str]
     ) -> None:
         """Upsert the user's risk and cost settings."""
         now = datetime.now(tz=UTC).isoformat()
@@ -136,7 +136,7 @@ class UserDefaultsStore:
         )
         self._conn.commit()
 
-    def get_risk_defaults(self, user_id: str) -> dict[str, int | float | bool] | None:
+    def get_risk_defaults(self, user_id: str) -> dict[str, int | float | bool | str] | None:
         """Return saved risk/cost settings, or None if not set."""
         cursor = self._conn.execute(
             "SELECT settings_json FROM user_risk_defaults WHERE user_id = ?",
@@ -145,7 +145,7 @@ class UserDefaultsStore:
         row = cursor.fetchone()
         if row is None:
             return None
-        result: dict[str, int | float | bool] = json.loads(row["settings_json"])
+        result: dict[str, int | float | bool | str] = json.loads(row["settings_json"])
         return result
 
     def delete_risk_defaults(self, user_id: str) -> None:

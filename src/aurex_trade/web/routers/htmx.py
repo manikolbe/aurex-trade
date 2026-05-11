@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.domain.models import User
 from aurex_trade.web._run_helpers import (
     create_backtest_runner,
@@ -16,7 +17,8 @@ from aurex_trade.web._run_helpers import (
     create_walk_forward_runner,
 )
 from aurex_trade.web.auth.dependencies import get_current_user
-from aurex_trade.web.dependencies import get_task_registry
+from aurex_trade.web.dependencies import get_task_registry, get_user_defaults_store
+from aurex_trade.web.routers.backtest import _extract_risk_settings, _save_user_defaults
 from aurex_trade.web.schemas import (
     BacktestRequest,
     SweepRequest,
@@ -45,11 +47,13 @@ def htmx_submit_backtest(
     req: BacktestRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> HTMLResponse:
     """Submit a backtest and return a loading fragment that polls for results."""
     task_id = uuid4()
     runner = create_backtest_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="backtest", task_id=task_id)
+    _save_user_defaults(defaults_store, user.id, req)
     logger.info("htmx.backtest.submitted", task_id=str(task_id))
     templates = _get_templates(request)
     return templates.TemplateResponse(
@@ -100,11 +104,16 @@ def htmx_submit_sweep(
     req: SweepRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> HTMLResponse:
     """Submit a sweep and return a loading fragment that polls for results."""
     task_id = uuid4()
     runner = create_sweep_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="sweep", task_id=task_id)
+    defaults_store.save_strategy_defaults(
+        user.id, req.strategy, {}, is_preferred=True
+    )
+    defaults_store.save_risk_defaults(user.id, _extract_risk_settings(req))
     logger.info("htmx.sweep.submitted", task_id=str(task_id))
     templates = _get_templates(request)
     return templates.TemplateResponse(
@@ -155,11 +164,16 @@ def htmx_submit_walk_forward(
     req: WalkForwardRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> HTMLResponse:
     """Submit walk-forward validation and return a loading fragment."""
     task_id = uuid4()
     runner = create_walk_forward_runner(req, task_id=task_id, registry=registry, user_id=user.id)
     registry.submit(runner, task_type="walk_forward", task_id=task_id)
+    defaults_store.save_strategy_defaults(
+        user.id, req.strategy, {}, is_preferred=True
+    )
+    defaults_store.save_risk_defaults(user.id, _extract_risk_settings(req))
     logger.info("htmx.walk_forward.submitted", task_id=str(task_id))
     templates = _get_templates(request)
     return templates.TemplateResponse(

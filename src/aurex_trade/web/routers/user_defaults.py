@@ -74,7 +74,7 @@ def save_risk_defaults(
     store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> RiskDefaultsResponse:
     """Save risk/cost defaults."""
-    settings: dict[str, int | float | bool] = req.model_dump()
+    settings: dict[str, int | float | bool | str] = req.model_dump()
     store.save_risk_defaults(user.id, settings)
     return RiskDefaultsResponse(settings=settings)
 

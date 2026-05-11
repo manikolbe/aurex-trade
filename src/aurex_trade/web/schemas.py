@@ -498,7 +498,7 @@ class RiskDefaultsRequest(BaseModel):
 class RiskDefaultsResponse(BaseModel):
     """Saved risk/cost defaults for a user."""
 
-    settings: dict[str, int | float | bool] | None
+    settings: dict[str, int | float | bool | str] | None
 
 
 class AllDefaultsResponse(BaseModel):
@@ -506,4 +506,4 @@ class AllDefaultsResponse(BaseModel):
 
     preferred_strategy: str | None
     strategy_params: dict[str, dict[str, int | float]]
-    risk_settings: dict[str, int | float | bool] | None
+    risk_settings: dict[str, int | float | bool | str] | None
