@@ -190,8 +190,9 @@ def create_app() -> FastAPI:
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request) -> HTMLResponse:
-        ctx = {**_user_context(request), "strategies": _get_strategies_context()}
-        return templates.TemplateResponse(request, "pages/settings.html", ctx)
+        return templates.TemplateResponse(
+            request, "pages/settings.html", _user_context(request)
+        )
 
     return app
 

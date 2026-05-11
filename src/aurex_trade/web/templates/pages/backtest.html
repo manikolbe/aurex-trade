@@ -61,6 +61,7 @@
 
         <!-- Dynamic Strategy Params -->
         <div id="strategy-params" class="grid grid-cols-2 gap-2"></div>
+        <button type="button" class="btn btn-ghost btn-xs mt-1" onclick="resetStrategyParams()">Reset to defaults</button>
 
         <div class="grid grid-cols-2 gap-2">
           <div class="form-control">
@@ -151,6 +152,7 @@
               </label>
               <input type="hidden" name="require_stop_loss" id="require-stop-loss-val" value="true">
             </div>
+            <button type="button" class="btn btn-ghost btn-xs mt-1" onclick="resetRiskDefaults()">Reset to defaults</button>
           </div>
         </div>
 
@@ -174,6 +176,21 @@
 
 <script>
 const STRATEGIES = {{ strategies | tojson }};
+
+function resetStrategyParams() {
+  const key = document.getElementById('strategy-select').value;
+  renderParams(key);
+}
+
+function resetRiskDefaults() {
+  const defaults = {capital: 100000, position_size: 1.0, spread: 0.6, slippage: 0.2, commission: 0, seed: 42, max_position: 10, max_daily_loss: 500, risk_per_trade: 0.02, max_drawdown_pct: 0.20, max_trades_per_day: 100, max_consecutive_losses: 5};
+  Object.entries(defaults).forEach(function([k, v]) {
+    const input = document.querySelector('[name="' + k + '"]');
+    if (input) input.value = v;
+  });
+  document.getElementById('require-stop-loss-cb').checked = true;
+  document.getElementById('require-stop-loss-val').value = 'true';
+}
 
 function renderParams(strategyKey) {
   const container = document.getElementById('strategy-params');

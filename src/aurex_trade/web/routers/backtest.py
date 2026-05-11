@@ -12,6 +12,7 @@ from aurex_trade.adapters.sqlite.market_data_store import (
     SQLiteMarketDataStore,
     UserDataPreferencesStore,
 )
+from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.domain.models import User
 from aurex_trade.web._run_helpers import (
     create_backtest_runner,
@@ -23,6 +24,7 @@ from aurex_trade.web.dependencies import (
     get_market_data_store,
     get_preferences_store,
     get_task_registry,
+    get_user_defaults_store,
 )
 from aurex_trade.web.schemas import (
     BacktestRequest,
@@ -49,12 +51,56 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api", tags=["backtest"])
 
 
+def _save_user_defaults(
+    store: UserDefaultsStore, user_id: str, req: BacktestRequest
+) -> None:
+    """Auto-save strategy params and risk/cost settings from a backtest submit."""
+    store.save_strategy_defaults(
+        user_id, req.strategy, req.params, is_preferred=True
+    )
+    store.save_risk_defaults(user_id, _extract_risk_settings(req))
+
+
+def _save_preferred_and_risk(
+    store: UserDefaultsStore,
+    user_id: str,
+    req: SweepRequest | WalkForwardRequest,
+) -> None:
+    """Auto-save preferred strategy + risk/cost from sweep/walk-forward submit."""
+    store.save_strategy_defaults(
+        user_id, req.strategy, {}, is_preferred=True
+    )
+    store.save_risk_defaults(user_id, _extract_risk_settings(req))
+
+
+def _extract_risk_settings(
+    req: BacktestRequest | SweepRequest | WalkForwardRequest,
+) -> dict[str, int | float | bool]:
+    """Extract risk/cost fields from a request into a settings dict."""
+    return {
+        "max_position": req.max_position,
+        "max_daily_loss": req.max_daily_loss,
+        "risk_per_trade": req.risk_per_trade,
+        "max_drawdown_pct": req.max_drawdown_pct,
+        "max_trades_per_day": req.max_trades_per_day,
+        "max_consecutive_losses": req.max_consecutive_losses,
+        "require_stop_loss": req.require_stop_loss,
+        "capital": req.capital,
+        "position_size": req.position_size,
+        "spread": req.spread,
+        "slippage": req.slippage,
+        "commission": req.commission,
+        "seed": req.seed,
+    }
+
+
 @router.post("/backtest", status_code=202)
 def submit_backtest(
     req: BacktestRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
     prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> TaskSubmittedResponse:
     """Submit a backtest for background execution."""
     task_id = uuid4()
@@ -64,6 +110,7 @@ def submit_backtest(
         prefs_store.save_preference(
             user.id, req.symbol, req.granularity, req.start_date, req.end_date
         )
+    _save_user_defaults(defaults_store, user.id, req)
     logger.info("backtest.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="backtest", status=TaskStatus.RUNNING)
 
@@ -93,6 +140,7 @@ def submit_sweep(
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
     prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> TaskSubmittedResponse:
     """Submit a parameter sweep for background execution."""
     task_id = uuid4()
@@ -102,6 +150,7 @@ def submit_sweep(
         prefs_store.save_preference(
             user.id, req.symbol, req.granularity, req.start_date, req.end_date
         )
+    _save_preferred_and_risk(defaults_store, user.id, req)
     logger.info("sweep.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(task_id=task_id, task_type="sweep", status=TaskStatus.RUNNING)
 
@@ -131,6 +180,7 @@ def submit_walk_forward(
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
     prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> TaskSubmittedResponse:
     """Submit a walk-forward validation for background execution."""
     task_id = uuid4()
@@ -140,6 +190,7 @@ def submit_walk_forward(
         prefs_store.save_preference(
             user.id, req.symbol, req.granularity, req.start_date, req.end_date
         )
+    _save_preferred_and_risk(defaults_store, user.id, req)
     logger.info("walk_forward.submitted", task_id=str(task_id))
     return TaskSubmittedResponse(
         task_id=task_id, task_type="walk_forward", status=TaskStatus.RUNNING
