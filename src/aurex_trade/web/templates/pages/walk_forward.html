@@ -127,7 +127,7 @@ function resetWfParams() {
 }
 
 function resetRiskDefaults() {
-  const defaults = {capital: 100000, spread: 0.6, slippage: 0.2, seed: 42};
+  const defaults = {symbol: 'XAU_USD', capital: 100000, spread: 0.6, slippage: 0.2, seed: 42};
   Object.entries(defaults).forEach(function([k, v]) {
     const input = document.querySelector('[name="' + k + '"]');
     if (input) input.value = v;
