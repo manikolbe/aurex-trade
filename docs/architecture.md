@@ -401,12 +401,17 @@ All settings are configurable via environment variables (prefix: `RATELIMIT_`):
 | `RATELIMIT_READ` | `120/minute` | Read endpoints (polling, status checks) |
 | `RATELIMIT_AUTH` | `10/minute` | OAuth endpoints (google redirect, callback) |
 | `RATELIMIT_AUTH_LOGOUT` | `5/minute` | Logout |
-| `RATELIMIT_TRUSTED_PROXIES` | `""` (empty) | Comma-separated IPs of reverse proxies allowed to set X-Forwarded-For |
 
-**Security note:** `X-Forwarded-For` is only trusted when the direct connection
-comes from an IP listed in `RATELIMIT_TRUSTED_PROXIES`. Without this, attackers
-can spoof arbitrary IPs to bypass rate limits. In production behind nginx/Caddy,
-set this to the proxy's internal IP (e.g. `"172.17.0.1"`).
+**Proxy requirement:** When deployed behind a reverse proxy, the proxy must
+**overwrite** (not append to) the `X-Forwarded-For` header to prevent IP spoofing:
+
+```nginx
+# nginx — overwrite mode (prevents client spoofing)
+proxy_set_header X-Forwarded-For $remote_addr;
+```
+
+Without this, clients can send arbitrary `X-Forwarded-For` values to get
+independent rate limit buckets.
 
 ### Endpoint Limits
 

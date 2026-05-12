@@ -29,36 +29,29 @@ class RateLimitConfig(BaseSettings):
     read: str = "120/minute"
     auth: str = "10/minute"
     auth_logout: str = "5/minute"
-    # Trusted proxy IPs that may set X-Forwarded-For.
-    # Comma-separated list. If empty, X-Forwarded-For is never trusted.
-    trusted_proxies: str = ""
 
 
 def get_client_ip(request: Request) -> str:
-    """Extract client IP, only trusting X-Forwarded-For from known proxies.
+    """Extract client IP from X-Forwarded-For header or direct connection.
 
-    Security: An attacker can spoof X-Forwarded-For to bypass rate limits.
-    We only parse it when the direct connection comes from a trusted proxy.
-    In development (TestClient), request.client.host is "testclient" which
-    won't match any trusted proxy — tests must use X-Forwarded-For headers
-    AND configure trusted_proxies, or rely on the direct client IP.
+    When behind a reverse proxy (nginx, Caddy), the real client IP is in
+    X-Forwarded-For. The proxy must be configured to OVERWRITE this header
+    (not append) to prevent client spoofing:
+
+        proxy_set_header X-Forwarded-For $remote_addr;
+
+    Falls back to direct socket address when no header is present.
     """
-    direct_ip = request.client.host if request.client else "127.0.0.1"
-
-    # Only parse X-Forwarded-For if the direct connection is from a trusted proxy
-    trusted = ratelimit_config.trusted_proxies
-    if trusted:
-        trusted_set = {ip.strip() for ip in trusted.split(",") if ip.strip()}
-        if direct_ip in trusted_set:
-            forwarded = request.headers.get("X-Forwarded-For")
-            if forwarded:
-                # Take first non-empty IP (leftmost = original client)
-                for ip in forwarded.split(","):
-                    cleaned = ip.strip()
-                    if cleaned:
-                        return cleaned
-
-    return direct_ip
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # Take first non-empty IP (leftmost = original client set by proxy)
+        for ip in forwarded.split(","):
+            cleaned = ip.strip()
+            if cleaned:
+                return cleaned
+    if request.client:
+        return request.client.host
+    return "127.0.0.1"
 
 
 def create_limiter(config: RateLimitConfig) -> Limiter:
