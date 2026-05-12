@@ -13,6 +13,7 @@ from aurex_trade.adapters.google.oauth import GoogleOAuthAdapter
 from aurex_trade.adapters.sqlite.session_store import SQLiteSessionStore
 from aurex_trade.domain.models import User
 from aurex_trade.web.auth.config import AuthConfig
+from aurex_trade.web.ratelimit import limiter, ratelimit_config
 
 logger = structlog.get_logger()
 
@@ -69,6 +70,7 @@ def create_auth_router(
         return response
 
     @router.get("/google")
+    @limiter.limit(ratelimit_config.auth)
     def google_redirect(
         request: Request, redirect_to: str = Query("/", alias="next")
     ) -> RedirectResponse:
@@ -82,6 +84,7 @@ def create_auth_router(
         return RedirectResponse(url=url, status_code=302)
 
     @router.get("/callback", response_model=None)
+    @limiter.limit(ratelimit_config.auth)
     def oauth_callback(
         request: Request, code: str = "", state: str = ""
     ) -> HTMLResponse | RedirectResponse:
@@ -146,6 +149,7 @@ def create_auth_router(
         return response
 
     @router.post("/logout")
+    @limiter.limit(ratelimit_config.auth_logout)
     def logout(request: Request) -> RedirectResponse:
         """Destroy session and clear cookie."""
         session_id = request.cookies.get("session_id")

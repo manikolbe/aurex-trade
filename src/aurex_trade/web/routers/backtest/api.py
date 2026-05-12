@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from aurex_trade.adapters.sqlite.market_data_store import (
     SQLiteMarketDataStore,
@@ -27,6 +27,7 @@ from aurex_trade.web.dependencies import (
     get_task_registry,
     get_user_defaults_store,
 )
+from aurex_trade.web.ratelimit import limiter, ratelimit_config
 from aurex_trade.web.schemas import (
     BacktestRequest,
     BacktestResultResponse,
@@ -53,7 +54,9 @@ router = APIRouter(prefix="/api", tags=["backtest"])
 
 
 @router.post("/backtest", status_code=202)
+@limiter.limit(ratelimit_config.compute)
 def submit_backtest(
+    request: Request,
     req: BacktestRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
@@ -93,7 +96,9 @@ def get_backtest_status(
 
 
 @router.post("/sweep", status_code=202)
+@limiter.limit(ratelimit_config.compute)
 def submit_sweep(
+    request: Request,
     req: SweepRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),
@@ -133,7 +138,9 @@ def get_sweep_status(
 
 
 @router.post("/walk-forward", status_code=202)
+@limiter.limit(ratelimit_config.compute)
 def submit_walk_forward(
+    request: Request,
     req: WalkForwardRequest,
     user: User = Depends(get_current_user),
     registry: TaskRegistry = Depends(get_task_registry),

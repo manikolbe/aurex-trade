@@ -8,6 +8,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 
 from aurex_trade.web.dependencies import get_task_registry
+from aurex_trade.web.ratelimit import limiter, ratelimit_config
 from aurex_trade.web.schemas import BotStatusResponse
 from aurex_trade.web.tasks import TaskRegistry, TaskStatus
 
@@ -33,6 +34,7 @@ def bot_status(request: Request) -> BotStatusResponse:
 
 
 @router.post("/start")
+@limiter.limit(ratelimit_config.bot_control)
 def start_bot(
     request: Request,
     registry: TaskRegistry = Depends(get_task_registry),
@@ -52,6 +54,7 @@ def start_bot(
 
 
 @router.post("/stop")
+@limiter.limit(ratelimit_config.bot_control)
 def stop_bot(request: Request) -> BotStatusResponse:
     """Stop the trading bot."""
     with _bot_lock:

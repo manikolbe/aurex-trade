@@ -379,3 +379,68 @@ def main():
     )
     engine.run()
 ```
+
+---
+
+## Rate Limiting
+
+API endpoints are rate-limited per-IP using [slowapi](https://github.com/laurentS/slowapi)
+to prevent resource exhaustion and abuse.
+
+### Configuration
+
+All settings are configurable via environment variables (prefix: `RATELIMIT_`):
+
+| Env Var | Default | Purpose |
+|---------|---------|---------|
+| `RATELIMIT_ENABLED` | `true` | Kill switch — set to `false` to disable all rate limiting |
+| `RATELIMIT_STORAGE_URI` | `memory://` | Storage backend URI |
+| `RATELIMIT_DEFAULT` | `60/minute` | Global default for all endpoints |
+| `RATELIMIT_COMPUTE` | `5/minute` | CPU-intensive: backtest, sweep, walk-forward |
+| `RATELIMIT_BOT_CONTROL` | `3/minute` | Critical controls: bot start/stop |
+| `RATELIMIT_READ` | `120/minute` | Read endpoints (polling, status checks) |
+| `RATELIMIT_AUTH` | `10/minute` | OAuth endpoints (google redirect, callback) |
+| `RATELIMIT_AUTH_LOGOUT` | `5/minute` | Logout |
+
+### Endpoint Limits
+
+| Endpoint | Limit | Reason |
+|----------|-------|--------|
+| `POST /api/backtest`, `/api/sweep`, `/api/walk-forward` | 5/min | CPU-intensive (2 ThreadPool workers) |
+| `POST /api/bot/start`, `/api/bot/stop` | 3/min | Critical controls |
+| `GET /api/*` (polling) | 120/min | HTMX polls every 2-5s |
+| `GET /auth/google`, `/auth/callback` | 10/min | OAuth abuse prevention |
+| `POST /auth/logout` | 5/min | CSRF flooding prevention |
+| `GET /api/health` | Exempt | Load balancer / monitoring |
+
+### 429 Response Format
+
+Rate-limited requests receive:
+- `Retry-After` header (seconds until retry is allowed)
+- JSON body for `/api/*` routes: `{"error": "Rate limit exceeded", "detail": "Try again in N seconds", "status_code": 429}`
+- HTML fragment for `/htmx/*` routes (DaisyUI warning alert)
+
+### Frontend Behavior
+
+The HTMX frontend (`static/ratelimit.js`) intercepts 429 responses client-side:
+1. Suppresses the error (does not show to user)
+2. Reads `Retry-After` header for delay timing
+3. Retries the request automatically (up to 3 attempts with exponential backoff)
+4. Only surfaces the error if all retries are exhausted
+
+Normal HTMX polling (every 2-5s = ~12-30 req/min) stays well under the 120/min
+read limit and is never disrupted.
+
+### Scaling Constraint
+
+> **Hard blocker for horizontal scaling:** Rate limit state is stored in-memory
+> (single-process, single-node only). Each node tracks limits independently —
+> without shared state, adding N nodes allows N× the intended request rate.
+>
+> **To scale to multiple nodes:**
+> 1. Deploy Redis (or another supported backend)
+> 2. Set `RATELIMIT_STORAGE_URI=redis://host:6379`
+> 3. Add `redis` to Python dependencies
+>
+> The slowapi/limits library natively supports Redis, Memcached, and MongoDB as
+> storage backends — switching is a configuration change, not a code change.

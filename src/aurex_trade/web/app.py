@@ -18,6 +18,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from aurex_trade.adapters.google.oauth import GoogleOAuthAdapter
 from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
@@ -33,6 +35,7 @@ from aurex_trade.web.auth.middleware import AuthMiddleware
 from aurex_trade.web.auth.router import create_auth_router
 from aurex_trade.web.config import WebConfig
 from aurex_trade.web.errors import register_error_handlers
+from aurex_trade.web.ratelimit import limiter, rate_limit_exceeded_handler
 from aurex_trade.web.routers import health
 from aurex_trade.web.tasks import TaskRegistry
 
@@ -174,6 +177,11 @@ def create_app() -> FastAPI:
         session_store=session_store,
         expiry_hours=auth_config.session_expiry_hours,
     )
+
+    # Rate limiting (added after auth — executes before auth in request path)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
+    app.add_middleware(SlowAPIMiddleware)
 
     # Routers
     app.include_router(health.router)
