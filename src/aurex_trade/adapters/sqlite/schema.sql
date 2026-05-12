@@ -119,3 +119,15 @@ CREATE TABLE IF NOT EXISTS user_risk_defaults (
     settings_json   TEXT NOT NULL DEFAULT '{}',
     updated_at      TEXT NOT NULL
 );
+
+-- Encrypted broker credentials (per-user isolation)
+
+CREATE TABLE IF NOT EXISTS broker_credentials (
+    user_id            TEXT NOT NULL,
+    broker             TEXT NOT NULL,
+    encrypted_data     BLOB NOT NULL,
+    account_id_masked  TEXT NOT NULL,
+    server             TEXT NOT NULL DEFAULT 'practice',
+    updated_at         TEXT NOT NULL,
+    PRIMARY KEY (user_id, broker)
+);

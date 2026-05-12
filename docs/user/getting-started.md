@@ -7,7 +7,24 @@ This guide walks you through running your first backtest. It takes about 5 minut
 Navigate to [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 You'll see the home page with a health status indicator and links to the main features.
 
-## Step 2: Go to Backtest
+## Step 2: Configure Your Broker
+
+Before running backtests that need fresh market data, connect your OANDA account:
+
+1. Click **Settings** in the top menu
+2. On the **Broker** tab, enter your OANDA practice account credentials:
+    - **Account ID** — found in OANDA's "Manage Funds" page
+    - **API Token** — generate in OANDA Hub → Manage API Access
+    - **Server** — select "Practice" for paper trading
+3. Click **Test Connection** to verify your credentials work
+4. Click **Save Credentials** to store them securely
+
+!!! tip "Why do I need this?"
+    This connects AurexTrade to your OANDA practice account so it can fetch
+    real historical market data for backtesting. Your credentials are encrypted
+    before storage — only you can use them.
+
+## Step 3: Go to Backtest
 
 Click **Strategy Testing** in the top menu, then select **Backtest**.
 

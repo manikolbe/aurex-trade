@@ -1,4 +1,10 @@
-"""Shared runner factories for backtest, sweep, and walk-forward tasks."""
+"""Shared runner factories for backtest, sweep, and walk-forward tasks.
+
+MULTI-USER: All web flows use per-user credentials from the credential store.
+They NEVER fall back to shared .env credentials. If a user has not configured
+broker credentials via Settings -> Broker, data download will fail with a
+clear error message directing them to configure credentials.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +19,7 @@ from aurex_trade.web.schemas import BacktestRequest, SweepRequest, WalkForwardRe
 from aurex_trade.web.tasks import TaskRegistry
 
 if TYPE_CHECKING:
+    from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
     from aurex_trade.domain.models import BarData
     from aurex_trade.ports.historical_data import HistoricalDataPort
 
@@ -29,6 +36,9 @@ def _ensure_data_available(
     end: datetime | None,
     task_id: UUID | None = None,
     registry: TaskRegistry | None = None,
+    *,
+    credential_store: FernetCredentialStore | None = None,
+    user_id: str = "",
 ) -> list[BarData]:
     """Load historical bars, auto-downloading from OANDA if missing.
 
@@ -62,17 +72,32 @@ def _ensure_data_available(
         msg = f"No data found for {symbol} ({granularity})"
         raise FileNotFoundError(msg)
 
-    # Check OANDA credentials
+    # Load per-user credentials from the credential store.
+    # Web flows NEVER fall back to shared .env credentials.
     from aurex_trade.config import OANDAConfig
 
-    oanda_config = OANDAConfig()
-    if not oanda_config.access_token or not oanda_config.account_id:
-        msg = (
-            "OANDA credentials not configured. "
-            "Set OANDA_ACCESS_TOKEN and OANDA_ACCOUNT_ID in your .env file, "
-            "or configure them in Settings."
+    if credential_store is not None and user_id:
+        creds = credential_store.retrieve(user_id, "oanda")
+        if creds is None:
+            msg = (
+                "OANDA credentials not configured. "
+                "Go to Settings \u2192 Broker to add your credentials."
+            )
+            raise ValueError(msg)
+        oanda_config = OANDAConfig(
+            access_token=creds.access_token,
+            account_id=creds.account_id,
+            server=creds.server,
         )
-        raise ValueError(msg)
+    else:
+        # Fallback for legacy/test usage only (no credential store injected)
+        oanda_config = OANDAConfig()
+        if not oanda_config.access_token or not oanda_config.account_id:
+            msg = (
+                "OANDA credentials not configured. "
+                "Go to Settings \u2192 Broker to add your credentials."
+            )
+            raise ValueError(msg)
 
     # Update task progress
     if task_id is not None and registry is not None:
@@ -127,6 +152,7 @@ def create_backtest_runner(
     registry: TaskRegistry | None = None,
     *,
     user_id: str,
+    credential_store: FernetCredentialStore | None = None,
 ) -> Callable[[], object]:
     """Create a callable that runs a single backtest with the given parameters."""
 
@@ -191,6 +217,7 @@ def create_backtest_runner(
             bars = _ensure_data_available(
                 data_store, config.symbol, config.granularity, start, end,
                 task_id=task_id, registry=registry,
+                credential_store=credential_store, user_id=user_id,
             )
         finally:
             data_store.close()
@@ -251,6 +278,7 @@ def create_sweep_runner(
     registry: TaskRegistry | None = None,
     *,
     user_id: str,
+    credential_store: FernetCredentialStore | None = None,
 ) -> Callable[[], object]:
     """Create a callable that runs a parameter sweep with the given parameters."""
 
@@ -293,6 +321,7 @@ def create_sweep_runner(
             bars = _ensure_data_available(
                 data_store, config.symbol, config.granularity, start, end,
                 task_id=task_id, registry=registry,
+                credential_store=credential_store, user_id=user_id,
             )
         finally:
             data_store.close()
@@ -331,6 +360,7 @@ def create_walk_forward_runner(
     registry: TaskRegistry | None = None,
     *,
     user_id: str,
+    credential_store: FernetCredentialStore | None = None,
 ) -> Callable[[], object]:
     """Create a callable that runs walk-forward validation with the given parameters."""
 
@@ -373,6 +403,7 @@ def create_walk_forward_runner(
             bars = _ensure_data_available(
                 data_store, config.symbol, config.granularity, start, end,
                 task_id=task_id, registry=registry,
+                credential_store=credential_store, user_id=user_id,
             )
         finally:
             data_store.close()

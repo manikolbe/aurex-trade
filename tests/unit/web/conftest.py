@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from aurex_trade.adapters.sqlite.session_store import SQLiteSessionStore
 from aurex_trade.domain.models import User
 from aurex_trade.web.app import create_app
+
+# Ensure a test encryption key is available for create_app()
+os.environ.setdefault("AUREX_CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 
 def _create_authenticated_client() -> Generator[TestClient]:

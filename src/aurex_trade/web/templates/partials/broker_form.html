@@ -1,0 +1,118 @@
+<!-- Broker credential management form -->
+<div class="space-y-4">
+
+  <!-- Status badge -->
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body py-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          {% if has_credentials %}
+          <span class="badge badge-success gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+            Configured
+          </span>
+          <span class="text-sm text-base-content/70">
+            Account: <code>{{ account_id_masked }}</code> &middot; Server: <code>{{ server }}</code>
+          </span>
+          {% else %}
+          <span class="badge badge-neutral gap-1">Not configured</span>
+          <span class="text-sm text-base-content/70">Add your OANDA credentials below to get started.</span>
+          {% endif %}
+        </div>
+        {% if has_credentials %}
+        <button class="btn btn-ghost btn-xs text-error"
+                hx-delete="/api/broker/credentials"
+                hx-target="#broker-form-container"
+                hx-swap="innerHTML"
+                hx-confirm="Delete stored credentials? This cannot be undone.">
+          Delete
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection test result (swapped in by test button) -->
+  <div id="broker-test-result"></div>
+
+  <!-- Credential form -->
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-lg">{% if has_credentials %}Update{% else %}Add{% endif %} Broker Credentials</h2>
+      <p class="text-sm text-base-content/60 mb-2">All fields are required. Credentials are encrypted before storage.</p>
+
+      <form id="broker-cred-form" class="space-y-3">
+        <!-- Broker -->
+        <div class="form-control">
+          <label class="label"><span class="label-text">Broker</span></label>
+          <select name="broker" class="select select-bordered w-full" disabled>
+            <option value="oanda" selected>OANDA</option>
+          </select>
+          <label class="label"><span class="label-text-alt">Only OANDA is currently supported.</span></label>
+        </div>
+
+        <!-- Account ID -->
+        <div class="form-control">
+          <label class="label"><span class="label-text">Account ID</span></label>
+          <input type="text" name="account_id" class="input input-bordered w-full"
+                 placeholder="e.g. 001-004-1234567-001" required />
+          <label class="label"><span class="label-text-alt">Found in OANDA's "Manage Funds" page under your account.</span></label>
+        </div>
+
+        <!-- API Token -->
+        <div class="form-control">
+          <label class="label"><span class="label-text">API Token</span></label>
+          <input type="password" name="access_token" class="input input-bordered w-full"
+                 placeholder="Enter your OANDA API token" required />
+          <label class="label"><span class="label-text-alt">Generate in OANDA Hub &rarr; Manage API Access. Never share this token.</span></label>
+        </div>
+
+        <!-- Server -->
+        <div class="form-control">
+          <label class="label"><span class="label-text">Server</span></label>
+          <select name="server" class="select select-bordered w-full">
+            <option value="practice" selected>Practice (paper trading)</option>
+            <option value="live">Live (real money)</option>
+          </select>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-2 pt-2">
+          <button type="button" class="btn btn-primary"
+                  hx-put="/api/broker/credentials"
+                  hx-target="#broker-form-container"
+                  hx-swap="innerHTML"
+                  hx-include="#broker-cred-form"
+                  hx-vals='{"broker": "oanda"}'
+                  hx-indicator="#save-spinner">
+            <span id="save-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
+            Save Credentials
+          </button>
+
+          <button type="button" class="btn btn-outline"
+                  hx-post="/api/broker/test"
+                  hx-target="#broker-test-result"
+                  hx-swap="innerHTML"
+                  hx-include="#broker-cred-form"
+                  hx-vals='{"broker": "oanda", "use_stored": false}'
+                  hx-indicator="#test-spinner">
+            <span id="test-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
+            Test Connection
+          </button>
+
+          {% if has_credentials %}
+          <button type="button" class="btn btn-outline btn-secondary"
+                  hx-post="/api/broker/test"
+                  hx-target="#broker-test-result"
+                  hx-swap="innerHTML"
+                  hx-vals='{"broker": "oanda", "use_stored": true}'
+                  hx-indicator="#test-saved-spinner">
+            <span id="test-saved-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
+            Test Saved
+          </button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

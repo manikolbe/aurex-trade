@@ -45,13 +45,13 @@ src/aurex_trade/
 │   │   └── rsi_mean_reversion.py  # RSI Mean-Reversion implementation
 │   └── risk/
 │       └── engine.py   # RiskEngine — gates ALL trade decisions
-├── ports/              # Protocol interfaces (BrokerPort, MarketDataPort, RepositoryPort, HistoricalDataPort)
+├── ports/              # Protocol interfaces (BrokerPort, MarketDataPort, RepositoryPort, HistoricalDataPort, CredentialStorePort)
 ├── adapters/
 │   ├── oanda/          # OANDA adapter (httpx → v20 REST API)
 │   ├── backtest/       # Backtesting adapters (simulated broker, historical replay)
 │   ├── memory/         # In-memory repository (local mode + tests)
 │   ├── paper/          # Paper trading simulator
-│   └── sqlite/         # SQLite persistence (repository, sessions, market data, user prefs)
+│   └── sqlite/         # SQLite persistence (repository, sessions, market data, user prefs, encrypted credentials)
 ├── backtest/
 │   ├── cli.py          # CLI: download-data, run, sweep, walk-forward
 │   ├── runner.py       # BacktestRunner — core orchestration loop
@@ -62,6 +62,20 @@ src/aurex_trade/
 ├── web/                # FastAPI app (API + HTMX UI, GET /api/strategies for metadata)
 └── logging.py          # structlog configuration
 ```
+
+### User Model (CRITICAL)
+
+| Concern | CLI (`app.py`, `backtest/cli.py`) | Web (`web/`) |
+|---------|-----------------------------------|--------------|
+| **User model** | Single-user (operator) | Multi-user (authenticated via OAuth) |
+| **Credential source** | `.env` / environment variables | Per-user credential store (encrypted in DB) |
+| **Isolation** | None needed — one operator | Strict — user A must never access user B's data |
+| **Auth** | None (trusted local context) | Google OAuth + session cookies |
+
+**Any code in the web layer that touches credentials, data access, or configuration
+MUST be user-scoped.** The web app is designed from the ground up for multi-user
+isolation. The CLI is a single-operator tool where shared environment config is
+appropriate. Web flows NEVER fall back to shared `.env` credentials.
 
 ## Conventions
 
@@ -181,7 +195,7 @@ All user-facing documentation follows the Diátaxis framework as a writing lens:
 | **How-To** | Task-oriented, problem-solving | (added as project grows) |
 | **Reference** | Information-oriented, dry facts | "Glossary" |
 
-### Audience Split
+### Audience Split (STRICT — never cross-contaminate)
 
 | Location | Audience | Depth | Purpose |
 |----------|----------|-------|---------|
@@ -189,8 +203,16 @@ All user-facing documentation follows the Diátaxis framework as a writing lens:
 | `docs/user/` (MkDocs) | Web users | Comprehensive, conceptual | "Help me understand" |
 | `docs/*.md` (repo-only) | Developers/operators | Technical | Setup, architecture, internals |
 
-**Rule**: In-app and MkDocs docs complement — never duplicate. In-app says "do this";
-docs say "understand why".
+**Rules:**
+
+- In-app and MkDocs docs complement — never duplicate. In-app says "do this";
+  docs say "understand why".
+- **`docs/user/` must NEVER reference CLI, `.env`, environment variables, or
+  operator-level setup.** Web users configure everything through the UI. If a
+  feature requires CLI-only setup, it is not ready for user docs.
+- **CLI documentation belongs in `docs/*.md` (repo-only) or `CLAUDE.md`.** The CLI
+  is a single-operator developer tool. Its docs target developers, not end users.
+- The CLI may be deprecated in the future. Do not add new CLI-specific user docs.
 
 ### When Adding a Strategy
 

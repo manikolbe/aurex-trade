@@ -507,3 +507,50 @@ class AllDefaultsResponse(BaseModel):
     preferred_strategy: str | None
     strategy_params: dict[str, dict[str, int | float]]
     risk_settings: dict[str, int | float | bool | str] | None
+
+
+# --- Broker Credentials ---
+
+
+class BrokerCredentialRequest(BaseModel):
+    """Request to save broker credentials (full replacement)."""
+
+    broker: str = Field(pattern=r"^[a-z_]{1,20}$")
+    account_id: str = Field(min_length=1, max_length=100)
+    access_token: str = Field(min_length=1, max_length=200)
+    server: str = Field(pattern=r"^(practice|live)$")
+
+
+class BrokerStatusResponse(BaseModel):
+    """Broker credential status (never exposes token)."""
+
+    broker: str
+    has_credentials: bool
+    account_id_masked: str
+    server: str
+
+
+class BrokerTestRequest(BaseModel):
+    """Request to test broker connection."""
+
+    broker: str = Field(pattern=r"^[a-z_]{1,20}$")
+    use_stored: bool = False
+    account_id: str = ""
+    access_token: str = ""
+    server: str = "practice"
+
+    @field_validator("server")
+    @classmethod
+    def validate_server(cls, v: str) -> str:
+        """Validate server is practice or live."""
+        if v not in ("practice", "live"):
+            msg = "server must be 'practice' or 'live'"
+            raise ValueError(msg)
+        return v
+
+
+class BrokerTestResponse(BaseModel):
+    """Connection test result."""
+
+    success: bool
+    message: str

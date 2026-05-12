@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from fastapi import Request
 
 if TYPE_CHECKING:
+    from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
     from aurex_trade.adapters.sqlite.market_data_store import (
         SQLiteMarketDataStore,
         UserDataPreferencesStore,
@@ -36,4 +37,10 @@ def get_preferences_store(request: Request) -> UserDataPreferencesStore:
 def get_user_defaults_store(request: Request) -> UserDefaultsStore:
     """Retrieve the UserDefaultsStore singleton from app state."""
     store: UserDefaultsStore = request.app.state.user_defaults_store
+    return store
+
+
+def get_credential_store(request: Request) -> FernetCredentialStore:
+    """Retrieve the FernetCredentialStore singleton from app state."""
+    store: FernetCredentialStore = request.app.state.credential_store
     return store

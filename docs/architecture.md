@@ -25,6 +25,16 @@ nothing about OANDA, SQLite, or any other external system.
     │ PaperBroker     │  │ DataAdapter  │   │ Repository │
     └─────────────────┘  └──────────────┘   └────────────┘
 
+        ┌─────────────────┐
+        │CredentialStore  │
+        │    Port         │
+        └────┬────────────┘
+             │
+        ┌────┴─────────────┐
+        │ FernetCredential │
+        │ Store (SQLite)   │
+        └──────────────────┘
+
               Domain Core (center — no external deps):
               ├── models.py (BarData, Signal, Order, Trade, Position)
               ├── strategy/ (Strategy Protocol, indicators, SMA Crossover, RSI Mean-Reversion)

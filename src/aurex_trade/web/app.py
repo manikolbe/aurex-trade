@@ -1,7 +1,13 @@
-"""FastAPI application factory — composition root for the web layer."""
+"""FastAPI application factory — composition root for the web layer.
+
+The web layer is designed for multi-user isolation. Each authenticated user
+has their own credentials, preferences, and data. Shared/operator-level
+configuration (from .env) is never used for per-user operations.
+"""
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from aurex_trade.adapters.google.oauth import GoogleOAuthAdapter
+from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
 from aurex_trade.adapters.sqlite.market_data_store import (
     SQLiteMarketDataStore,
     UserDataPreferencesStore,
@@ -93,6 +100,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     if preferences_store:
         preferences_store.close()
+    credential_store: FernetCredentialStore | None = getattr(
+        app.state, "credential_store", None
+    )
+    if credential_store:
+        credential_store.close()
     if session_store:
         session_store.close()
     registry.shutdown()
@@ -131,6 +143,21 @@ def create_app() -> FastAPI:
     user_defaults_store = UserDefaultsStore(db_path=_DB_PATH)
     app.state.user_defaults_store = user_defaults_store
 
+    # Encrypted credential store (per-user broker credentials)
+    # Read from environment; dotenv loading ensures .env values are available.
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    encryption_key = os.environ.get("AUREX_CREDENTIAL_ENCRYPTION_KEY", "")
+    if not encryption_key:
+        raise SystemExit(
+            "AUREX_CREDENTIAL_ENCRYPTION_KEY must be set.\n"
+            "Generate: python -c "
+            '"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+        )
+    credential_store = FernetCredentialStore(db_path=_DB_PATH, encryption_key=encryption_key)
+    app.state.credential_store = credential_store
+
     # Authentication
     auth_config = AuthConfig()
     session_store = SQLiteSessionStore(db_path=_DB_PATH)
@@ -152,10 +179,11 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
 
     # Import and include additional routers (lazy to avoid circular imports)
-    from aurex_trade.web.routers import backtest, bot, htmx, settings, user_defaults
+    from aurex_trade.web.routers import backtest, bot, broker, htmx, settings, user_defaults
 
     app.include_router(backtest.router)
     app.include_router(bot.router)
+    app.include_router(broker.router)
     app.include_router(settings.router)
     app.include_router(htmx.router)
     app.include_router(user_defaults.router)

@@ -30,6 +30,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
 **Commission**
 :   A fee charged by the broker for executing a trade. Measured in dollars per trade.
 
+**Connection Test**
+:   A verification step that confirms your broker credentials are valid by contacting
+    the broker's API. Use this after entering credentials to make sure they work
+    before saving.
+
 ## D
 
 **Drawdown**
@@ -38,6 +43,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
     (or about 13.6%).
 
 ## E
+
+**Encryption Key**
+:   A secret value used to protect your broker credentials at rest. Generated once
+    when you set up the application and stored in your server's environment. Without
+    this key, stored credentials cannot be decrypted.
 
 **Equity Curve**
 :   A chart showing how your account balance changes over time during a test.
