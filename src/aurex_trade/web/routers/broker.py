@@ -56,6 +56,8 @@ def _render_broker_form(
     has_credentials: bool,
     account_id_masked: str,
     server: str,
+    *,
+    just_saved: bool = False,
 ) -> HTMLResponse:
     """Render the broker form partial."""
     templates = _get_templates(request)
@@ -66,6 +68,7 @@ def _render_broker_form(
             "has_credentials": has_credentials,
             "account_id_masked": account_id_masked,
             "server": server,
+            "just_saved": just_saved,
         },
     )
 
@@ -151,7 +154,8 @@ async def save_credentials(
 
     if _is_htmx(request):
         return _render_broker_form(
-            request, info.has_credentials, info.account_id_masked, info.server
+            request, info.has_credentials, info.account_id_masked, info.server,
+            just_saved=True,
         )
 
     return BrokerStatusResponse(

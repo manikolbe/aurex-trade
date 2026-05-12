@@ -1,6 +1,16 @@
 <!-- Broker credential management form -->
 <div class="space-y-4">
 
+  {% if just_saved %}
+  <!-- Success alert after saving -->
+  <div class="alert alert-success shadow-lg">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span class="font-medium">Credentials saved successfully.</span>
+  </div>
+  {% endif %}
+
   <!-- Status badge -->
   <div class="card bg-base-100 shadow-md">
     <div class="card-body py-3">
@@ -34,6 +44,21 @@
 
   <!-- Connection test result (swapped in by test button) -->
   <div id="broker-test-result"></div>
+
+  {% if has_credentials %}
+  <!-- Test saved credentials -->
+  <div class="flex">
+    <button type="button" class="btn btn-outline btn-sm"
+            hx-post="/api/broker/test"
+            hx-target="#broker-test-result"
+            hx-swap="innerHTML"
+            hx-vals='{"broker": "oanda", "use_stored": true}'
+            hx-indicator="#test-spinner">
+      <span id="test-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
+      Test Connection
+    </button>
+  </div>
+  {% endif %}
 
   <!-- Credential form -->
   <div class="card bg-base-100 shadow-md">
@@ -77,8 +102,8 @@
           <label class="label"><span class="label-text-alt">Live trading is not yet available.</span></label>
         </div>
 
-        <!-- Actions -->
-        <div class="flex gap-2 pt-2">
+        <!-- Save button -->
+        <div class="pt-2">
           <button type="button" class="btn btn-primary"
                   hx-put="/api/broker/credentials"
                   hx-target="#broker-form-container"
@@ -89,29 +114,6 @@
             <span id="save-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
             Save Credentials
           </button>
-
-          <button type="button" class="btn btn-outline"
-                  hx-post="/api/broker/test"
-                  hx-target="#broker-test-result"
-                  hx-swap="innerHTML"
-                  hx-include="#broker-cred-form"
-                  hx-vals='{"broker": "oanda", "use_stored": false}'
-                  hx-indicator="#test-spinner">
-            <span id="test-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
-            Test Connection
-          </button>
-
-          {% if has_credentials %}
-          <button type="button" class="btn btn-outline btn-secondary"
-                  hx-post="/api/broker/test"
-                  hx-target="#broker-test-result"
-                  hx-swap="innerHTML"
-                  hx-vals='{"broker": "oanda", "use_stored": true}'
-                  hx-indicator="#test-saved-spinner">
-            <span id="test-saved-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
-            Test Saved
-          </button>
-          {% endif %}
         </div>
       </form>
     </div>
