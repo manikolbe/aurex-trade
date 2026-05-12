@@ -23,21 +23,11 @@ from aurex_trade.web.schemas import (
     BrokerTestResponse,
 )
 
+from ._common import ALLOWED_SERVERS, validate_broker
+
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/broker", tags=["broker"])
-
-_SUPPORTED_BROKERS = {"oanda"}
-_ALLOWED_SERVERS = {"practice"}  # "live" disabled until live trading is ready
-
-
-def _validate_broker(broker: str) -> None:
-    """Reject unsupported broker names."""
-    if broker not in _SUPPORTED_BROKERS:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unsupported broker: {broker!r}. Supported: {', '.join(_SUPPORTED_BROKERS)}",
-        )
 
 
 @router.get("/status")
@@ -67,8 +57,8 @@ def save_credentials(
     store: FernetCredentialStore = Depends(get_credential_store),
 ) -> BrokerStatusResponse:
     """Save broker credentials (full replacement). Token never returned."""
-    _validate_broker(req.broker)
-    if req.server not in _ALLOWED_SERVERS:
+    validate_broker(req.broker)
+    if req.server not in ALLOWED_SERVERS:
         raise HTTPException(status_code=422, detail="Live trading is not yet available.")
 
     store.store(
@@ -120,7 +110,7 @@ def test_connection(
     - use_stored=true: test credentials already saved in the store
     - use_stored=false: test credentials provided in this request (before saving)
     """
-    _validate_broker(req.broker)
+    validate_broker(req.broker)
 
     if req.use_stored:
         try:

@@ -36,7 +36,7 @@ from aurex_trade.web.tasks import TaskRegistry, TaskStatus
 
 logger = structlog.get_logger()
 
-router = APIRouter(prefix="/htmx", tags=["htmx"])
+router = APIRouter(prefix="/htmx", tags=["backtest-htmx"])
 
 
 def _get_templates(request: Request) -> Jinja2Templates:

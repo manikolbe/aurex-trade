@@ -17,7 +17,7 @@ from aurex_trade.web.auth.dependencies import get_current_user
 from aurex_trade.web.dependencies import get_credential_store
 from aurex_trade.web.schemas import BrokerCredentialRequest, BrokerTestRequest
 
-from .api import _ALLOWED_SERVERS, _validate_broker
+from ._common import ALLOWED_SERVERS, validate_broker
 
 logger = structlog.get_logger()
 
@@ -97,8 +97,8 @@ async def save_credentials(
 ) -> HTMLResponse:
     """Save broker credentials and return updated form partial."""
     req = await _parse_credential_form(request)
-    _validate_broker(req.broker)
-    if req.server not in _ALLOWED_SERVERS:
+    validate_broker(req.broker)
+    if req.server not in ALLOWED_SERVERS:
         raise HTTPException(status_code=422, detail="Live trading is not yet available.")
 
     store.store(
@@ -140,7 +140,7 @@ async def test_connection(
 ) -> HTMLResponse:
     """Test broker connection and return status HTML partial."""
     req = await _parse_test_form(request)
-    _validate_broker(req.broker)
+    validate_broker(req.broker)
 
     if req.use_stored:
         try:
