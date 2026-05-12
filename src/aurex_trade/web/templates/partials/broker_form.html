@@ -30,34 +30,34 @@
           {% endif %}
         </div>
         {% if has_credentials %}
-        <button class="btn btn-ghost btn-xs text-error"
-                hx-delete="/api/broker/credentials"
-                hx-target="#broker-form-container"
-                hx-swap="innerHTML"
-                hx-confirm="Delete stored credentials? This cannot be undone.">
-          Delete
-        </button>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-outline btn-xs"
+                  hx-post="/api/broker/test"
+                  hx-target="#broker-test-result"
+                  hx-swap="innerHTML"
+                  hx-vals='{"broker": "oanda", "use_stored": true}'
+                  hx-indicator="#test-spinner">
+            <span id="test-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
+            Test Connection
+          </button>
+          <button class="btn btn-ghost btn-xs text-error"
+                  hx-delete="/api/broker/credentials"
+                  hx-target="#broker-form-container"
+                  hx-swap="innerHTML"
+                  hx-confirm="Delete stored credentials? This cannot be undone.">
+            Delete
+          </button>
+        </div>
         {% endif %}
       </div>
+      {% if has_credentials %}
+      <div id="broker-test-result"></div>
+      {% endif %}
     </div>
   </div>
 
-  <!-- Connection test result (swapped in by test button) -->
+  {% if not has_credentials %}
   <div id="broker-test-result"></div>
-
-  {% if has_credentials %}
-  <!-- Test saved credentials -->
-  <div class="flex">
-    <button type="button" class="btn btn-outline btn-sm"
-            hx-post="/api/broker/test"
-            hx-target="#broker-test-result"
-            hx-swap="innerHTML"
-            hx-vals='{"broker": "oanda", "use_stored": true}'
-            hx-indicator="#test-spinner">
-      <span id="test-spinner" class="loading loading-spinner loading-xs htmx-indicator"></span>
-      Test Connection
-    </button>
-  </div>
   {% endif %}
 
   <!-- Credential form -->
