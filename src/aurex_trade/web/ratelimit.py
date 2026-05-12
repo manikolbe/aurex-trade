@@ -123,7 +123,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
         status_code=429,
         content={
             "error": "Rate limit exceeded",
-            "detail": f"Try again in {retry_seconds} seconds",
+            "detail": "Please try again shortly",
             "status_code": 429,
         },
         headers=headers,
