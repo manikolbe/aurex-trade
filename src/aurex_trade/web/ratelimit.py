@@ -94,8 +94,12 @@ def _parse_retry_after(detail: str) -> str:
     return "60"
 
 
-async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
-    """Handle 429 responses — JSON for API, HTML fragment for HTMX routes."""
+def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
+    """Handle 429 responses — JSON for API, HTML fragment for HTMX routes.
+
+    IMPORTANT: This must be a sync function. SlowAPIMiddleware uses a sync code
+    path internally and falls back to its built-in handler for async handlers.
+    """
     retry_seconds = _parse_retry_after(exc.detail) if exc.detail else "60"
 
     headers = {"Retry-After": retry_seconds}
@@ -110,7 +114,7 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
             ' 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34'
             ' 16c-.77 1.333.192 3 1.732 3z" />'
             "</svg>"
-            f"<span>Rate limit exceeded. Try again in {retry_seconds} seconds.</span>"
+            "<span>Too many requests. Please try again shortly.</span>"
             "</div>"
         )
         return HTMLResponse(status_code=429, content=html, headers=headers)
