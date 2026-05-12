@@ -7,22 +7,45 @@ This guide walks you through running your first backtest. It takes about 5 minut
 Navigate to [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 You'll see the home page with a health status indicator and links to the main features.
 
-## Step 2: Configure Your Broker
+## Step 2: Connect Your Broker
 
-Before running backtests that need fresh market data, connect your OANDA account:
+AurexTrade needs a broker connection to fetch market data. You'll connect a free
+OANDA demo account — no real money involved. This is a one-time setup that takes
+a couple of minutes.
+
+### 2a. Create a free OANDA demo account
+
+If you don't already have one, [open a free demo account](https://help.oanda.com/us/en/faqs/open-demo-account.htm).
+It uses virtual money so there's zero financial risk.
+
+!!! warning "Choose the **v20** account type"
+    When creating your demo account, OANDA offers several account types.
+    Select **v20**.
+
+### 2b. Get your API Token
+
+Go to [OANDA Hub → Personal Access Token](https://hub.oanda.com/tpa/personal_token)
+and generate a token. This is what authorises AurexTrade to fetch data on your behalf.
+Copy it somewhere safe — you'll paste it in the next step.
+
+### 2c. Get your Account ID
+
+Go to [OANDA Hub → Accounts](https://hub.oanda.com/accounts) and copy your
+**Primary** account number. It looks like `101-004-XXXXXXXX-001`.
+
+### 2d. Save credentials in AurexTrade
 
 1. Click **Settings** in the top menu
-2. On the **Broker** tab, enter your OANDA practice account credentials:
-    - **Account ID** — found in OANDA's "Manage Funds" page
-    - **API Token** — generate in OANDA Hub → Manage API Access
-    - **Server** — select "Practice" for paper trading
-3. Click **Test Connection** to verify your credentials work
-4. Click **Save Credentials** to store them securely
+2. On the **Broker** tab, paste your credentials:
+    - **Account ID** — the number you copied in step 2c
+    - **API Token** — the token you generated in step 2b
+    - **Server** — select "Practice"
+3. Click **Save Credentials**
+4. (Optional) Click **Test Connection** to verify everything works
 
-!!! tip "Why do I need this?"
-    This connects AurexTrade to your OANDA practice account so it can fetch
-    real historical market data for backtesting. Your credentials are encrypted
-    before storage — only you can use them.
+!!! tip "One-time setup"
+    You only need to do this once. Your credentials are encrypted before storage
+    and never displayed back — only you can use them.
 
 ## Step 3: Go to Backtest
 
@@ -38,6 +61,11 @@ to do one thing:
 
 That's it. The system will test the SMA Crossover strategy against historical gold
 price data and show you the results.
+
+!!! note "First run takes a little longer"
+    The first time you run a backtest, AurexTrade downloads historical data from
+    OANDA. You'll see a "Downloading..." status — this typically takes 10–30 seconds
+    depending on the date range. Subsequent runs reuse the cached data and are much faster.
 
 !!! tip "What just happened?"
     The system replayed past gold prices through a trading strategy to see what

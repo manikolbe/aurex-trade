@@ -6,12 +6,20 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## A
 
+**API Token**
+:   A secret key that authorises AurexTrade to communicate with your broker account
+    on your behalf. Generated in the OANDA Hub and entered once in Settings → Broker.
+
 **ATR (Average True Range)**
 :   A measure of how much the price typically moves in a given period. Used to set
     stop-losses at a sensible distance from the current price. Higher ATR = more
     volatile market.
 
 ## B
+
+**Broker**
+:   A service that connects you to financial markets and executes trades. AurexTrade
+    uses OANDA as its broker for market data and trade execution.
 
 **Backtest**
 :   Running a strategy against historical (past) market data to see how it would
@@ -88,6 +96,10 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## O
 
+**OANDA**
+:   The broker that AurexTrade connects to for market data and trade execution.
+    Offers free demo accounts with virtual money for risk-free testing.
+
 **Overbought**
 :   When the RSI is above a high threshold (default 70), suggesting the price has
     risen too fast and may pull back.
@@ -102,6 +114,10 @@ Quick definitions of terms you'll encounter in AurexTrade.
     subject.
 
 ## P
+
+**Practice Account**
+:   A free broker account that uses virtual money. Lets you test strategies without
+    financial risk. Also called a "demo account".
 
 **Parameter**
 :   A setting that controls how a strategy behaves. For example, the "short window"
