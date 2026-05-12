@@ -61,9 +61,16 @@
   {% endif %}
 
   <!-- Credential form -->
+  {% if has_credentials %}
+  <div class="collapse collapse-arrow bg-base-100 shadow-md">
+    <input type="checkbox" />
+    <div class="collapse-title font-medium">Update Broker Credentials</div>
+    <div class="collapse-content">
+  {% else %}
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
-      <h2 class="card-title text-lg">{% if has_credentials %}Update{% else %}Add{% endif %} Broker Credentials</h2>
+      <h2 class="card-title text-lg">Add Broker Credentials</h2>
+  {% endif %}
       <p class="text-sm text-base-content/60 mb-2">All fields are required. Credentials are encrypted before storage.</p>
 
       <form id="broker-cred-form" class="space-y-3">
@@ -116,6 +123,11 @@
           </button>
         </div>
       </form>
+  {% if has_credentials %}
     </div>
   </div>
+  {% else %}
+    </div>
+  </div>
+  {% endif %}
 </div>
