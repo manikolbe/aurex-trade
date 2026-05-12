@@ -60,8 +60,45 @@ src/aurex_trade/
 ├── engine/
 │   └── trading_engine.py  # Main trading loop
 ├── web/                # FastAPI app (API + HTMX UI, GET /api/strategies for metadata)
+│   └── routers/        # Feature-based modules (see Router Organization below)
 └── logging.py          # structlog configuration
 ```
+
+### Web Router Organization
+
+Routers follow a feature-based module pattern with transport separation:
+
+```
+web/routers/
+├── __init__.py          # Package docstring only
+├── health.py            # Simple single-endpoint routers stay flat
+├── broker/
+│   ├── __init__.py      # Exports combined `router` (includes api + htmx)
+│   ├── api.py           # JSON endpoints: prefix /api/broker
+│   └── htmx.py          # HTML fragment endpoints: prefix /htmx/broker
+├── backtest/
+│   ├── __init__.py      # Exports combined `router`
+│   ├── api.py           # JSON: /api/backtest, /api/sweep, /api/walk-forward, etc.
+│   └── htmx.py          # HTML: /htmx/backtest/submit, /htmx/sweep/submit, etc.
+├── bot/
+│   ├── __init__.py
+│   └── api.py           # JSON: /api/bot/...
+├── settings/
+│   ├── __init__.py
+│   └── api.py           # JSON: /api/settings
+└── user_defaults/
+    ├── __init__.py
+    └── api.py           # JSON: /api/user-defaults/...
+```
+
+**Rules:**
+- Each feature folder exports one `router` from `__init__.py`
+- `api.py` = JSON in, JSON out. Pydantic request/response models. No template rendering.
+- `htmx.py` = form data in, HTML fragments out. Template rendering. No JSON responses.
+- No content-type sniffing — transport is determined by the endpoint, not the request headers
+- `app.py` includes one router per feature (the combined one from `__init__.py`)
+- Simple features with only one transport may stay as flat files (e.g., `health.py`)
+- Each feature folder is self-contained — no cross-feature imports between routers
 
 ### User Model (CRITICAL)
 

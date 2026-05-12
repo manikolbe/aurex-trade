@@ -179,13 +179,12 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
 
     # Import and include additional routers (lazy to avoid circular imports)
-    from aurex_trade.web.routers import backtest, bot, broker, htmx, settings, user_defaults
+    from aurex_trade.web.routers import backtest, bot, broker, settings, user_defaults
 
     app.include_router(backtest.router)
     app.include_router(bot.router)
     app.include_router(broker.router)
     app.include_router(settings.router)
-    app.include_router(htmx.router)
     app.include_router(user_defaults.router)
 
     # Page routes (serve HTML templates)

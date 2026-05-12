@@ -32,7 +32,7 @@
         {% if has_credentials %}
         <div class="flex gap-2">
           <button type="button" class="btn btn-outline btn-xs"
-                  hx-post="/api/broker/test"
+                  hx-post="/htmx/broker/test"
                   hx-target="#broker-test-result"
                   hx-swap="innerHTML"
                   hx-vals='{"broker": "oanda", "use_stored": true}'
@@ -41,7 +41,7 @@
             Test Connection
           </button>
           <button class="btn btn-ghost btn-xs text-error"
-                  hx-delete="/api/broker/credentials"
+                  hx-delete="/htmx/broker/credentials"
                   hx-target="#broker-form-container"
                   hx-swap="innerHTML"
                   hx-confirm="Delete stored credentials? This cannot be undone.">
@@ -112,7 +112,7 @@
         <!-- Save button -->
         <div class="pt-2">
           <button type="button" class="btn btn-primary"
-                  hx-put="/api/broker/credentials"
+                  hx-put="/htmx/broker/credentials"
                   hx-target="#broker-form-container"
                   hx-swap="innerHTML"
                   hx-include="#broker-cred-form"

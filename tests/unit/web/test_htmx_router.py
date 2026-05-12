@@ -16,7 +16,7 @@ class TestHtmxBacktest:
 
     def test_submit_returns_loading_html(self, client: TestClient) -> None:
         """POST /htmx/backtest/submit returns HTML with polling trigger."""
-        with patch("aurex_trade.web.routers.htmx.create_backtest_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.htmx.create_backtest_runner") as mock:
             mock.return_value = lambda: None
             response = client.post(
                 "/htmx/backtest/submit",
@@ -42,7 +42,7 @@ class TestHtmxBacktest:
 
     def test_poll_running_returns_loading(self, client: TestClient) -> None:
         """Poll returns loading HTML when task is still running."""
-        with patch("aurex_trade.web.routers.htmx.create_backtest_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.htmx.create_backtest_runner") as mock:
             mock.return_value = lambda: time.sleep(10)
             submit_resp = client.post(
                 "/htmx/backtest/submit",
@@ -89,7 +89,7 @@ class TestHtmxSweep:
 
     def test_submit_returns_loading_html(self, client: TestClient) -> None:
         """POST /htmx/sweep/submit returns HTML with polling trigger."""
-        with patch("aurex_trade.web.routers.htmx.create_sweep_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.htmx.create_sweep_runner") as mock:
             mock.return_value = lambda: None
             response = client.post(
                 "/htmx/sweep/submit",
@@ -115,7 +115,7 @@ class TestHtmxWalkForward:
 
     def test_submit_returns_loading_html(self, client: TestClient) -> None:
         """POST /htmx/walk-forward/submit returns HTML with polling trigger."""
-        with patch("aurex_trade.web.routers.htmx.create_walk_forward_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.htmx.create_walk_forward_runner") as mock:
             mock.return_value = lambda: None
             response = client.post(
                 "/htmx/walk-forward/submit",

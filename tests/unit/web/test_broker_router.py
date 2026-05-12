@@ -159,7 +159,7 @@ class TestDeleteCredentials:
 class TestConnectionTest:
     def test_success_with_mock(self, client: TestClient) -> None:
         with patch(
-            "aurex_trade.web.routers.broker.OANDAConnection"
+            "aurex_trade.web.routers.broker.api.OANDAConnection"
         ) as mock_conn_cls:
             mock_conn = mock_conn_cls.return_value
             mock_conn.connect.return_value = None
@@ -182,7 +182,7 @@ class TestConnectionTest:
 
     def test_failure_returns_error_message(self, client: TestClient) -> None:
         with patch(
-            "aurex_trade.web.routers.broker.OANDAConnection"
+            "aurex_trade.web.routers.broker.api.OANDAConnection"
         ) as mock_conn_cls:
             from aurex_trade.adapters.oanda.connection import OANDAConnectionError
 
@@ -217,7 +217,7 @@ class TestConnectionTest:
         )
 
         with patch(
-            "aurex_trade.web.routers.broker.OANDAConnection"
+            "aurex_trade.web.routers.broker.api.OANDAConnection"
         ) as mock_conn_cls:
             mock_conn = mock_conn_cls.return_value
             mock_conn.connect.return_value = None

@@ -8,7 +8,7 @@
   <input type="radio" name="settings-tabs" role="tab" class="tab" aria-label="Broker" checked />
   <div role="tabpanel" class="tab-content pt-4">
     <div id="broker-form-container"
-         hx-get="/api/broker/status"
+         hx-get="/htmx/broker/status"
          hx-trigger="load"
          hx-target="#broker-form-container"
          hx-swap="innerHTML">

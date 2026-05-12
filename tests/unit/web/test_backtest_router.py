@@ -13,7 +13,7 @@ class TestBacktestSubmit:
 
     def test_returns_202(self, client: TestClient) -> None:
         """Submit returns 202 Accepted."""
-        with patch("aurex_trade.web.routers.backtest.create_backtest_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.api.create_backtest_runner") as mock:
             mock.return_value = lambda: None
             resp = client.post(
                 "/api/backtest",
@@ -27,7 +27,7 @@ class TestBacktestSubmit:
 
     def test_response_shape(self, client: TestClient) -> None:
         """Submit returns task_id, task_type, and status."""
-        with patch("aurex_trade.web.routers.backtest.create_backtest_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.api.create_backtest_runner") as mock:
             mock.return_value = lambda: None
             data = client.post(
                 "/api/backtest",
@@ -43,7 +43,7 @@ class TestBacktestSubmit:
 
     def test_rsi_strategy_accepted(self, client: TestClient) -> None:
         """RSI strategy with params returns 202."""
-        with patch("aurex_trade.web.routers.backtest.create_backtest_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.api.create_backtest_runner") as mock:
             mock.return_value = lambda: None
             resp = client.post(
                 "/api/backtest",
@@ -83,7 +83,7 @@ class TestBacktestPoll:
         """Polling a running task returns TaskStatusResponse."""
         import time
 
-        with patch("aurex_trade.web.routers.backtest.create_backtest_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.api.create_backtest_runner") as mock:
             mock.return_value = lambda: time.sleep(10)
             submit = client.post(
                 "/api/backtest",
@@ -126,7 +126,7 @@ class TestSweepSubmit:
 
     def test_returns_202(self, client: TestClient) -> None:
         """Submit returns 202 Accepted."""
-        with patch("aurex_trade.web.routers.backtest.create_sweep_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.api.create_sweep_runner") as mock:
             mock.return_value = lambda: None
             resp = client.post(
                 "/api/sweep",
@@ -167,7 +167,7 @@ class TestWalkForwardSubmit:
 
     def test_returns_202(self, client: TestClient) -> None:
         """Submit returns 202 Accepted."""
-        with patch("aurex_trade.web.routers.backtest.create_walk_forward_runner") as mock:
+        with patch("aurex_trade.web.routers.backtest.api.create_walk_forward_runner") as mock:
             mock.return_value = lambda: None
             resp = client.post(
                 "/api/walk-forward",
