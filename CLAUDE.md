@@ -74,6 +74,7 @@ web/routers/
 ├── health.py            # Simple single-endpoint routers stay flat
 ├── broker/
 │   ├── __init__.py      # Exports combined `router` (includes api + htmx)
+│   ├── _common.py       # Shared constants and validation (ALLOWED_SERVERS, validate_broker)
 │   ├── api.py           # JSON endpoints: prefix /api/broker
 │   └── htmx.py          # HTML fragment endpoints: prefix /htmx/broker
 ├── backtest/

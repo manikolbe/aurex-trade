@@ -119,3 +119,6 @@ periods in trending markets).
    - Add to `STRATEGY_METADATA`
 5. Add tests in `tests/unit/domain/test_your_strategy.py`
 6. Verify: `just backtest --strategy your_strategy --param key=value`
+7. **Web UI**: No template changes needed — the UI renders dynamically from
+   `StrategyMetadata`. New strategies automatically appear in dropdowns with
+   correct parameter fields, tooltips, and valid ranges.

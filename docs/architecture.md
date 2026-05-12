@@ -305,6 +305,41 @@ Environment variable mapping uses prefixes:
 - `RISK_MAX_DAILY_LOSS` → `config.risk.max_daily_loss`
 - `STRATEGY_SMA_SHORT_WINDOW` → `config.strategy.sma_short_window`
 
+## Web Layer (`web/`)
+
+The web layer is a FastAPI application serving both a JSON API and an HTMX-driven UI.
+It acts as a second composition root (alongside the CLI `app.py`), wiring adapters
+for the multi-user web context.
+
+### Transport Separation
+
+Routers are organized into feature-based modules with explicit transport separation:
+
+- **`api.py`** — JSON in, JSON out. Pydantic request/response models. No templates.
+- **`htmx.py`** — Form data in, HTML fragments out. Jinja2 template rendering.
+- **`_common.py`** — Shared constants/validation within a feature (if needed).
+
+Each feature folder exports a single combined `router` from its `__init__.py`.
+The app includes one router per feature — no cross-feature imports between routers.
+
+### Request Flow
+
+```
+Browser → FastAPI → AuthMiddleware → Router (api.py or htmx.py)
+                                        │
+                          ┌─────────────┼─────────────┐
+                          ▼             ▼             ▼
+                   CredentialStore  TaskRegistry  UserDefaults
+                   (per-user)      (background)  (per-user)
+```
+
+### Multi-User Isolation
+
+The web layer is designed for multi-user access (Google OAuth + session cookies).
+Every data access is scoped to the authenticated user — user A cannot see user B's
+credentials, preferences, or task results. This is enforced by the `get_current_user`
+dependency injected into all authenticated endpoints.
+
 ## Composition Root (`app.py`)
 
 The composition root is the ONLY place that knows about concrete adapter classes.

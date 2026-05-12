@@ -28,7 +28,7 @@ Before running backtests that need fresh market data, connect your OANDA account
 
 Click **Strategy Testing** in the top menu, then select **Backtest**.
 
-## Step 3: Run Your First Test
+## Step 4: Run Your First Test
 
 The backtest page has a form with several fields. For your first run, you only need
 to do one thing:
@@ -43,7 +43,7 @@ price data and show you the results.
     The system replayed past gold prices through a trading strategy to see what
     would have happened if you had followed its signals. No real money was involved.
 
-## Step 4: Read Your Results
+## Step 5: Read Your Results
 
 After a few seconds, you'll see:
 
