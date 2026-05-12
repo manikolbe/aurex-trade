@@ -47,14 +47,26 @@ class TestSaveCredentials:
                 "broker": "oanda",
                 "account_id": "001-004-9999999-002",
                 "access_token": "my-secret-token",
-                "server": "live",
+                "server": "practice",
             },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["has_credentials"] is True
         assert data["account_id_masked"] == "***-002"
-        assert data["server"] == "live"
+        assert data["server"] == "practice"
+
+    def test_save_rejects_live_server(self, client: TestClient) -> None:
+        resp = client.put(
+            "/api/broker/credentials",
+            json={
+                "broker": "oanda",
+                "account_id": "001-004-9999999-002",
+                "access_token": "my-secret-token",
+                "server": "live",
+            },
+        )
+        assert resp.status_code == 422
 
     def test_token_never_in_response(self, client: TestClient) -> None:
         resp = client.put(

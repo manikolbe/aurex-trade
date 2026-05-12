@@ -30,6 +30,7 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api/broker", tags=["broker"])
 
 _SUPPORTED_BROKERS = {"oanda"}
+_ALLOWED_SERVERS = {"practice"}  # "live" disabled until live trading is ready
 
 
 def _get_templates(request: Request) -> Jinja2Templates:
@@ -101,6 +102,8 @@ def save_credentials(
 ) -> HTMLResponse | BrokerStatusResponse:
     """Save broker credentials (full replacement). Token never returned."""
     _validate_broker(req.broker)
+    if req.server not in _ALLOWED_SERVERS:
+        raise HTTPException(status_code=422, detail="Live trading is not yet available.")
 
     store.store(
         user_id=user.id,
