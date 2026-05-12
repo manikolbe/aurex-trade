@@ -401,6 +401,12 @@ All settings are configurable via environment variables (prefix: `RATELIMIT_`):
 | `RATELIMIT_READ` | `120/minute` | Read endpoints (polling, status checks) |
 | `RATELIMIT_AUTH` | `10/minute` | OAuth endpoints (google redirect, callback) |
 | `RATELIMIT_AUTH_LOGOUT` | `5/minute` | Logout |
+| `RATELIMIT_TRUSTED_PROXIES` | `""` (empty) | Comma-separated IPs of reverse proxies allowed to set X-Forwarded-For |
+
+**Security note:** `X-Forwarded-For` is only trusted when the direct connection
+comes from an IP listed in `RATELIMIT_TRUSTED_PROXIES`. Without this, attackers
+can spoof arbitrary IPs to bypass rate limits. In production behind nginx/Caddy,
+set this to the proxy's internal IP (e.g. `"172.17.0.1"`).
 
 ### Endpoint Limits
 
@@ -434,11 +440,15 @@ read limit and is never disrupted.
 ### Scaling Constraint
 
 > **Hard blocker for horizontal scaling:** Rate limit state is stored in-memory
-> (single-process, single-node only). Each node tracks limits independently —
-> without shared state, adding N nodes allows N× the intended request rate.
+> (single-process only). Without shared storage, scaling breaks rate limiting:
 >
-> **To scale to multiple nodes:**
-> 1. Deploy Redis (or another supported backend)
+> - **Single-node, single-worker:** Works as designed
+> - **Multi-worker (`uvicorn --workers > 1`):** Each worker has independent
+>   counters — allows N× the intended rate
+> - **Multi-node (horizontal scaling):** Same problem across machines
+>
+> **To enable multi-worker or multi-node scaling:**
+> 1. Deploy Redis (or Memcached/MongoDB)
 > 2. Set `RATELIMIT_STORAGE_URI=redis://host:6379`
 > 3. Add `redis` to Python dependencies
 >

@@ -46,6 +46,21 @@
     }
   }
 
+  /**
+   * Determine the HTTP method and URL from an HTMX element's attributes.
+   * Returns {method, url} or null if not determinable.
+   */
+  function getRequestInfo(elt) {
+    var methods = ["get", "post", "put", "patch", "delete"];
+    for (var i = 0; i < methods.length; i++) {
+      var url = elt.getAttribute("hx-" + methods[i]);
+      if (url) {
+        return { method: methods[i].toUpperCase(), url: url };
+      }
+    }
+    return null;
+  }
+
   document.body.addEventListener("htmx:beforeOnLoad", function (evt) {
     var xhr = evt.detail.xhr;
     if (xhr.status !== 429) return;
@@ -77,11 +92,17 @@
 
     retryState.set(elt, state);
 
-    // Schedule retry
-    setTimeout(function () {
-      htmx.trigger(elt, "htmx:abort");
-      htmx.trigger(elt, elt.getAttribute("hx-trigger") || "click");
-    }, retryAfterMs);
+    // Schedule retry using htmx.ajax() for a clean request cycle
+    var info = getRequestInfo(elt);
+    if (info) {
+      setTimeout(function () {
+        htmx.ajax(info.method, info.url, {
+          source: elt,
+          target: elt.getAttribute("hx-target") || undefined,
+          swap: elt.getAttribute("hx-swap") || undefined
+        });
+      }, retryAfterMs);
+    }
   });
 
   // Clean up retry state on successful responses

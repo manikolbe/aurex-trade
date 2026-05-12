@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import re
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
+
+_UNIT_SECONDS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400}
+
+# Pattern matching slowapi detail: "N per M <unit>" (e.g. "5 per 1 minute")
+_RATE_DETAIL_RE = re.compile(r"(\d+)\s+per\s+(\d+)\s+(\w+)")
 
 
 class RateLimitConfig(BaseSettings):
@@ -22,20 +29,36 @@ class RateLimitConfig(BaseSettings):
     read: str = "120/minute"
     auth: str = "10/minute"
     auth_logout: str = "5/minute"
+    # Trusted proxy IPs that may set X-Forwarded-For.
+    # Comma-separated list. If empty, X-Forwarded-For is never trusted.
+    trusted_proxies: str = ""
 
 
 def get_client_ip(request: Request) -> str:
-    """Extract client IP from X-Forwarded-For header or direct connection.
+    """Extract client IP, only trusting X-Forwarded-For from known proxies.
 
-    When behind a reverse proxy (nginx, Caddy, etc.), the real client IP
-    is in X-Forwarded-For. Falls back to direct socket address.
+    Security: An attacker can spoof X-Forwarded-For to bypass rate limits.
+    We only parse it when the direct connection comes from a trusted proxy.
+    In development (TestClient), request.client.host is "testclient" which
+    won't match any trusted proxy — tests must use X-Forwarded-For headers
+    AND configure trusted_proxies, or rely on the direct client IP.
     """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "127.0.0.1"
+    direct_ip = request.client.host if request.client else "127.0.0.1"
+
+    # Only parse X-Forwarded-For if the direct connection is from a trusted proxy
+    trusted = ratelimit_config.trusted_proxies
+    if trusted:
+        trusted_set = {ip.strip() for ip in trusted.split(",") if ip.strip()}
+        if direct_ip in trusted_set:
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                # Take first non-empty IP (leftmost = original client)
+                for ip in forwarded.split(","):
+                    cleaned = ip.strip()
+                    if cleaned:
+                        return cleaned
+
+    return direct_ip
 
 
 def create_limiter(config: RateLimitConfig) -> Limiter:
@@ -54,15 +77,33 @@ ratelimit_config = RateLimitConfig()
 limiter = create_limiter(ratelimit_config)
 
 
+def reset_limiter() -> None:
+    """Reset all rate limit counters. Used in tests for isolation."""
+    storage = getattr(limiter, "_storage", None)
+    if storage and hasattr(storage, "reset"):
+        storage.reset()
+
+
+def _parse_retry_after(detail: str) -> str:
+    """Parse slowapi's detail string to compute a Retry-After value in seconds.
+
+    slowapi detail format: "N per M <unit>" (e.g. "5 per 1 minute").
+    We compute: window_seconds / max_requests as the retry interval.
+    """
+    match = _RATE_DETAIL_RE.search(detail)
+    if match:
+        max_requests = int(match.group(1))
+        duration = int(match.group(2))
+        unit = match.group(3).rstrip("s")  # "minutes" → "minute"
+        window_seconds = duration * _UNIT_SECONDS.get(unit, 60)
+        # Suggest waiting for one slot to free up
+        return str(max(1, window_seconds // max(1, max_requests)))
+    return "60"
+
+
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
     """Handle 429 responses — JSON for API, HTML fragment for HTMX routes."""
-    retry_after = exc.detail.split(" ")[-1] if exc.detail else "60"
-    # slowapi detail format: "Rate limit exceeded: N per M period"
-    # Extract a reasonable retry value
-    try:
-        retry_seconds = str(int(retry_after))
-    except (ValueError, TypeError):
-        retry_seconds = "60"
+    retry_seconds = _parse_retry_after(exc.detail) if exc.detail else "60"
 
     headers = {"Retry-After": retry_seconds}
 

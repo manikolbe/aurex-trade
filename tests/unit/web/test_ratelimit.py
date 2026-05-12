@@ -7,7 +7,23 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from aurex_trade.web.ratelimit import RateLimitConfig, get_client_ip
+from aurex_trade.web.ratelimit import (
+    RateLimitConfig,
+    _parse_retry_after,
+    get_client_ip,
+    ratelimit_config,
+    reset_limiter,
+)
+
+
+@pytest.fixture(autouse=True)
+def _configure_trusted_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Configure 'testclient' as a trusted proxy so X-Forwarded-For is honoured in tests.
+
+    Also resets rate limit counters between tests for isolation.
+    """
+    monkeypatch.setattr(ratelimit_config, "trusted_proxies", "testclient")
+    reset_limiter()
 
 
 def _unique_ip() -> str:
@@ -36,26 +52,87 @@ class TestRateLimitConfig:
         assert config.compute == "10/minute"
         assert config.enabled is False
 
+    def test_trusted_proxies_default_empty(self) -> None:
+        config = RateLimitConfig()
+        assert config.trusted_proxies == ""
+
+
+class TestParseRetryAfter:
+    """Test Retry-After header value parsing from slowapi detail strings."""
+
+    def test_parses_per_minute_format(self) -> None:
+        # "5 per 1 minute" → window=60s, slots=5, retry=12s
+        assert _parse_retry_after("5 per 1 minute") == "12"
+
+    def test_parses_per_minute_plural(self) -> None:
+        # "3 per 1 minutes" → same as minute
+        assert _parse_retry_after("3 per 1 minutes") == "20"
+
+    def test_parses_per_hour(self) -> None:
+        # "100 per 1 hour" → window=3600s, slots=100, retry=36s
+        assert _parse_retry_after("100 per 1 hour") == "36"
+
+    def test_returns_fallback_on_unparseable(self) -> None:
+        assert _parse_retry_after("unexpected format") == "60"
+
+    def test_returns_fallback_on_empty(self) -> None:
+        assert _parse_retry_after("") == "60"
+
 
 class TestGetClientIp:
-    """Test client IP extraction."""
+    """Test client IP extraction with trusted proxy enforcement."""
 
-    def test_extracts_from_x_forwarded_for(self) -> None:
+    def test_extracts_from_x_forwarded_for_when_proxy_trusted(self) -> None:
         from unittest.mock import MagicMock
+
+        # Simulate request from a trusted proxy
+        monkeypatch_config = ratelimit_config
+        monkeypatch_config.trusted_proxies = "172.16.0.1"
 
         request = MagicMock()
         request.headers = {"X-Forwarded-For": "203.0.113.50, 70.41.3.18"}
+        request.client.host = "172.16.0.1"
         assert get_client_ip(request) == "203.0.113.50"
 
-    def test_single_ip_in_forwarded_for(self) -> None:
+    def test_ignores_x_forwarded_for_from_untrusted_source(self) -> None:
         from unittest.mock import MagicMock
 
+        monkeypatch_config = ratelimit_config
+        monkeypatch_config.trusted_proxies = "172.16.0.1"
+
         request = MagicMock()
-        request.headers = {"X-Forwarded-For": "192.168.1.1"}
+        request.headers = {"X-Forwarded-For": "spoofed.ip.1.2"}
+        request.client.host = "evil.attacker.com"
+        # Should use direct IP, not spoofed header
+        assert get_client_ip(request) == "evil.attacker.com"
+
+    def test_ignores_x_forwarded_for_when_no_trusted_proxies(self) -> None:
+        from unittest.mock import MagicMock
+
+        monkeypatch_config = ratelimit_config
+        monkeypatch_config.trusted_proxies = ""
+
+        request = MagicMock()
+        request.headers = {"X-Forwarded-For": "spoofed.ip"}
+        request.client.host = "actual.client.ip"
+        assert get_client_ip(request) == "actual.client.ip"
+
+    def test_skips_empty_ips_in_forwarded_for(self) -> None:
+        from unittest.mock import MagicMock
+
+        monkeypatch_config = ratelimit_config
+        monkeypatch_config.trusted_proxies = "proxy.local"
+
+        request = MagicMock()
+        request.headers = {"X-Forwarded-For": ", , 192.168.1.1"}
+        request.client.host = "proxy.local"
         assert get_client_ip(request) == "192.168.1.1"
 
     def test_falls_back_to_client_host(self) -> None:
         from unittest.mock import MagicMock
+
+        monkeypatch_config = ratelimit_config
+        monkeypatch_config.trusted_proxies = ""
 
         request = MagicMock()
         request.headers = {}
@@ -64,6 +141,9 @@ class TestGetClientIp:
 
     def test_returns_default_when_no_client(self) -> None:
         from unittest.mock import MagicMock
+
+        monkeypatch_config = ratelimit_config
+        monkeypatch_config.trusted_proxies = ""
 
         request = MagicMock()
         request.headers = {}

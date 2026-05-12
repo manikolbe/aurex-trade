@@ -182,7 +182,9 @@ def get_walk_forward_status(
 
 
 @router.get("/data-range")
+@limiter.limit(ratelimit_config.read)
 def get_data_range(
+    request: Request,
     user: User = Depends(get_current_user),
     market_data_store: SQLiteMarketDataStore = Depends(get_market_data_store),
     prefs_store: UserDataPreferencesStore = Depends(get_preferences_store),
@@ -222,7 +224,8 @@ def get_data_range(
 
 
 @router.get("/strategies")
-def list_strategies() -> StrategiesResponse:
+@limiter.limit(ratelimit_config.read)
+def list_strategies(request: Request) -> StrategiesResponse:
     """Return all registered strategies with their parameter metadata."""
     from aurex_trade.backtest.cli import STRATEGY_METADATA
 
