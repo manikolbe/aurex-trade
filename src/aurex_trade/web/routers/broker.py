@@ -10,6 +10,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from aurex_trade.adapters.oanda.connection import OANDAConnection, OANDAConnectionError
 from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
@@ -93,14 +94,45 @@ def get_broker_status(
     )
 
 
+async def _parse_credential_request(request: Request) -> BrokerCredentialRequest:
+    """Parse credential request from JSON or form data."""
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+    try:
+        return BrokerCredentialRequest(**body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+
+async def _parse_test_request(request: Request) -> BrokerTestRequest:
+    """Parse test request from JSON or form data."""
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+        # HTMX sends "false"/"true" as strings; coerce to bool
+        if "use_stored" in body:
+            body["use_stored"] = body["use_stored"] in ("true", "True", "1")
+    try:
+        return BrokerTestRequest(**body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+
 @router.put("/credentials", response_model=None)
-def save_credentials(
+async def save_credentials(
     request: Request,
-    req: BrokerCredentialRequest,
     user: User = Depends(get_current_user),
     store: FernetCredentialStore = Depends(get_credential_store),
 ) -> HTMLResponse | BrokerStatusResponse:
     """Save broker credentials (full replacement). Token never returned."""
+    req = await _parse_credential_request(request)
     _validate_broker(req.broker)
     if req.server not in _ALLOWED_SERVERS:
         raise HTTPException(status_code=422, detail="Live trading is not yet available.")
@@ -152,9 +184,8 @@ def delete_credentials(
 
 
 @router.post("/test", response_model=None)
-def test_connection(
+async def test_connection(
     request: Request,
-    req: BrokerTestRequest,
     user: User = Depends(get_current_user),
     store: FernetCredentialStore = Depends(get_credential_store),
 ) -> HTMLResponse | BrokerTestResponse:
@@ -164,6 +195,7 @@ def test_connection(
     - use_stored=true: test credentials already saved in the store
     - use_stored=false: test credentials provided in this request (before saving)
     """
+    req = await _parse_test_request(request)
     _validate_broker(req.broker)
 
     if req.use_stored:
