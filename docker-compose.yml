@@ -24,6 +24,7 @@ services:
     image: caddy:2-alpine
     container_name: aurex-caddy
     restart: unless-stopped
+    env_file: .env
     ports:
       - "80:80"
       - "443:443"

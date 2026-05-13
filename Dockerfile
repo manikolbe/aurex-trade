@@ -5,8 +5,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Install all deps (including mkdocs dev dependency)
+# Install deps first (cached unless pyproject.toml/uv.lock change)
 COPY pyproject.toml uv.lock .python-version ./
+RUN uv sync --frozen --no-install-project
+
+# Copy source and install project
 COPY src/ src/
 RUN uv sync --frozen
 
@@ -42,18 +45,16 @@ COPY deploy/gunicorn.conf.py ./
 # Runtime environment
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app/src" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    HOME=/app
 
-# Create data/logs directories and non-root user
+# Create data/logs directories and non-root user (UID 1000 for volume consistency)
 RUN mkdir -p data logs \
-    && adduser --disabled-password --no-create-home appuser \
+    && useradd --no-create-home --uid 1000 appuser \
     && chown appuser:appuser data logs
 
 USER appuser
 
 EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "aurex_trade.web.app:create_app()"]

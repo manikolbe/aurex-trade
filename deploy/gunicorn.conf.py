@@ -1,12 +1,12 @@
 """Gunicorn configuration for production deployment."""
 
-import multiprocessing
-
 # Bind to all interfaces (Caddy reverse-proxies to this)
 bind = "0.0.0.0:8000"
 
-# Workers: cap at 4 due to SQLite single-writer constraint
-workers = min(2 * multiprocessing.cpu_count() + 1, 4)
+# Single worker: SQLite single-writer + in-memory rate limiting
+# require a single process for correctness. Scale vertically if needed,
+# or switch to Redis-backed rate limiting before adding workers.
+workers = 1
 
 # Uvicorn worker class for ASGI/async support
 worker_class = "uvicorn.workers.UvicornWorker"
@@ -29,5 +29,5 @@ limit_request_field_size = 8190
 # Process naming
 proc_name = "aurex-trade"
 
-# Preload app for faster worker spawning
-preload_app = True
+# Disable control socket (not needed in container)
+control_socket_disable = True
