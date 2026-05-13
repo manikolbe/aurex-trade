@@ -405,9 +405,9 @@ All settings are configurable via environment variables (prefix: `RATELIMIT_`):
 **Proxy requirement:** When deployed behind a reverse proxy, the proxy must
 **overwrite** (not append to) the `X-Forwarded-For` header to prevent IP spoofing:
 
-```nginx
-# nginx — overwrite mode (prevents client spoofing)
-proxy_set_header X-Forwarded-For $remote_addr;
+```caddyfile
+# Caddy — overwrite mode (prevents client spoofing)
+header_up X-Forwarded-For {remote_host}
 ```
 
 Without this, clients can send arbitrary `X-Forwarded-For` values to get
@@ -459,3 +459,55 @@ read limit and is never disrupted.
 >
 > The slowapi/limits library natively supports Redis, Memcached, and MongoDB as
 > storage backends — switching is a configuration change, not a code change.
+
+## Deployment Architecture
+
+Production deployment uses Docker Compose with two services:
+
+```
+Client → Caddy (TLS + headers + proxy) → App (gunicorn + uvicorn workers)
+              :80/:443                         :8000 (internal only)
+```
+
+### Container Layout
+
+| Service | Image | Role |
+|---------|-------|------|
+| `app` | Custom (multi-stage Dockerfile) | FastAPI via gunicorn + UvicornWorker |
+| `caddy` | `caddy:2-alpine` | Reverse proxy, TLS termination, security headers |
+
+### Dockerfile (multi-stage)
+
+- **Builder stage**: Installs all deps (including dev) to build MkDocs documentation
+- **Runtime stage**: Production deps only + gunicorn. Source stays at `/app/src/`
+  with `PYTHONPATH=/app/src` (no editable install — path resolution relies on
+  `Path(__file__).parent` landing in the source tree)
+
+### Caddy Responsibilities
+
+- Automatic TLS via Let's Encrypt (when `CADDY_DOMAIN` is a real domain)
+- HTTP-only on port 80 for local dev (default: `CADDY_DOMAIN=:80`)
+- Security headers on ALL responses (CSP, HSTS, X-Frame-Options, etc.)
+- `X-Forwarded-For` overwrite (prevents IP spoofing for rate limiting)
+- Request logging (JSON to stdout)
+
+### Gunicorn Configuration (`deploy/gunicorn.conf.py`)
+
+- Workers capped at 4 (SQLite single-writer constraint)
+- `UvicornWorker` class for async/ASGI support
+- `preload_app = True` for faster worker spawning
+- Factory pattern: `aurex_trade.web.app:create_app()`
+
+### Volume Strategy
+
+| Volume | Mount | Purpose |
+|--------|-------|---------|
+| `app-data` | `/app/data` | SQLite database (persistent across deploys) |
+| `caddy-data` | `/data` | TLS certificates (auto-managed by Caddy) |
+| `caddy-config` | `/config` | Caddy internal state |
+
+### Environment
+
+- `CADDY_DOMAIN` — `:80` for local, real domain for production (triggers auto-TLS)
+- `WEB_HOST=0.0.0.0` — required for container networking
+- All other config via `.env` file (passed via `env_file` in Compose)

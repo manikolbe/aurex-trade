@@ -138,6 +138,11 @@ just run        # Run bot (local mode)
 just web        # Run web server (http://127.0.0.1:8000)
 just sync       # Install/sync dependencies
 
+# Deployment (Docker)
+just deploy         # Build and start app + Caddy via Docker Compose
+just deploy-down    # Stop and remove containers
+just deploy-logs    # View container logs
+
 # Backtesting (see docs/backtesting.md for full details)
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
 just backtest --strategy sma_crossover --param short_window=10 --param long_window=30

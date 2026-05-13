@@ -68,6 +68,18 @@ docs:
 docs-serve:
     uv run mkdocs serve
 
+# Build and start Docker containers
+deploy:
+    docker compose up --build -d
+
+# Stop Docker containers
+deploy-down:
+    docker compose down
+
+# View Docker container logs
+deploy-logs *args='':
+    docker compose logs {{args}}
+
 # Clean build artifacts
 clean:
     rm -rf dist/ build/ .eggs/ *.egg-info/

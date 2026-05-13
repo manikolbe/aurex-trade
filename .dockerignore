@@ -1,0 +1,56 @@
+# Version control
+.git/
+.gitignore
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables (NEVER include in image)
+.env
+.env.*
+!.env.example
+
+# Runtime data (managed by volumes)
+data/
+logs/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Testing & tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# MkDocs output (rebuilt in Docker build)
+site/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Dev-only docs
+docs/architecture.md
+docs/backtesting.md
+docs/strategies.md
+docs/user-guide.md
+CLAUDE.md
+README.md
+
+# CI/CD
+.github/

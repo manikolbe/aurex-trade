@@ -142,6 +142,61 @@ The web layer exposes a REST API for programmatic use:
 
 All run endpoints return a `task_id` for polling via `GET /api/{type}/{task_id}`.
 
+## Docker Deployment
+
+The recommended way to run AurexTrade for production use. Docker Compose
+orchestrates the app behind a Caddy reverse proxy with automatic TLS and
+security headers.
+
+### Prerequisites
+
+- **Docker** + **Docker Compose** — [docs.docker.com/get-docker](https://docs.docker.com/get-docker/)
+
+### Quick Start
+
+```bash
+# Copy and configure environment
+cp .env.example .env
+# Edit .env: set AUREX_CREDENTIAL_ENCRYPTION_KEY, AUTH_GOOGLE_* credentials, etc.
+
+# Build and start
+just deploy
+# or: docker compose up --build -d
+
+# Verify
+curl http://localhost/api/health
+```
+
+The app is accessible at `http://localhost` (port 80).
+
+### Production (with TLS)
+
+Set `CADDY_DOMAIN` in `.env` to your real domain:
+
+```bash
+CADDY_DOMAIN=aurex.example.com
+```
+
+Point your domain's A record to the server IP. Caddy automatically provisions
+and renews a Let's Encrypt certificate — no certbot or manual cert management.
+
+### Management
+
+```bash
+just deploy-logs        # View logs (add -f to follow)
+just deploy-down        # Stop containers
+just deploy             # Rebuild and restart
+```
+
+### Data Persistence
+
+The SQLite database is stored in a Docker volume (`app-data`). It persists
+across container restarts and rebuilds. To back up:
+
+```bash
+docker compose cp app:/app/data/aurex_trade.db ./backup.db
+```
+
 ## Development
 
 ```bash

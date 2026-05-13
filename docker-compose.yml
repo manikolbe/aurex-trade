@@ -1,0 +1,48 @@
+services:
+  app:
+    build: .
+    container_name: aurex-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WEB_HOST: "0.0.0.0"
+      WEB_RELOAD: "false"
+    volumes:
+      - app-data:/app/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: aurex-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+volumes:
+  app-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:
+    driver: bridge
