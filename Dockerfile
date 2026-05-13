@@ -31,7 +31,7 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Install gunicorn into the venv (deployment concern, not a project dependency)
-RUN uv pip install --no-cache-dir gunicorn
+RUN uv pip install --no-cache-dir gunicorn==23.0.0
 
 # Copy application source
 COPY src/ src/

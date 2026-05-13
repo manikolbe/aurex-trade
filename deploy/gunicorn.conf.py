@@ -28,6 +28,3 @@ limit_request_field_size = 8190
 
 # Process naming
 proc_name = "aurex-trade"
-
-# Disable control socket (not needed in container)
-control_socket_disable = True

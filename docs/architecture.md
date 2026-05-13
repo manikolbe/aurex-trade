@@ -493,9 +493,8 @@ Client → Caddy (TLS + headers + proxy) → App (gunicorn + uvicorn workers)
 
 ### Gunicorn Configuration (`deploy/gunicorn.conf.py`)
 
-- Workers capped at 4 (SQLite single-writer constraint)
+- Single worker (SQLite single-writer + in-memory rate limiting require one process)
 - `UvicornWorker` class for async/ASGI support
-- `preload_app = True` for faster worker spawning
 - Factory pattern: `aurex_trade.web.app:create_app()`
 
 ### Volume Strategy
