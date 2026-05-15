@@ -10,6 +10,7 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; img-src 'self' https://*.googleusercontent.com data:; connect-src 'self' https://cdn.jsdelivr.net; font-src 'self';"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		-Server
+		-Via
 	}
 
 	# HSTS only over TLS (meaningless and incorrect over plain HTTP)
