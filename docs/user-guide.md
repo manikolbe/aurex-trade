@@ -174,7 +174,7 @@ The app is accessible at `http://localhost` (port 80).
 Set `CADDY_DOMAIN` in `.env` to your real domain:
 
 ```bash
-CADDY_DOMAIN=aurex.example.com
+CADDY_DOMAIN=aurex.manikolbe.com
 ```
 
 Point your domain's A record to the server IP. Caddy automatically provisions

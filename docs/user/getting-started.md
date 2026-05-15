@@ -4,7 +4,7 @@ This guide walks you through running your first backtest. It takes about 5 minut
 
 ## Step 1: Open the Web Interface
 
-Navigate to [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+Navigate to [https://aurex.manikolbe.com](https://aurex.manikolbe.com) in your browser.
 You'll see the home page with a health status indicator and links to the main features.
 
 ## Step 2: Connect Your Broker
