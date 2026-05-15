@@ -139,9 +139,12 @@ just web        # Run web server (http://127.0.0.1:8000)
 just sync       # Install/sync dependencies
 
 # Deployment (Docker) — production: https://aurex.manikolbe.com
-just deploy         # Build and start app + Caddy via Docker Compose
+just deploy         # Build and start app + Caddy via Docker Compose (local)
 just deploy-down    # Stop and remove containers
 just deploy-logs    # View container logs
+
+# Deploy to production VPS (after pushing to main):
+ssh aurex 'cd ~/aurex-trade && git pull && docker compose up --build -d'
 
 # Backtesting (see docs/backtesting.md for full details)
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
