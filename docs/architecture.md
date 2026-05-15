@@ -505,8 +505,28 @@ Client → Caddy (TLS + headers + proxy) → App (gunicorn + uvicorn workers)
 | `caddy-data` | `/data` | TLS certificates (auto-managed by Caddy) |
 | `caddy-config` | `/config` | Caddy internal state |
 
+### Container Hardening
+
+- `no-new-privileges` on both containers (prevents privilege escalation)
+- `cap_drop: ALL` — all Linux capabilities removed
+- Caddy gets `NET_BIND_SERVICE` only (needed for ports 80/443)
+- App container: no resource limits (backtests need full CPU/RAM)
+- Caddy container: 128M memory limit
+- Log rotation: 10MB x 3 files per container (prevents disk exhaustion)
+- App runs as `appuser` (uid 1000), never root
+- `.env` file permissions: 600 (owner-only read)
+
 ### Environment
 
 - `CADDY_DOMAIN` — `:80` for local, real domain for production (triggers auto-TLS)
 - `WEB_HOST=0.0.0.0` — required for container networking
-- All other config via `.env` file (passed via `env_file` in Compose)
+- All other config via `.env` file (passed to app only; Caddy only receives `CADDY_DOMAIN`)
+
+### Production Instance
+
+- **URL**: `https://aurex.manikolbe.com`
+- **VPS**: Hetzner CPX22 (2 vCPU, 4GB RAM, 80GB SSD), Nuremberg
+- **DNS**: Cloudflare (DNS-only mode, no proxy)
+- **Firewall**: Hetzner Cloud Firewall — SSH (home IP only), HTTP/HTTPS (all)
+- **SSH**: Key-only, root disabled, `deploy` user with docker group access
+- **Backups**: Hetzner automated backups enabled

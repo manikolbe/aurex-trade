@@ -167,18 +167,15 @@ just deploy
 curl http://localhost/api/health
 ```
 
-The app is accessible at `http://localhost` (port 80).
+The app is accessible at `http://localhost` (port 80) for local testing.
 
-### Production (with TLS)
+### Production
 
-Set `CADDY_DOMAIN` in `.env` to your real domain:
+The production instance is live at **https://aurex.manikolbe.com**.
 
-```bash
-CADDY_DOMAIN=aurex.manikolbe.com
-```
-
-Point your domain's A record to the server IP. Caddy automatically provisions
-and renews a Let's Encrypt certificate — no certbot or manual cert management.
+It runs on a Hetzner VPS with `CADDY_DOMAIN=aurex.manikolbe.com` set in `.env`.
+Caddy automatically provisions and renews a Let's Encrypt certificate — no
+certbot or manual cert management. DNS is managed via Cloudflare (DNS-only mode).
 
 ### Management
 
