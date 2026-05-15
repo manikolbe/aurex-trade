@@ -160,7 +160,7 @@ cp .env.example .env
 # Edit .env: set AUREX_CREDENTIAL_ENCRYPTION_KEY, AUTH_GOOGLE_* credentials, etc.
 
 # Build and start
-just deploy
+just deploy-local
 # or: docker compose up --build -d
 
 # Verify
@@ -180,9 +180,10 @@ certbot or manual cert management. DNS is managed via Cloudflare (DNS-only mode)
 ### Management
 
 ```bash
-just deploy-logs        # View logs (add -f to follow)
-just deploy-down        # Stop containers
-just deploy             # Rebuild and restart
+just deploy-local-logs   # View logs (add -f to follow)
+just deploy-local-down   # Stop containers
+just deploy-local        # Rebuild and restart
+just deploy-prod         # Deploy to production VPS
 ```
 
 ### Data Persistence

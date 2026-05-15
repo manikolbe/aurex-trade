@@ -68,17 +68,21 @@ docs:
 docs-serve:
     uv run mkdocs serve
 
-# Build and start Docker containers
-deploy:
+# Build and start Docker containers (local)
+deploy-local:
     docker compose up --build -d
 
-# Stop Docker containers
-deploy-down:
+# Stop local Docker containers
+deploy-local-down:
     docker compose down
 
-# View Docker container logs
-deploy-logs *args='':
+# View local Docker container logs
+deploy-local-logs *args='':
     docker compose logs {{args}}
+
+# Deploy to production VPS (requires ssh aurex configured)
+deploy-prod:
+    ssh aurex 'cd ~/aurex-trade && git pull && docker compose up --build -d'
 
 # Clean build artifacts
 clean:
