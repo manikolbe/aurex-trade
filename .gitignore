@@ -43,8 +43,7 @@ htmlcov/
 # Ruff
 .ruff_cache/
 
-# uv
-uv.lock
+# uv — lock file is tracked (required for reproducible Docker builds)
 
 # MkDocs build output
 site/
