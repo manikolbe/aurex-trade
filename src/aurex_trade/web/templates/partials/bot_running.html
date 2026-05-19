@@ -9,7 +9,6 @@
           {% else %}
           <div class="badge badge-success">Running</div>
           {% endif %}
-          <span class="text-sm font-medium">{{ strategy_name }} on {{ symbol }} ({{ granularity }})</span>
         </div>
         {% if started_at %}
         <p class="text-xs text-base-content/60">Started: {{ started_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
@@ -25,7 +24,20 @@
 
         <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
           <div>
-            <h3 class="text-xs font-semibold text-base-content/70 mb-1">Strategy</h3>
+            <h3 class="text-xs font-semibold text-base-content/70 mb-1">General</h3>
+            <div class="flex justify-between">
+              <span class="text-base-content/60">Strategy</span>
+              <span class="font-mono">{{ strategy_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-base-content/60">Symbol</span>
+              <span class="font-mono">{{ symbol }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-base-content/60">Granularity</span>
+              <span class="font-mono">{{ granularity }}</span>
+            </div>
+            <h3 class="text-xs font-semibold text-base-content/70 mt-3 mb-1">Strategy Parameters</h3>
             {% for key, value in strategy_params.items() %}
             <div class="flex justify-between">
               <span class="text-base-content/60">{{ key.replace('_', ' ').title() }}</span>
