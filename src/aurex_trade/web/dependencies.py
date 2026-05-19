@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         UserDataPreferencesStore,
     )
     from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
+    from aurex_trade.web._bot_sessions import BotSessionManager
     from aurex_trade.web.tasks import TaskRegistry
 
 
@@ -44,3 +45,9 @@ def get_credential_store(request: Request) -> FernetCredentialStore:
     """Retrieve the FernetCredentialStore singleton from app state."""
     store: FernetCredentialStore = request.app.state.credential_store
     return store
+
+
+def get_bot_session_manager(request: Request) -> BotSessionManager:
+    """Retrieve the BotSessionManager singleton from app state."""
+    manager: BotSessionManager = request.app.state.bot_session_manager
+    return manager

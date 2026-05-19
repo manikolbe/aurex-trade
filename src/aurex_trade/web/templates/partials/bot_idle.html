@@ -1,0 +1,63 @@
+<div id="bot-content">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-body">
+        <h2 class="card-title text-lg">Start Bot</h2>
+        <form hx-post="/htmx/bot/start" hx-target="#bot-content" hx-swap="innerHTML">
+          <div class="form-control mb-3">
+            <label class="label"><span class="label-text">Strategy</span></label>
+            <select name="strategy_name" id="bot-strategy-select" class="select select-bordered w-full" onchange="updateBotParams()">
+              <option value="" disabled selected>Select strategy...</option>
+            </select>
+          </div>
+          <div id="bot-strategy-params" class="mb-3"></div>
+          <div class="form-control mb-3">
+            <label class="label"><span class="label-text">Symbol</span></label>
+            <input type="text" name="symbol" value="XAU_USD" class="input input-bordered w-full" />
+          </div>
+          <div class="form-control mb-3">
+            <label class="label"><span class="label-text">Interval (seconds)</span></label>
+            <input type="number" name="interval_seconds" value="60" min="5" max="3600" class="input input-bordered w-full" />
+          </div>
+          <button type="submit" class="btn btn-success w-full">Start Paper Trading</button>
+        </form>
+      </div>
+    </div>
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-body">
+        <h2 class="card-title text-lg">Status</h2>
+        <div class="badge badge-ghost">Idle</div>
+        <p class="text-sm text-base-content/60 mt-2">Bot is not running. Configure and start above.</p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const botStrategies = {{ strategies_json | safe }};
+  function updateBotParams() {
+    const select = document.getElementById('bot-strategy-select');
+    const container = document.getElementById('bot-strategy-params');
+    const name = select.value;
+    const meta = botStrategies[name];
+    if (!meta) { container.innerHTML = ''; return; }
+    container.innerHTML = meta.params.map(p =>
+      `<div class="form-control mb-2">
+        <label class="label"><span class="label-text">${p.label}</span></label>
+        <input type="number" name="param_${p.key}" value="${p.default}"
+               min="${p.min_value}" max="${p.max_value}"
+               class="input input-bordered w-full input-sm"
+               title="${p.tooltip}" />
+      </div>`
+    ).join('');
+  }
+  // Populate strategy dropdown
+  (function() {
+    const select = document.getElementById('bot-strategy-select');
+    for (const [key, meta] of Object.entries(botStrategies)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = meta.display_name;
+      select.appendChild(opt);
+    }
+  })();
+</script>

@@ -30,6 +30,7 @@ from aurex_trade.adapters.sqlite.market_data_store import (
 from aurex_trade.adapters.sqlite.session_store import SQLiteSessionStore
 from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.logging import setup_logging
+from aurex_trade.web._bot_sessions import BotSessionManager
 from aurex_trade.web.auth.config import AuthConfig
 from aurex_trade.web.auth.middleware import AuthMiddleware
 from aurex_trade.web.auth.router import create_auth_router
@@ -79,8 +80,11 @@ _DB_PATH = Path("data/aurex_trade.db")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
-    registry = TaskRegistry(max_workers=2)
+    registry = TaskRegistry(max_workers=4)
     app.state.task_registry = registry
+
+    bot_session_manager = BotSessionManager()
+    app.state.bot_session_manager = bot_session_manager
 
     # Cleanup expired sessions on startup (store is created in create_app)
     session_store: SQLiteSessionStore | None = getattr(app.state, "session_store", None)
@@ -89,8 +93,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if expired:
             logger.info("web.session_cleanup", deleted=expired)
 
-    logger.info("web.startup", workers=2)
+    logger.info("web.startup", workers=4)
     yield
+
+    # Stop all active bot sessions before shutting down the executor
+    bot_session_manager.stop_all()
 
     # Shutdown: close stores
     market_data_store: SQLiteMarketDataStore | None = getattr(
@@ -221,7 +228,8 @@ def create_app() -> FastAPI:
 
     @app.get("/bot", response_class=HTMLResponse)
     def bot_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(request, "pages/bot.html", _user_context(request))
+        ctx = {**_user_context(request), "strategies": _get_strategies_context()}
+        return templates.TemplateResponse(request, "pages/bot.html", ctx)
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request) -> HTMLResponse:

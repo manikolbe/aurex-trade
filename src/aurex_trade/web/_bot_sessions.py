@@ -103,3 +103,10 @@ class BotSessionManager:
 
     def is_running(self, user_id: str) -> bool:
         return self.get(user_id) is not None
+
+    def stop_all(self) -> None:
+        """Stop all active bot sessions. Used during application shutdown."""
+        with self._lock:
+            user_ids = list(self._sessions.keys())
+        for uid in user_ids:
+            self.stop(uid)

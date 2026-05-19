@@ -323,11 +323,38 @@ class DataRangeResponse(BaseModel):
 # --- Bot ---
 
 
+class BotStartRequest(BaseModel):
+    """Request to start the trading bot."""
+
+    strategy_name: str = Field(pattern=r"^[a-z_]{1,30}$")
+    strategy_params: dict[str, int | float] = Field(default_factory=dict)
+    risk_params: dict[str, int | float | bool] = Field(default_factory=dict)
+    symbol: Symbol = "XAU_USD"
+    interval_seconds: int = Field(default=60, ge=5, le=3600)
+
+
+class BotMetricsResponse(BaseModel):
+    """Live engine metrics from a running bot."""
+
+    cycle_count: int
+    started_at: datetime | None = None
+    running: bool
+    session_signals: int
+    session_trades: int
+    session_rejections: int
+    peak_equity: float
+    uptime_seconds: float | None = None
+
+
 class BotStatusResponse(BaseModel):
     """Bot status response."""
 
     running: bool
-    task_id: UUID | None = None
+    symbol: str | None = None
+    strategy_name: str | None = None
+    started_at: datetime | None = None
+    metrics: BotMetricsResponse | None = None
+    error: str | None = None
 
 
 # --- Settings ---

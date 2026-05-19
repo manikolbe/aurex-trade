@@ -143,12 +143,19 @@ class TestRateLimitEndpoints:
     def test_bot_control_limited_at_3(self, client: TestClient) -> None:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
+        body = {
+            "strategy_name": "sma_crossover",
+            "strategy_params": {},
+            "risk_params": {},
+            "symbol": "XAU_USD",
+            "interval_seconds": 60,
+        }
 
         for _ in range(3):
-            resp = client.post("/api/bot/start", headers=headers)
+            resp = client.post("/api/bot/start", json=body, headers=headers)
             assert resp.status_code != 429
 
-        resp = client.post("/api/bot/start", headers=headers)
+        resp = client.post("/api/bot/start", json=body, headers=headers)
         assert resp.status_code == 429
 
     def test_health_endpoint_exempt(self, client: TestClient) -> None:
@@ -163,17 +170,24 @@ class TestRateLimitEndpoints:
     def test_different_ips_have_independent_limits(self, client: TestClient) -> None:
         ip1 = _unique_ip()
         ip2 = _unique_ip()
+        body = {
+            "strategy_name": "sma_crossover",
+            "strategy_params": {},
+            "risk_params": {},
+            "symbol": "XAU_USD",
+            "interval_seconds": 60,
+        }
 
         # Exhaust limit for ip1
         for _ in range(3):
-            client.post("/api/bot/start", headers={"X-Forwarded-For": ip1})
+            client.post("/api/bot/start", json=body, headers={"X-Forwarded-For": ip1})
 
         # ip1 is limited
-        resp = client.post("/api/bot/start", headers={"X-Forwarded-For": ip1})
+        resp = client.post("/api/bot/start", json=body, headers={"X-Forwarded-For": ip1})
         assert resp.status_code == 429
 
         # ip2 still has budget
-        resp = client.post("/api/bot/start", headers={"X-Forwarded-For": ip2})
+        resp = client.post("/api/bot/start", json=body, headers={"X-Forwarded-For": ip2})
         assert resp.status_code != 429
 
 
@@ -187,12 +201,19 @@ class TestRateLimitResponse:
     def test_429_json_matches_error_schema(self, client: TestClient) -> None:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
+        body = {
+            "strategy_name": "sma_crossover",
+            "strategy_params": {},
+            "risk_params": {},
+            "symbol": "XAU_USD",
+            "interval_seconds": 60,
+        }
 
         # Exhaust bot control limit
         for _ in range(3):
-            client.post("/api/bot/start", headers=headers)
+            client.post("/api/bot/start", json=body, headers=headers)
 
-        resp = client.post("/api/bot/start", headers=headers)
+        resp = client.post("/api/bot/start", json=body, headers=headers)
         assert resp.status_code == 429
         data = resp.json()
         assert data["error"] == "Rate limit exceeded"
@@ -202,12 +223,19 @@ class TestRateLimitResponse:
     def test_429_includes_retry_after_header(self, client: TestClient) -> None:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
+        body = {
+            "strategy_name": "sma_crossover",
+            "strategy_params": {},
+            "risk_params": {},
+            "symbol": "XAU_USD",
+            "interval_seconds": 60,
+        }
 
         # Exhaust bot control limit
         for _ in range(3):
-            client.post("/api/bot/start", headers=headers)
+            client.post("/api/bot/start", json=body, headers=headers)
 
-        resp = client.post("/api/bot/start", headers=headers)
+        resp = client.post("/api/bot/start", json=body, headers=headers)
         assert resp.status_code == 429
         assert "Retry-After" in resp.headers
         retry_after = int(resp.headers["Retry-After"])
