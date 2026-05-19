@@ -22,6 +22,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Trading Concepts: trading-concepts.md
+  - Strategy Testing: strategy-testing.md
   - Understanding Results: understanding-results.md
   - Glossary: glossary.md
 

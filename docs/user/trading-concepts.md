@@ -3,6 +3,24 @@
 This page explains the core ideas behind AurexTrade in plain language.
 No prior trading experience needed.
 
+## Paper Trading vs Live Trading
+
+When you start the bot for the first time, it trades with **virtual money** in
+your OANDA practice account. This is called **paper trading** — it works exactly
+like real trading, but nothing you do costs real money.
+
+| Mode | Money | Risk | Purpose |
+|------|-------|------|---------|
+| **Paper (practice)** | Virtual — provided free by OANDA | None | Learn how the bot works, test strategies |
+| **Live** | Real money from your funded account | Real financial risk | Actual trading for profit/loss |
+
+You should stay on paper trading until you're confident in your strategy and
+settings. There's no time limit and no pressure to switch.
+
+!!! info "Going live requires two confirmations"
+    AurexTrade has a safety gate: switching to live trading requires you to
+    explicitly confirm twice. You can never accidentally trade real money.
+
 ## What Is a Trading Strategy?
 
 A trading strategy is a set of rules that tells you when to buy and when to sell.
@@ -91,6 +109,51 @@ be unsafe.
 | **Trade frequency** | Prevents excessive trading (overtrading) |
 
 Think of it as a co-pilot that can override the autopilot when things look dangerous.
+
+## Understanding Risk Settings
+
+When you start the bot, you'll see a "Risk Settings" section. Here's what each
+setting means in plain English:
+
+**Kill Switch**
+:   An emergency stop button. When activated, the bot immediately stops placing
+    any new trades. Use this if something feels wrong and you want everything to
+    halt right now.
+
+**Risk Per Trade (default: 2%)**
+:   How much of your balance you're willing to risk on a single trade. At 2%, if
+    your balance is $100,000, the most you could lose on one trade is $2,000.
+    Lower = safer but slower growth. Higher = more aggressive.
+
+**Max Position (default: 10 units)**
+:   The largest trade size the bot can place at once. Think of it as a cap on
+    how big any single bet can be.
+
+**Max Daily Loss (default: $500)**
+:   If the bot loses this much in a single day, it stops trading for the rest
+    of that day. Prevents a bad day from becoming a terrible day.
+
+**Max Drawdown (default: 20%)**
+:   If your balance drops more than 20% from its highest point, the bot stops
+    entirely. This is your "worst case" safety net.
+
+**Max Consecutive Losses (default: 5)**
+:   If the bot loses 5 trades in a row, it pauses. This gives the market time
+    to settle before trying again.
+
+**Max Trades Per Day (default: 10)**
+:   Prevents the bot from trading too often. More trades = more fees, and
+    sometimes doing less is better.
+
+**Require Stop-Loss (default: on)**
+:   Every trade must have a maximum loss limit set before it's placed. If the
+    market moves against you, the trade closes automatically at that limit.
+    This should almost always stay on.
+
+!!! tip "Start with the defaults"
+    The default risk settings are conservative and designed for safe practice
+    trading. You don't need to change them until you understand what each one
+    does and why you'd want a different value.
 
 ## The 3-Step Validation Workflow
 

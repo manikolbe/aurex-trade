@@ -8,18 +8,19 @@ based on rules you choose — no guesswork, no emotions.
 
 With the web interface, you can:
 
+- **Run a trading bot** on a practice account with virtual money — zero risk
 - **Test strategies** on past market data to see if they would have made money
 - **Find the best settings** by trying thousands of combinations automatically
 - **Validate your results** to make sure they aren't just luck
-- **Run the trading bot** once you're confident in a strategy
 
 ## How This Guide Is Organised
 
 | Page | What You'll Learn |
 |------|-------------------|
-| [Getting Started](getting-started.md) | Run your first test in under 5 minutes |
-| [Trading Concepts](trading-concepts.md) | What the strategies do, in plain English |
-| [Understanding Results](understanding-results.md) | How to read and interpret your test results |
+| [Getting Started](getting-started.md) | Start your first bot in under 5 minutes |
+| [Trading Concepts](trading-concepts.md) | What the strategies and settings mean |
+| [Strategy Testing](strategy-testing.md) | Find better settings with backtesting |
+| [Understanding Results](understanding-results.md) | How to read test numbers and charts |
 | [Glossary](glossary.md) | Quick definitions of trading terms |
 
 ## The Golden Rule

@@ -1,148 +1,175 @@
 # Getting Started
 
-This guide walks you through running your first backtest. It takes about 5 minutes.
+This guide walks you through starting your first trading bot. It uses fake money,
+so there's nothing to worry about. Takes about 5 minutes.
 
-## Step 1: Open the Web Interface
+## What You're About to Do
 
-Navigate to [https://aurex.manikolbe.com](https://aurex.manikolbe.com) in your browser.
-You'll see the home page with a health status indicator and links to the main features.
+AurexTrade is a bot that watches gold prices and makes trades based on rules you
+choose. Think of it as an autopilot — it follows a plan so you don't have to sit
+and watch the market all day.
 
-## Step 2: Connect Your Broker
+In this guide, you'll:
 
-AurexTrade needs a broker connection to fetch market data. You'll connect a free
-OANDA demo account — no real money involved. This is a one-time setup that takes
-a couple of minutes.
+1. Connect a free practice account (no real money)
+2. Start the bot
+3. Watch it make a few trades
+4. Stop it whenever you like
 
-### 2a. Create a free OANDA demo account
+By the end, you'll have seen the bot in action and understand how it works at a
+basic level.
+
+---
+
+## Step 1: Connect Your Practice Account
+
+Before the bot can watch gold prices, it needs access to market data. You'll
+connect a free OANDA practice account — this uses virtual money, so there's zero
+financial risk.
+
+!!! tip "One-time setup"
+    You only need to do this once. After that, your connection is saved.
+
+### 1a. Create a free OANDA practice account
 
 If you don't already have one, [open a free demo account](https://help.oanda.com/us/en/faqs/open-demo-account.htm).
-It uses virtual money so there's zero financial risk.
+It gives you virtual money to trade with — like a flight simulator for trading.
 
 !!! warning "Choose the **v20** account type"
-    When creating your demo account, OANDA offers several account types.
+    When creating your account, OANDA offers several account types.
     Select **v20**.
 
-### 2b. Get your API Token
+### 1b. Get your API Token
 
 Go to [OANDA Hub → Personal Access Token](https://hub.oanda.com/tpa/personal_token)
-and generate a token. This is what authorises AurexTrade to fetch data on your behalf.
-Copy it somewhere safe — you'll paste it in the next step.
+and generate a token. This is like a password that lets AurexTrade connect to your
+practice account. Copy it somewhere safe — you'll paste it in the next step.
 
-### 2c. Get your Account ID
+### 1c. Get your Account ID
 
 Go to [OANDA Hub → Accounts](https://hub.oanda.com/accounts) and copy your
 **Primary** account number. It looks like `101-004-XXXXXXXX-001`.
 
-### 2d. Save credentials in AurexTrade
+### 1d. Save your details in AurexTrade
 
-1. Click **Settings** in the top menu
-2. On the **Broker** tab, paste your credentials:
-    - **Account ID** — the number you copied in step 2c
-    - **API Token** — the token you generated in step 2b
+1. Open [AurexTrade](https://aurex.manikolbe.com) in your browser
+2. Click **Settings** in the top menu
+3. On the **Broker** tab, paste your details:
+    - **Account ID** — the number from step 1c
+    - **API Token** — the token from step 1b
     - **Server** — select "Practice"
-3. Click **Save Credentials**
-4. (Optional) Click **Test Connection** to verify everything works
+4. Click **Save Credentials**
+5. Click **Test Connection** — you should see a green success message
 
-!!! tip "One-time setup"
-    You only need to do this once. Your credentials are encrypted before storage
-    and never displayed back — only you can use them.
+!!! info "Your details are safe"
+    Your credentials are encrypted before they're stored. They're never shown
+    back to you or shared with anyone.
 
-## Step 3: Go to Backtest
+---
 
-Click **Strategy Testing** in the top menu, then select **Backtest**.
+## Step 2: Start Your First Bot
 
-## Step 4: Run Your First Test
+Now for the fun part.
 
-The backtest page has a form with several fields. For your first run, you only need
-to do one thing:
+1. Click **Trading Bot** in the top menu
+2. You'll see a form on the left and a status panel on the right
 
-1. **Leave all defaults as they are** — they're set to sensible starting values
-2. Click **Run Backtest**
+The form has some fields already filled in with sensible defaults. **You don't need
+to change anything.** Here's what's there:
 
-That's it. The system will test the SMA Crossover strategy against historical gold
-price data and show you the results.
+- **Strategy** — The rules the bot will follow to decide when to buy and sell.
+  The default (SMA Crossover) is a simple approach that follows price trends.
+  Don't worry about understanding it yet — we'll explain it later.
+- **Symbol** — What the bot trades. It's set to gold (XAU/USD).
+- **Interval** — How often the bot checks for new opportunities. Default is
+  every 60 seconds.
 
-!!! note "First run takes a little longer"
-    The first time you run a backtest, AurexTrade downloads historical data from
-    OANDA. You'll see a "Downloading..." status — this typically takes 10–30 seconds
-    depending on the date range. Subsequent runs reuse the cached data and are much faster.
+Below the main fields, there's a **Risk Settings** section (collapsed by default).
+These are safety limits — like a speed limiter on a car. The defaults are
+conservative and safe for practice. You can explore them later.
 
-!!! tip "What just happened?"
-    The system replayed past gold prices through a trading strategy to see what
-    would have happened if you had followed its signals. No real money was involved.
+**When you're ready:**
 
-## Step 5: Read Your Results
+Click the green **Start Paper Trading** button.
 
-After a few seconds, you'll see:
+That's it. The bot is now running.
 
-- **A metrics table** — key numbers that tell you how the strategy performed
-- **An equity curve** — a chart showing how your account balance changed over time
+---
 
-The most important numbers to look at first:
+## Step 3: Watch It Run
 
-| Metric | What it tells you |
-|--------|-------------------|
-| **Total P&L** | Did the strategy make or lose money overall? |
-| **Win Rate** | What percentage of trades were profitable? |
-| **Max Drawdown** | What was the worst losing streak? |
+Once started, the page changes to show you what's happening:
 
-For detailed explanations of all metrics, see [Understanding Results](understanding-results.md).
+- **Status badge** — Shows "Running" in green
+- **Cycles** — How many times the bot has checked the market. This ticks up
+  every 60 seconds.
+- **Signals** — How many times the bot spotted a potential trade
+- **Trades** — How many trades it actually made (some signals get blocked by
+  the safety limits — that's normal and good)
+- **Peak Equity** — The highest your practice balance has reached
+- **Uptime** — How long the bot has been running
+
+!!! tip "Be patient"
+    The bot only trades when its rules are triggered. It might run for several
+    cycles before making its first trade — that's completely normal. It's being
+    selective, not broken.
+
+!!! note "This is all practice money"
+    Nothing you see here costs real money. The bot is trading with virtual funds
+    in your OANDA practice account. You can let it run, stop it, restart it —
+    experiment freely.
+
+---
+
+## Step 4: Stop the Bot
+
+Whenever you want to stop:
+
+1. Click the red **Stop Bot** button
+2. Confirm when asked
+
+The bot stops immediately. Any open practice trades will be left as they are
+in your OANDA practice account.
+
+You can also use the **Kill Switch** (in Risk Settings) as an emergency stop —
+it prevents all new trades instantly.
+
+**You are always in control.** The bot only runs when you tell it to, and stops
+the moment you ask.
+
+---
+
+## What Just Happened?
+
+Let's recap what the bot did:
+
+1. It watched gold prices every 60 seconds
+2. It applied a set of rules (the strategy) to decide: buy, sell, or do nothing
+3. Before placing any trade, it checked the safety limits (risk settings)
+4. If everything looked safe, it placed the trade in your practice account
+5. It repeated this cycle until you stopped it
+
+All with virtual money. No financial risk at all.
+
+---
 
 ## What to Do Next
 
-Once you've run a single backtest, the next steps are:
+Now that you've seen the bot in action, you might be curious:
 
-### Try Different Settings
+**"Why did it buy/sell when it did?"**
+:   The [Trading Concepts](trading-concepts.md) page explains how each strategy
+    works in plain English — what rules it follows and why.
 
-Go back to the form and change some parameters. For example, with SMA Crossover:
+**"Can I find better settings?"**
+:   The [Strategy Testing](strategy-testing.md) page shows you how to test
+    different settings against past market data to see which ones perform best.
+    This is a more advanced feature — come back to it once you're comfortable
+    with the basics.
 
-- Try a shorter **Short Window** (e.g., 5) — makes the strategy react faster
-- Try a longer **Long Window** (e.g., 50) — makes it more cautious
+**"What do all the numbers mean?"**
+:   The [Understanding Results](understanding-results.md) page explains every
+    metric you'll encounter.
 
-### Run a Parameter Sweep
-
-Instead of testing one setting at a time, use the **Sweep** page to test hundreds
-of combinations automatically. The system will rank them and show you which settings
-performed best.
-
-### Validate with Walk-Forward
-
-Found settings you like? Use the **Walk-Forward** page to check whether those
-settings only worked in the past (overfitting) or are genuinely robust.
-
-## The 3-Step Workflow
-
-The recommended workflow is:
-
-```
-1. Backtest  →  2. Sweep  →  3. Walk-Forward
-   (sanity        (find         (prove it's
-    check)         best)         not luck)
-```
-
-Each step builds on the previous one:
-
-1. **Backtest** confirms the strategy can work at all
-2. **Sweep** finds the best parameter combination
-3. **Walk-Forward** proves the best settings aren't just a lucky fit to past data
-
-!!! warning "Don't skip Walk-Forward"
-    It's tempting to take the best sweep result and start trading immediately.
-    But the best settings in a sweep are often **overfit** — they worked perfectly
-    on that specific data but will fail on new data. Walk-Forward catches this.
-
-## Saving Your Defaults
-
-Once you've found settings you like, you can save them so all backtest forms
-pre-fill automatically on your next visit.
-
-1. Go to **Settings** in the top menu
-2. Under **Strategy Defaults**, pick a strategy, adjust the parameters, and click **Save Strategy Defaults**
-3. Under **Risk & Cost Defaults**, set your preferred risk/cost values and click **Save Risk Defaults**
-
-Next time you open any backtest form (Backtest, Sweep, or Walk-Forward), your
-saved parameters will be pre-filled.
-
-!!! tip "Reset to Defaults"
-    Made a mess of the settings? Click **Reset to Defaults** to restore the
-    original application defaults instantly.
+There's no rush. Take your time exploring, and remember — as long as you're using
+a practice account, everything is risk-free.

@@ -38,12 +38,27 @@ Quick definitions of terms you'll encounter in AurexTrade.
 **Commission**
 :   A fee charged by the broker for executing a trade. Measured in dollars per trade.
 
+**Consecutive Losses**
+:   The number of losing trades in a row. The bot can be configured to pause after
+    a certain number of consecutive losses to let the market settle.
+
+**Cycle**
+:   One loop of the bot's operation: check the price, decide whether to trade, act
+    (or not), then wait for the next cycle. By default, a cycle runs every 60 seconds.
+
 **Connection Test**
 :   A verification step that confirms your broker credentials are valid by contacting
     the broker's API. Use this after entering credentials to make sure they work
     before saving.
 
 ## D
+
+**Daily Loss Limit**
+:   The maximum amount of money the bot is allowed to lose in a single day. Once
+    this limit is hit, the bot stops trading for the rest of the day.
+
+**Demo Account**
+:   See *Practice Account*.
 
 **Drawdown**
 :   The drop from a peak (highest point) to a trough (lowest point) in your account
@@ -72,6 +87,12 @@ Quick definitions of terms you'll encounter in AurexTrade.
     H1 = 1 hour, D = 1 day. Smaller granularity means more data points and more
     detailed testing.
 
+## I
+
+**Interval**
+:   How often the bot checks for new trading opportunities. An interval of 60
+    seconds means the bot looks at the market once per minute.
+
 ## K
 
 **Kill Switch**
@@ -85,6 +106,10 @@ Quick definitions of terms you'll encounter in AurexTrade.
     rises after you buy.
 
 ## M
+
+**Max Position**
+:   The largest trade size the bot is allowed to place at once. Acts as a cap on
+    how big any single trade can be.
 
 **Max Drawdown**
 :   The worst (largest) drawdown during a test period. Tells you the most painful
@@ -115,6 +140,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## P
 
+**Paper Trading**
+:   Trading with virtual (fake) money to practise and learn. Everything works
+    exactly like real trading, but there's no financial risk. Also called
+    "practice trading" or "demo trading".
+
 **Practice Account**
 :   A free broker account that uses virtual money. Lets you test strategies without
     financial risk. Also called a "demo account".
@@ -138,6 +168,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
 :   Total money won divided by total money lost. Above 1.0 = profitable.
 
 ## R
+
+**Risk Per Trade**
+:   The fraction of your balance you're willing to lose on a single trade. Expressed
+    as a decimal: 0.02 means 2%. If your balance is $100,000 and risk per trade is
+    0.02, the most you could lose on one trade is $2,000.
 
 **RSI (Relative Strength Index)**
 :   A number from 0 to 100 that measures how fast the price has been moving up vs.
