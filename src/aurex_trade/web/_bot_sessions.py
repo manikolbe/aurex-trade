@@ -98,10 +98,8 @@ class BotSessionManager:
         log.info("bot_session.stopped", user_id=user_id)
 
     def get(self, user_id: str) -> ActiveBotSession | None:
-        """Return the active session for a user, or None."""
         with self._lock:
             return self._sessions.get(user_id)
 
     def is_running(self, user_id: str) -> bool:
-        """Check whether a user has an active bot session."""
         return self.get(user_id) is not None

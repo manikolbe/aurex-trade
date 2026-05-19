@@ -200,13 +200,7 @@ class TestConcurrency:
 
         def worker(uid: str) -> None:
             try:
-                manager.start(
-                    user_id=uid,
-                    engine=FakeEngine(),  # type: ignore[arg-type]
-                    connection=FakeConnection(),
-                    symbol="XAU_USD",
-                    strategy_name="sma_crossover",
-                )
+                _start_session(manager, user_id=uid)
                 manager.stop(uid)
             except Exception as exc:
                 errors.append(exc)
@@ -226,13 +220,7 @@ class TestConcurrency:
 
         def worker() -> None:
             try:
-                manager.start(
-                    user_id="user-race",
-                    engine=FakeEngine(),  # type: ignore[arg-type]
-                    connection=FakeConnection(),
-                    symbol="XAU_USD",
-                    strategy_name="sma_crossover",
-                )
+                _start_session(manager, user_id="user-race")
                 successes.append("ok")
             except BotAlreadyRunningError:
                 failures.append("rejected")
