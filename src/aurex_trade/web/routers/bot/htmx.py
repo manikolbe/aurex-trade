@@ -157,7 +157,7 @@ def htmx_state_check(
     user: User = Depends(get_current_user),
     session_manager: BotSessionManager = Depends(get_bot_session_manager),
 ) -> HTMLResponse:
-    """Lightweight check — returns idle partial if bot stopped, empty if still running."""
+    """Lightweight check — returns idle partial if bot stopped, 204 if still running."""
     templates = _get_templates(request)
     session = session_manager.get(user.id)
 
@@ -166,7 +166,7 @@ def htmx_state_check(
             request, "partials/bot_idle.html", {"strategies_json": _get_strategies_json()}
         )
 
-    return HTMLResponse("")
+    return HTMLResponse(status_code=204)
 
 
 @router.get("/status/poll", response_class=HTMLResponse)
