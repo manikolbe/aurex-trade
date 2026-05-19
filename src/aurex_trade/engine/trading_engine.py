@@ -37,6 +37,9 @@ class EngineMetrics(TypedDict):
     session_trades: int
     session_rejections: int
     current_equity: float
+    balance: float
+    unrealized_pnl: float
+    open_position_count: int
     peak_equity: float
     uptime_seconds: float | None
 
@@ -175,6 +178,20 @@ class TradingEngine:
         if started is not None:
             uptime = (datetime.now(UTC) - started).total_seconds()
 
+        # Get detailed account info if broker supports it
+        balance = 0.0
+        unrealized_pnl = 0.0
+        open_position_count = 0
+        current_equity = self._broker.equity
+
+        if hasattr(self._broker, "get_account_summary"):
+            summary = self._broker.get_account_summary()
+            balance = summary["balance"]
+            unrealized_pnl = summary["unrealized_pnl"]
+            open_position_count = int(summary["open_position_count"])
+        else:
+            balance = current_equity
+
         return EngineMetrics(
             cycle_count=self._cycle_count,
             started_at=self._started_at,
@@ -182,7 +199,10 @@ class TradingEngine:
             session_signals=self._session_signals,
             session_trades=self._session_trades,
             session_rejections=self._session_rejections,
-            current_equity=self._broker.equity,
+            current_equity=current_equity,
+            balance=balance,
+            unrealized_pnl=unrealized_pnl,
+            open_position_count=open_position_count,
             peak_equity=self._peak_equity,
             uptime_seconds=uptime,
         )

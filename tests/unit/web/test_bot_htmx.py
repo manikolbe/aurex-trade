@@ -29,6 +29,9 @@ class TestBotStatusPoll:
             "session_trades": 0,
             "session_rejections": 1,
             "current_equity": 10000.0,
+            "balance": 10000.0,
+            "unrealized_pnl": 0.0,
+            "open_position_count": 0,
             "peak_equity": 10000.0,
             "uptime_seconds": 60.0,
         }
@@ -94,6 +97,9 @@ class TestBotMetricsPoll:
             "session_trades": 2,
             "session_rejections": 3,
             "current_equity": 11000.0,
+            "balance": 11000.0,
+            "unrealized_pnl": 0.0,
+            "open_position_count": 0,
             "peak_equity": 11000.0,
             "uptime_seconds": 600.0,
         }

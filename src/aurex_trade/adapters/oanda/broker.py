@@ -31,6 +31,18 @@ class OANDABrokerAdapter:
         )
         return float(data["account"]["NAV"])
 
+    def get_account_summary(self) -> dict[str, float | int]:
+        """Return account balance, unrealized P&L, and open position count."""
+        data = self._connection.get(
+            f"/v3/accounts/{self._account_id}/summary"
+        )
+        account = data["account"]
+        return {
+            "balance": float(account["balance"]),
+            "unrealized_pnl": float(account.get("unrealizedPL", 0.0)),
+            "open_position_count": int(account.get("openPositionCount", 0)),
+        }
+
     def place_order(self, order: Order) -> Trade:
         """Place a market order and return the resulting Trade."""
         units = order.quantity if order.side == OrderSide.BUY else -order.quantity

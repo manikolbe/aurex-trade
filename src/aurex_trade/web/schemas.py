@@ -353,6 +353,9 @@ class BotMetricsResponse(BaseModel):
     session_trades: int
     session_rejections: int
     current_equity: float
+    balance: float
+    unrealized_pnl: float
+    open_position_count: int
     peak_equity: float
     uptime_seconds: float | None = None
 
