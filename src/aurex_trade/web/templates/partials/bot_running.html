@@ -97,8 +97,9 @@
     <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
       <div class="card-body">
         <h2 class="card-title text-lg">Equity Curve</h2>
-        <div id="bot-equity-container" hx-get="/htmx/bot/equity/poll" hx-trigger="load, every 30s" hx-swap="innerHTML">
-          <p class="text-sm text-base-content/60 text-center py-4">Chart will appear after a few cycles...</p>
+        <div id="bot-equity-container">
+          <canvas id="bot-equity-chart" height="150"></canvas>
+          <p id="bot-equity-placeholder" class="text-sm text-base-content/60 text-center py-4">Chart will appear after a few cycles...</p>
         </div>
       </div>
     </div>
@@ -107,3 +108,75 @@
   <!-- Detect bot stop — if bot stops, this swaps the whole view to idle -->
   <div hx-get="/htmx/bot/state-check" hx-trigger="every 5s" hx-target="#bot-content" hx-swap="innerHTML"></div>
 </div>
+
+<script>
+(function() {
+  var chart = null;
+  var canvas = document.getElementById('bot-equity-chart');
+  var placeholder = document.getElementById('bot-equity-placeholder');
+  canvas.style.display = 'none';
+
+  function updateEquityChart() {
+    fetch('/api/bot/equity')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data || data.length < 2) return;
+
+        placeholder.style.display = 'none';
+        canvas.style.display = '';
+
+        var labels = data.map(function(p) {
+          var d = new Date(p.timestamp);
+          return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+        });
+        var values = data.map(function(p) { return p.equity; });
+
+        if (chart) {
+          chart.data.labels = labels;
+          chart.data.datasets[0].data = values;
+          chart.update('none');
+        } else {
+          chart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'Equity',
+                data: values,
+                borderColor: 'hsl(160, 60%, 50%)',
+                backgroundColor: 'hsla(160, 60%, 50%, 0.1)',
+                fill: true,
+                pointRadius: 0,
+                borderWidth: 1.5,
+                tension: 0.1
+              }]
+            },
+            options: {
+              responsive: true,
+              animation: false,
+              plugins: { legend: { display: false }, title: { display: false } },
+              scales: {
+                x: {
+                  display: true,
+                  title: { display: true, text: 'Time', color: '#a6adbb' },
+                  ticks: { color: '#a6adbb', maxTicksLimit: 8 },
+                  grid: { color: 'rgba(166,173,187,0.1)' }
+                },
+                y: {
+                  display: true,
+                  title: { display: true, text: 'Equity ($)', color: '#a6adbb' },
+                  ticks: { color: '#a6adbb' },
+                  grid: { color: 'rgba(166,173,187,0.1)' }
+                }
+              }
+            }
+          });
+        }
+      })
+      .catch(function() {});
+  }
+
+  updateEquityChart();
+  setInterval(updateEquityChart, 30000);
+})();
+</script>

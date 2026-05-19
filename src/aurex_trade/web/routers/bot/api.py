@@ -120,3 +120,15 @@ def bot_metrics(
     if session is None:
         return JSONResponse(status_code=404, content={"detail": "No bot running"})
     return BotMetricsResponse(**session.engine.get_metrics())
+
+
+@router.get("/equity", response_model=None)
+def bot_equity(
+    user: User = Depends(get_current_user),
+    session_manager: BotSessionManager = Depends(get_bot_session_manager),
+) -> JSONResponse:
+    """Get equity history for charting."""
+    session = session_manager.get(user.id)
+    if session is None:
+        return JSONResponse(status_code=404, content={"detail": "No bot running"})
+    return JSONResponse(content=session.engine.get_equity_history())
