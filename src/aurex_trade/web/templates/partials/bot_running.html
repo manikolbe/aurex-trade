@@ -2,17 +2,17 @@
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div class="card bg-base-100 shadow-md">
       <div class="card-body">
-        <h2 class="card-title text-lg">Controls</h2>
-        <div class="flex items-center gap-3 mb-3">
+        <h2 class="card-title text-lg">Bot</h2>
+        <div class="flex items-center gap-3 mb-2">
           {% if kill_switch_active %}
           <div class="badge badge-warning">Paused</div>
           {% else %}
           <div class="badge badge-success">Running</div>
           {% endif %}
-          <span class="text-sm">{{ strategy_name }} on {{ symbol }} ({{ granularity }})</span>
+          <span class="text-sm font-medium">{{ strategy_name }} on {{ symbol }} ({{ granularity }})</span>
         </div>
         {% if started_at %}
-        <p class="text-sm text-base-content/60">Started: {{ started_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+        <p class="text-xs text-base-content/60">Started: {{ started_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
         {% endif %}
 
         {% if kill_switch_active %}
@@ -21,7 +21,36 @@
         </div>
         {% endif %}
 
-        <div class="flex flex-col gap-2 mt-3">
+        <div class="divider my-2"></div>
+
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <div>
+            <h3 class="text-xs font-semibold text-base-content/70 mb-1">Strategy</h3>
+            {% for key, value in strategy_params.items() %}
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ key.replace('_', ' ').title() }}</span>
+              <span class="font-mono">{{ value }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          <div>
+            <h3 class="text-xs font-semibold text-base-content/70 mb-1">Risk</h3>
+            {% for key, value in risk_params.items() %}
+            {% if key != 'kill_switch' %}
+            <div class="flex justify-between">
+              <span class="text-base-content/60">{{ key.replace('_', ' ').title() }}</span>
+              <span class="font-mono">
+                {% if value is sameas true %}Yes{% elif value is sameas false %}No{% else %}{{ value }}{% endif %}
+              </span>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="divider my-2"></div>
+
+        <div class="flex flex-col gap-2">
           <form hx-post="/htmx/bot/kill-switch" hx-target="#bot-content" hx-swap="innerHTML">
             {% if kill_switch_active %}
             <button type="submit" class="btn btn-success btn-sm w-full">Resume Trading</button>
@@ -66,44 +95,6 @@
           <span class="text-sm">Waiting for first cycle...</span>
         </div>
         {% endif %}
-      </div>
-    </div>
-
-    <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
-      <div class="card-body">
-        <h2 class="card-title text-lg">Configuration</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <h3 class="text-sm font-semibold mb-2">Strategy Parameters</h3>
-            <table class="table table-xs">
-              <tbody>
-                {% for key, value in strategy_params.items() %}
-                <tr>
-                  <td class="text-base-content/60">{{ key.replace('_', ' ').title() }}</td>
-                  <td class="font-mono">{{ value }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div>
-            <h3 class="text-sm font-semibold mb-2">Risk Settings</h3>
-            <table class="table table-xs">
-              <tbody>
-                {% for key, value in risk_params.items() %}
-                {% if key != 'kill_switch' %}
-                <tr>
-                  <td class="text-base-content/60">{{ key.replace('_', ' ').title() }}</td>
-                  <td class="font-mono">
-                    {% if value is sameas true %}Yes{% elif value is sameas false %}No{% else %}{{ value }}{% endif %}
-                  </td>
-                </tr>
-                {% endif %}
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
     </div>
   </div>
