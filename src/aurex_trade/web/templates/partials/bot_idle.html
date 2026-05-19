@@ -3,61 +3,226 @@
     <div class="card bg-base-100 shadow-md">
       <div class="card-body">
         <h2 class="card-title text-lg">Start Bot</h2>
-        <form hx-post="/htmx/bot/start" hx-target="#bot-content" hx-swap="innerHTML">
-          <div class="form-control mb-3">
-            <label class="label"><span class="label-text">Strategy</span></label>
-            <select name="strategy_name" id="bot-strategy-select" class="select select-bordered w-full" onchange="updateBotParams()">
+        <p id="bot-strategy-desc" class="text-sm text-base-content/60 italic mb-2" style="display:none;"></p>
+
+        <form hx-post="/htmx/bot/start" hx-target="#bot-content" hx-swap="innerHTML" novalidate>
+          <div class="form-control mb-2">
+            <label class="label label-text tooltip tooltip-top" data-tip="Which trading strategy the bot will use">Strategy</label>
+            <select name="strategy_name" id="bot-strategy-select" class="select select-bordered select-sm w-full" onchange="updateBotParams(); updateBotDescription();">
               <option value="" disabled selected>Select strategy...</option>
             </select>
           </div>
-          <div id="bot-strategy-params" class="mb-3"></div>
-          <div class="form-control mb-3">
-            <label class="label"><span class="label-text">Symbol</span></label>
-            <input type="text" name="symbol" value="XAU_USD" class="input input-bordered w-full" />
+
+          <div id="bot-strategy-params" class="grid grid-cols-2 gap-2"></div>
+          <button type="button" class="btn btn-outline btn-xs mt-1" onclick="resetBotStrategyParams()">Reset to defaults</button>
+
+          <div class="form-control mb-2 mt-3">
+            <label class="label label-text tooltip tooltip-top" data-tip="Instrument to trade (e.g. XAU_USD = Gold vs US Dollar)">Symbol</label>
+            <input type="text" name="symbol" value="XAU_USD" class="input input-bordered input-sm w-full">
           </div>
-          <div class="form-control mb-3">
-            <label class="label"><span class="label-text">Interval (seconds)</span></label>
-            <input type="number" name="interval_seconds" value="60" min="5" max="3600" class="input input-bordered w-full" />
+
+          <div class="form-control mb-2">
+            <label class="label label-text tooltip tooltip-top" data-tip="How often the bot checks for signals (seconds between cycles)">Interval (seconds)</label>
+            <input type="number" name="interval_seconds" value="60" min="5" max="3600" class="input input-bordered input-sm w-full">
           </div>
-          <button type="submit" class="btn btn-success w-full">Start Paper Trading</button>
+
+          <div class="collapse collapse-arrow bg-base-200 mt-3">
+            <input type="checkbox">
+            <div class="collapse-title text-sm font-medium py-2 min-h-0">Risk Settings</div>
+            <div class="collapse-content">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="form-control">
+                  <label class="label label-text tooltip tooltip-top" data-tip="Largest trade size allowed (units)">Max Position</label>
+                  <input type="number" name="risk_max_position_size" value="10" min="1" class="input input-bordered input-sm">
+                </div>
+                <div class="form-control">
+                  <label class="label label-text tooltip tooltip-top" data-tip="Stop trading if daily losses hit this (USD)">Max Daily Loss</label>
+                  <input type="number" name="risk_max_daily_loss" value="500" min="1" class="input input-bordered input-sm">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="form-control">
+                  <label class="label label-text tooltip tooltip-top" data-tip="Fraction of balance risked per trade (0.02 = 2%)">Risk/Trade</label>
+                  <input type="number" name="risk_risk_per_trade" value="0.02" step="0.01" min="0.001" max="1" class="input input-bordered input-sm">
+                </div>
+                <div class="form-control">
+                  <label class="label label-text tooltip tooltip-top" data-tip="Stop if balance drops this far from peak (0.20 = 20%)">Max Drawdown %</label>
+                  <input type="number" name="risk_max_drawdown_pct" value="0.20" step="0.01" min="0.01" max="1" class="input input-bordered input-sm">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="form-control">
+                  <label class="label label-text tooltip tooltip-top" data-tip="Maximum trades allowed per day">Max Trades/Day</label>
+                  <input type="number" name="risk_max_trades_per_day" value="10" min="1" class="input input-bordered input-sm">
+                </div>
+                <div class="form-control">
+                  <label class="label label-text tooltip tooltip-top" data-tip="Pause after this many consecutive losses">Max Consec. Losses</label>
+                  <input type="number" name="risk_max_consecutive_losses" value="5" min="1" class="input input-bordered input-sm">
+                </div>
+              </div>
+              <div class="form-control mt-2">
+                <label class="label cursor-pointer justify-start gap-2 tooltip tooltip-top" data-tip="Only allow trades that have a stop-loss exit price">
+                  <span class="label-text">Require Stop Loss</span>
+                  <input type="checkbox" id="bot-require-stop-loss-cb" checked class="toggle toggle-sm toggle-primary">
+                </label>
+                <input type="hidden" name="risk_require_stop_loss" id="bot-require-stop-loss-val" value="true">
+              </div>
+              <div class="form-control">
+                <label class="label cursor-pointer justify-start gap-2 tooltip tooltip-top" data-tip="Emergency stop — prevents all new trades immediately">
+                  <span class="label-text">Kill Switch</span>
+                  <input type="checkbox" id="bot-kill-switch-cb" class="toggle toggle-sm toggle-error">
+                </label>
+                <input type="hidden" name="risk_kill_switch" id="bot-kill-switch-val" value="false">
+              </div>
+              <button type="button" class="btn btn-outline btn-xs mt-2" onclick="resetBotRiskDefaults()">Reset to defaults</button>
+            </div>
+          </div>
+
+          <div class="form-control mt-4">
+            <button type="submit" class="btn btn-success btn-sm w-full">Start Paper Trading</button>
+          </div>
         </form>
       </div>
     </div>
+
     <div class="card bg-base-100 shadow-md">
       <div class="card-body">
         <h2 class="card-title text-lg">Status</h2>
         <div class="badge badge-ghost">Idle</div>
-        <p class="text-sm text-base-content/60 mt-2">Bot is not running. Configure and start above.</p>
+        <p class="text-sm text-base-content/60 mt-2">Bot is not running. Configure and start to begin paper trading.</p>
       </div>
     </div>
   </div>
 </div>
+
 <script>
-  const botStrategies = {{ strategies_json | safe }};
-  function updateBotParams() {
-    const select = document.getElementById('bot-strategy-select');
-    const container = document.getElementById('bot-strategy-params');
-    const name = select.value;
-    const meta = botStrategies[name];
-    if (!meta) { container.innerHTML = ''; return; }
-    container.innerHTML = meta.params.map(p =>
-      `<div class="form-control mb-2">
-        <label class="label"><span class="label-text">${p.label}</span></label>
-        <input type="number" name="param_${p.key}" value="${p.default}"
-               min="${p.min_value}" max="${p.max_value}"
-               class="input input-bordered w-full input-sm"
-               title="${p.tooltip}" />
-      </div>`
-    ).join('');
+const botStrategies = {{ strategies_json | safe }};
+
+const BOT_RISK_DEFAULTS = {
+  max_position_size: 10,
+  max_daily_loss: 500,
+  max_trades_per_day: 10,
+  risk_per_trade: 0.02,
+  max_drawdown_pct: 0.20,
+  max_consecutive_losses: 5,
+  kill_switch: false,
+  require_stop_loss: true
+};
+
+function updateBotParams() {
+  var select = document.getElementById('bot-strategy-select');
+  var container = document.getElementById('bot-strategy-params');
+  var name = select.value;
+  var meta = botStrategies[name];
+  if (!meta) { container.innerHTML = ''; return; }
+  container.innerHTML = meta.params.map(function(p) {
+    var step = Number.isInteger(p.default) ? '1' : '0.1';
+    return '<div class="form-control">' +
+      '<label class="label label-text tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + '</label>' +
+      '<input type="number" name="param_' + p.key + '" value="' + p.default +
+      '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value +
+      '" class="input input-bordered input-sm">' +
+      '</div>';
+  }).join('');
+}
+
+function updateBotDescription() {
+  var select = document.getElementById('bot-strategy-select');
+  var desc = document.getElementById('bot-strategy-desc');
+  var meta = botStrategies[select.value];
+  if (meta) {
+    desc.textContent = meta.description;
+    desc.style.display = '';
+  } else {
+    desc.style.display = 'none';
   }
-  // Populate strategy dropdown
-  (function() {
-    const select = document.getElementById('bot-strategy-select');
-    for (const [key, meta] of Object.entries(botStrategies)) {
-      const opt = document.createElement('option');
-      opt.value = key;
-      opt.textContent = meta.display_name;
-      select.appendChild(opt);
-    }
-  })();
+}
+
+function resetBotStrategyParams() {
+  var select = document.getElementById('bot-strategy-select');
+  if (select.value) updateBotParams();
+}
+
+var RISK_FIELD_MAP = {
+  max_position_size: 'risk_max_position_size',
+  max_daily_loss: 'risk_max_daily_loss',
+  max_trades_per_day: 'risk_max_trades_per_day',
+  risk_per_trade: 'risk_risk_per_trade',
+  max_drawdown_pct: 'risk_max_drawdown_pct',
+  max_consecutive_losses: 'risk_max_consecutive_losses'
+};
+
+function resetBotRiskDefaults() {
+  Object.entries(RISK_FIELD_MAP).forEach(function(entry) {
+    document.querySelector('[name="' + entry[1] + '"]').value = BOT_RISK_DEFAULTS[entry[0]];
+  });
+  document.getElementById('bot-require-stop-loss-cb').checked = BOT_RISK_DEFAULTS.require_stop_loss;
+  document.getElementById('bot-require-stop-loss-val').value = BOT_RISK_DEFAULTS.require_stop_loss ? 'true' : 'false';
+  document.getElementById('bot-kill-switch-cb').checked = BOT_RISK_DEFAULTS.kill_switch;
+  document.getElementById('bot-kill-switch-val').value = BOT_RISK_DEFAULTS.kill_switch ? 'true' : 'false';
+}
+
+function loadBotUserDefaults() {
+  fetch('/api/user-defaults/all')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var sel = document.getElementById('bot-strategy-select');
+      if (data.preferred_strategy && botStrategies[data.preferred_strategy]) {
+        sel.value = data.preferred_strategy;
+        updateBotParams();
+        updateBotDescription();
+      }
+      var currentStrategy = sel.value;
+      if (data.strategy_params && data.strategy_params[currentStrategy]) {
+        Object.entries(data.strategy_params[currentStrategy]).forEach(function(entry) {
+          var input = document.querySelector('[name="param_' + entry[0] + '"]');
+          if (input) input.value = entry[1];
+        });
+      }
+      if (data.risk_settings) {
+        // API uses "max_position"; bot factory uses "max_position_size"
+        var apiToField = {
+          max_position: 'risk_max_position_size',
+          max_daily_loss: 'risk_max_daily_loss',
+          max_trades_per_day: 'risk_max_trades_per_day',
+          risk_per_trade: 'risk_risk_per_trade',
+          max_drawdown_pct: 'risk_max_drawdown_pct',
+          max_consecutive_losses: 'risk_max_consecutive_losses'
+        };
+        Object.entries(apiToField).forEach(function(entry) {
+          var val = data.risk_settings[entry[0]];
+          if (val !== undefined) {
+            var input = document.querySelector('[name="' + entry[1] + '"]');
+            if (input) input.value = val;
+          }
+        });
+        if (data.risk_settings.require_stop_loss !== undefined) {
+          var checked = !!data.risk_settings.require_stop_loss;
+          document.getElementById('bot-require-stop-loss-cb').checked = checked;
+          document.getElementById('bot-require-stop-loss-val').value = checked ? 'true' : 'false';
+        }
+      }
+    })
+    .catch(function() { /* silently ignore — defaults remain */ });
+}
+
+// Toggle event listeners
+document.getElementById('bot-require-stop-loss-cb').addEventListener('change', function() {
+  document.getElementById('bot-require-stop-loss-val').value = this.checked ? 'true' : 'false';
+});
+document.getElementById('bot-kill-switch-cb').addEventListener('change', function() {
+  document.getElementById('bot-kill-switch-val').value = this.checked ? 'true' : 'false';
+});
+
+// Initialize: populate dropdown and load defaults
+(function() {
+  var select = document.getElementById('bot-strategy-select');
+  for (var key of Object.keys(botStrategies)) {
+    var opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = botStrategies[key].display_name;
+    select.appendChild(opt);
+  }
+  loadBotUserDefaults();
+})();
 </script>
