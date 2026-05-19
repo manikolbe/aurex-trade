@@ -4,6 +4,8 @@ Depends ONLY on port interfaces and domain types. Never imports adapters.
 """
 
 import time
+from datetime import UTC, datetime
+from typing import TypedDict
 
 import structlog
 
@@ -16,6 +18,19 @@ from aurex_trade.ports.market_data import MarketDataPort
 from aurex_trade.ports.repository import RepositoryPort
 
 log = structlog.get_logger()
+
+
+class EngineMetrics(TypedDict):
+    """Snapshot of engine state, safe to read from any thread (GIL-protected)."""
+
+    cycle_count: int
+    started_at: datetime | None
+    running: bool
+    session_signals: int
+    session_trades: int
+    session_rejections: int
+    peak_equity: float
+    uptime_seconds: float | None
 
 
 class TradingEngine:
@@ -60,6 +75,9 @@ class TradingEngine:
         # Account state tracking for risk engine
         self._peak_equity: float = 0.0
         self._trade_pnls: list[float] = []
+        # Observability (read by web layer via get_metrics())
+        self._cycle_count: int = 0
+        self._started_at: datetime | None = None
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -69,7 +87,8 @@ class TradingEngine:
                         None means run indefinitely.
         """
         self._running = True
-        cycle = 0
+        self._cycle_count = 0
+        self._started_at = datetime.now(UTC)
 
         # Initialize peak equity
         self._peak_equity = self._broker.equity
@@ -83,23 +102,23 @@ class TradingEngine:
         )
 
         while self._running:
-            if max_cycles is not None and cycle >= max_cycles:
-                log.info("max_cycles_reached", cycles=cycle)
+            if max_cycles is not None and self._cycle_count >= max_cycles:
+                log.info("max_cycles_reached", cycles=self._cycle_count)
                 break
 
             try:
                 self._run_cycle()
             except Exception:
-                log.exception("cycle_error", cycle=cycle)
+                log.exception("cycle_error", cycle=self._cycle_count)
 
-            cycle += 1
+            self._cycle_count += 1
 
             # Periodic session summary
-            if cycle > 0 and cycle % self._SUMMARY_INTERVAL == 0:
+            if self._cycle_count > 0 and self._cycle_count % self._SUMMARY_INTERVAL == 0:
                 position = self._broker.get_positions(self._symbol)
                 log.info(
                     "session_summary",
-                    cycles=cycle,
+                    cycles=self._cycle_count,
                     signals=self._session_signals,
                     trades=self._session_trades,
                     rejections=self._session_rejections,
@@ -110,15 +129,38 @@ class TradingEngine:
                     realized_pnl=position.realized_pnl if position else 0.0,
                 )
 
-            if self._running and (max_cycles is None or cycle < max_cycles):
+            if self._running and (max_cycles is None or self._cycle_count < max_cycles):
                 time.sleep(self._interval_seconds)
 
-        log.info("engine_stopped", total_cycles=cycle)
+        self._running = False
+        self._started_at = None
+        log.info("engine_stopped", total_cycles=self._cycle_count)
 
     def stop(self) -> None:
         """Signal the engine to stop after the current cycle."""
         self._running = False
         log.info("stop_requested")
+
+    def get_metrics(self) -> EngineMetrics:
+        """Return a snapshot of current engine metrics.
+
+        Safe to call from any thread — all accessed attributes are simple
+        types protected by the GIL for atomic reads.
+        """
+        uptime: float | None = None
+        if self._started_at is not None:
+            uptime = (datetime.now(UTC) - self._started_at).total_seconds()
+
+        return EngineMetrics(
+            cycle_count=self._cycle_count,
+            started_at=self._started_at,
+            running=self._running,
+            session_signals=self._session_signals,
+            session_trades=self._session_trades,
+            session_rejections=self._session_rejections,
+            peak_equity=self._peak_equity,
+            uptime_seconds=uptime,
+        )
 
     def _run_cycle(self) -> None:
         """Execute one complete trading cycle."""
