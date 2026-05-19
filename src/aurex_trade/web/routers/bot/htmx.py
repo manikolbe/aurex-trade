@@ -126,6 +126,7 @@ async def htmx_start_bot(
             "strategy_name": body.strategy_name,
             "started_at": session.started_at,
             "metrics": None,
+            "kill_switch_active": False,
         },
     )
 
@@ -176,6 +177,41 @@ def htmx_poll_status(
             "strategy_name": session.strategy_name,
             "started_at": session.started_at,
             "metrics": metrics,
+            "kill_switch_active": session.engine.kill_switch,
+        },
+    )
+
+
+@router.post("/kill-switch", response_class=HTMLResponse)
+@limiter.limit(ratelimit_config.bot_control)
+def htmx_toggle_kill_switch(
+    request: Request,
+    user: User = Depends(get_current_user),
+    session_manager: BotSessionManager = Depends(get_bot_session_manager),
+) -> HTMLResponse:
+    """Toggle the kill switch on a running bot."""
+    templates = _get_templates(request)
+    session = session_manager.get(user.id)
+
+    if session is None:
+        return templates.TemplateResponse(
+            request, "partials/bot_error.html", {"error": "No bot is running."}
+        )
+
+    new_state = not session.engine.kill_switch
+    session.engine.kill_switch = new_state
+    logger.info("htmx.bot.kill_switch_toggled", user_id=user.id, active=new_state)
+
+    metrics = session.engine.get_metrics()
+    return templates.TemplateResponse(
+        request,
+        "partials/bot_running.html",
+        {
+            "symbol": session.symbol,
+            "strategy_name": session.strategy_name,
+            "started_at": session.started_at,
+            "metrics": metrics,
+            "kill_switch_active": new_state,
         },
     )
 

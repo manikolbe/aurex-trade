@@ -10,10 +10,26 @@
         {% if started_at %}
         <p class="text-sm text-base-content/60">Started: {{ started_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
         {% endif %}
-        <form hx-post="/htmx/bot/stop" hx-target="#bot-content" hx-swap="innerHTML" class="mt-3">
-          <button type="submit" class="btn btn-error btn-sm w-full"
-                  hx-confirm="Stop the trading bot?">Stop Bot</button>
-        </form>
+
+        {% if kill_switch_active %}
+        <div class="alert alert-warning py-2 px-3 mt-2">
+          <span class="text-sm">Paused — still monitoring, no new trades</span>
+        </div>
+        {% endif %}
+
+        <div class="flex flex-col gap-2 mt-3">
+          <form hx-post="/htmx/bot/kill-switch" hx-target="#bot-content" hx-swap="innerHTML">
+            {% if kill_switch_active %}
+            <button type="submit" class="btn btn-success btn-sm w-full">Resume Trading</button>
+            {% else %}
+            <button type="submit" class="btn btn-warning btn-sm w-full">Pause Trading</button>
+            {% endif %}
+          </form>
+          <form hx-post="/htmx/bot/stop" hx-target="#bot-content" hx-swap="innerHTML">
+            <button type="submit" class="btn btn-error btn-sm w-full"
+                    hx-confirm="Stop the trading bot?">Stop Bot</button>
+          </form>
+        </div>
       </div>
     </div>
 

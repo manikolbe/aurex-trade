@@ -79,13 +79,6 @@
                 </label>
                 <input type="hidden" name="risk_require_stop_loss" id="bot-require-stop-loss-val" value="true">
               </div>
-              <div class="form-control">
-                <label class="label cursor-pointer justify-start gap-2 tooltip tooltip-top" data-tip="Emergency stop — prevents all new trades immediately">
-                  <span class="label-text">Kill Switch</span>
-                  <input type="checkbox" id="bot-kill-switch-cb" class="toggle toggle-sm toggle-error">
-                </label>
-                <input type="hidden" name="risk_kill_switch" id="bot-kill-switch-val" value="false">
-              </div>
               <button type="button" class="btn btn-outline btn-xs mt-2" onclick="resetBotRiskDefaults()">Reset to defaults</button>
             </div>
           </div>
@@ -117,7 +110,6 @@ const BOT_RISK_DEFAULTS = {
   risk_per_trade: 0.02,
   max_drawdown_pct: 0.20,
   max_consecutive_losses: 5,
-  kill_switch: false,
   require_stop_loss: true
 };
 
@@ -170,8 +162,6 @@ function resetBotRiskDefaults() {
   });
   document.getElementById('bot-require-stop-loss-cb').checked = BOT_RISK_DEFAULTS.require_stop_loss;
   document.getElementById('bot-require-stop-loss-val').value = BOT_RISK_DEFAULTS.require_stop_loss ? 'true' : 'false';
-  document.getElementById('bot-kill-switch-cb').checked = BOT_RISK_DEFAULTS.kill_switch;
-  document.getElementById('bot-kill-switch-val').value = BOT_RISK_DEFAULTS.kill_switch ? 'true' : 'false';
 }
 
 function loadBotUserDefaults() {
@@ -221,9 +211,6 @@ function loadBotUserDefaults() {
 // Toggle event listeners
 document.getElementById('bot-require-stop-loss-cb').addEventListener('change', function() {
   document.getElementById('bot-require-stop-loss-val').value = this.checked ? 'true' : 'false';
-});
-document.getElementById('bot-kill-switch-cb').addEventListener('change', function() {
-  document.getElementById('bot-kill-switch-val').value = this.checked ? 'true' : 'false';
 });
 
 // Initialize: populate dropdown and load defaults

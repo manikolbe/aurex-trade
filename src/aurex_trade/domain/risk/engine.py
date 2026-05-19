@@ -45,6 +45,16 @@ class RiskEngine:
         self._max_drawdown_pct = max_drawdown_pct
         self._max_consecutive_losses = max_consecutive_losses
 
+    @property
+    def kill_switch(self) -> bool:
+        """Whether the kill switch is currently active."""
+        return self._kill_switch
+
+    @kill_switch.setter
+    def kill_switch(self, value: bool) -> None:
+        self._kill_switch = value
+        log.info("kill_switch_toggled", active=value)
+
     def evaluate(
         self,
         signal: Signal,

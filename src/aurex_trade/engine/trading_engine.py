@@ -141,6 +141,15 @@ class TradingEngine:
         self._running = False
         log.info("stop_requested")
 
+    @property
+    def kill_switch(self) -> bool:
+        """Whether the kill switch is currently active."""
+        return self._risk_engine.kill_switch
+
+    @kill_switch.setter
+    def kill_switch(self, value: bool) -> None:
+        self._risk_engine.kill_switch = value
+
     def get_metrics(self) -> EngineMetrics:
         """Return a snapshot of current engine metrics.
 
