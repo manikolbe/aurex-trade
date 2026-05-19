@@ -148,8 +148,9 @@ class TradingEngine:
         types protected by the GIL for atomic reads.
         """
         uptime: float | None = None
-        if self._started_at is not None:
-            uptime = (datetime.now(UTC) - self._started_at).total_seconds()
+        started = self._started_at
+        if started is not None:
+            uptime = (datetime.now(UTC) - started).total_seconds()
 
         return EngineMetrics(
             cycle_count=self._cycle_count,
