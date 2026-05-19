@@ -5,6 +5,7 @@
   <div class="navbar-center hidden lg:flex">
     <ul class="menu menu-horizontal px-1 gap-1">
       <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Home</a></li>
+      <li><a href="/bot" class="{% if request.url.path == '/bot' %}active{% endif %}">Bot</a></li>
       <li>
         <details>
           <summary class="{% if request.url.path in ['/backtest', '/sweep', '/walk-forward'] %}active{% endif %}">Strategy Testing</summary>
@@ -15,7 +16,6 @@
           </ul>
         </details>
       </li>
-      <li><a href="/bot" class="{% if request.url.path == '/bot' %}active{% endif %}">Bot</a></li>
       <li><a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}">Settings</a></li>
       <li><a href="/guide/" class="{% if request.url.path.startswith('/guide') %}active{% endif %}">Guide</a></li>
     </ul>
