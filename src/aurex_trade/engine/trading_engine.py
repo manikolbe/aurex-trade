@@ -21,10 +21,11 @@ log = structlog.get_logger()
 
 
 class EquitySnapshot(TypedDict):
-    """A single equity reading at a point in time."""
+    """A single equity + price reading at a point in time."""
 
     timestamp: str
     equity: float
+    price: float
 
 
 class EngineMetrics(TypedDict):
@@ -209,15 +210,6 @@ class TradingEngine:
 
     def _run_cycle(self) -> None:
         """Execute one complete trading cycle."""
-        # Record equity snapshot for live chart
-        current_eq = self._broker.equity
-        self._equity_history.append(
-            EquitySnapshot(
-                timestamp=datetime.now(UTC).isoformat(),
-                equity=current_eq,
-            )
-        )
-
         # Step 1: Fetch market data
         bars = self._market_data.get_latest_bars(self._symbol, self._bar_count)
 
@@ -226,6 +218,15 @@ class TradingEngine:
             return
 
         latest_close = bars[-1].close
+
+        # Record equity + price snapshot for live charts
+        self._equity_history.append(
+            EquitySnapshot(
+                timestamp=datetime.now(UTC).isoformat(),
+                equity=self._broker.equity,
+                price=latest_close,
+            )
+        )
         log.info(
             "bars_fetched",
             symbol=self._symbol,

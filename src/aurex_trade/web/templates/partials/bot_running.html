@@ -129,32 +129,52 @@
           var d = new Date(p.timestamp);
           return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
         });
-        var values = data.map(function(p) { return p.equity; });
+        var equityValues = data.map(function(p) { return p.equity; });
+        var priceValues = data.map(function(p) { return p.price; });
 
         if (chart) {
           chart.data.labels = labels;
-          chart.data.datasets[0].data = values;
+          chart.data.datasets[0].data = equityValues;
+          chart.data.datasets[1].data = priceValues;
           chart.update('none');
         } else {
           chart = new Chart(canvas.getContext('2d'), {
             type: 'line',
             data: {
               labels: labels,
-              datasets: [{
-                label: 'Equity',
-                data: values,
-                borderColor: 'hsl(160, 60%, 50%)',
-                backgroundColor: 'hsla(160, 60%, 50%, 0.1)',
-                fill: true,
-                pointRadius: 0,
-                borderWidth: 1.5,
-                tension: 0.1
-              }]
+              datasets: [
+                {
+                  label: 'Equity ($)',
+                  data: equityValues,
+                  borderColor: 'hsl(160, 60%, 50%)',
+                  backgroundColor: 'hsla(160, 60%, 50%, 0.08)',
+                  fill: true,
+                  pointRadius: 0,
+                  borderWidth: 1.5,
+                  tension: 0.1,
+                  yAxisID: 'y'
+                },
+                {
+                  label: 'Price',
+                  data: priceValues,
+                  borderColor: 'hsl(35, 80%, 55%)',
+                  backgroundColor: 'transparent',
+                  fill: false,
+                  pointRadius: 0,
+                  borderWidth: 1.5,
+                  tension: 0.1,
+                  yAxisID: 'y1'
+                }
+              ]
             },
             options: {
               responsive: true,
               animation: false,
-              plugins: { legend: { display: false }, title: { display: false } },
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { display: true, labels: { color: '#a6adbb' } },
+                title: { display: false }
+              },
               scales: {
                 x: {
                   display: true,
@@ -164,9 +184,17 @@
                 },
                 y: {
                   display: true,
+                  position: 'left',
                   title: { display: true, text: 'Equity ($)', color: '#a6adbb' },
                   ticks: { color: '#a6adbb' },
                   grid: { color: 'rgba(166,173,187,0.1)' }
+                },
+                y1: {
+                  display: true,
+                  position: 'right',
+                  title: { display: true, text: 'Price', color: '#a6adbb' },
+                  ticks: { color: '#a6adbb' },
+                  grid: { drawOnChartArea: false }
                 }
               }
             }
