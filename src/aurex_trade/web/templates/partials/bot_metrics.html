@@ -1,23 +1,21 @@
-<div id="bot-metrics" hx-get="/htmx/bot/metrics/poll" hx-trigger="every 2s" hx-swap="outerHTML">
-  {% if metrics %}
-  <div class="stats stats-vertical shadow w-full">
-    <div class="stat py-2">
-      <div class="stat-title">Cycles</div>
-      <div class="stat-value text-lg">{{ metrics['cycle_count'] }}</div>
-    </div>
-    <div class="stat py-2">
-      <div class="stat-title">Signals / Trades / Rejections</div>
-      <div class="stat-value text-lg">{{ metrics['session_signals'] }} / {{ metrics['session_trades'] }} / {{ metrics['session_rejections'] }}</div>
-    </div>
-    <div class="stat py-2">
-      <div class="stat-title">Peak Equity</div>
-      <div class="stat-value text-lg">${{ "%.2f" | format(metrics['peak_equity']) }}</div>
-    </div>
-    <div class="stat py-2">
-      <div class="stat-title">Uptime</div>
-      {% set _up = (metrics['uptime_seconds'] or 0)|int %}
-      <div class="stat-value text-lg">{{ _up // 3600 }}h {{ (_up % 3600) // 60 }}m {{ _up % 60 }}s</div>
-    </div>
+{% if metrics %}
+<div class="stats stats-vertical shadow w-full">
+  <div class="stat py-2">
+    <div class="stat-title">Balance</div>
+    <div class="stat-value text-lg">${{ "%.2f" | format(metrics['current_equity']) }}</div>
   </div>
-  {% endif %}
+  <div class="stat py-2">
+    <div class="stat-title">Cycles</div>
+    <div class="stat-value text-lg">{{ metrics['cycle_count'] }}</div>
+  </div>
+  <div class="stat py-2">
+    <div class="stat-title">Signals / Trades / Rejections</div>
+    <div class="stat-value text-lg">{{ metrics['session_signals'] }} / {{ metrics['session_trades'] }} / {{ metrics['session_rejections'] }}</div>
+  </div>
+  <div class="stat py-2">
+    <div class="stat-title">Uptime</div>
+    {% set _up = (metrics['uptime_seconds'] or 0)|int %}
+    <div class="stat-value text-lg">{{ _up // 3600 }}h {{ (_up % 3600) // 60 }}m {{ _up % 60 }}s</div>
+  </div>
 </div>
+{% endif %}

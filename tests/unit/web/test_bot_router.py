@@ -83,6 +83,7 @@ class TestBotStart:
             "session_signals": 0,
             "session_trades": 0,
             "session_rejections": 0,
+            "current_equity": 10000.0,
             "peak_equity": 10000.0,
             "uptime_seconds": 0.0,
         }
@@ -153,6 +154,7 @@ class TestBotMetrics:
             "session_signals": 2,
             "session_trades": 1,
             "session_rejections": 1,
+            "current_equity": 10500.0,
             "peak_equity": 10500.0,
             "uptime_seconds": 300.0,
         }

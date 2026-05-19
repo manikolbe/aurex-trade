@@ -36,6 +36,7 @@ class EngineMetrics(TypedDict):
     session_signals: int
     session_trades: int
     session_rejections: int
+    current_equity: float
     peak_equity: float
     uptime_seconds: float | None
 
@@ -181,6 +182,7 @@ class TradingEngine:
             session_signals=self._session_signals,
             session_trades=self._session_trades,
             session_rejections=self._session_rejections,
+            current_equity=self._broker.equity,
             peak_equity=self._peak_equity,
             uptime_seconds=uptime,
         )

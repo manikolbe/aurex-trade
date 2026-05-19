@@ -151,6 +151,24 @@ def htmx_stop_bot(
     )
 
 
+@router.get("/state-check", response_class=HTMLResponse)
+def htmx_state_check(
+    request: Request,
+    user: User = Depends(get_current_user),
+    session_manager: BotSessionManager = Depends(get_bot_session_manager),
+) -> HTMLResponse:
+    """Lightweight check — returns idle partial if bot stopped, empty if still running."""
+    templates = _get_templates(request)
+    session = session_manager.get(user.id)
+
+    if session is None or not session.engine.get_metrics()["running"]:
+        return templates.TemplateResponse(
+            request, "partials/bot_idle.html", {"strategies_json": _get_strategies_json()}
+        )
+
+    return HTMLResponse("")
+
+
 @router.get("/status/poll", response_class=HTMLResponse)
 def htmx_poll_status(
     request: Request,
