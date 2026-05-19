@@ -109,5 +109,67 @@
         {% endif %}
       </div>
     </div>
+
+    <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
+      <div class="card-body">
+        {% if equity_history and equity_history|length > 1 %}
+        <canvas id="bot-equity-chart" height="150"></canvas>
+        <script>
+        (function() {
+          var data = {{ equity_history | tojson }};
+          var labels = data.map(function(p) {
+            var d = new Date(p.timestamp);
+            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+          });
+          var values = data.map(function(p) { return p.equity; });
+
+          var existing = Chart.getChart('bot-equity-chart');
+          if (existing) existing.destroy();
+
+          var ctx = document.getElementById('bot-equity-chart').getContext('2d');
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'Equity',
+                data: values,
+                borderColor: 'hsl(160, 60%, 50%)',
+                backgroundColor: 'hsla(160, 60%, 50%, 0.1)',
+                fill: true,
+                pointRadius: 0,
+                borderWidth: 1.5,
+                tension: 0.1
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Equity Curve', color: '#a6adbb' }
+              },
+              scales: {
+                x: {
+                  display: true,
+                  title: { display: true, text: 'Time', color: '#a6adbb' },
+                  ticks: { color: '#a6adbb', maxTicksLimit: 8 },
+                  grid: { color: 'rgba(166,173,187,0.1)' }
+                },
+                y: {
+                  display: true,
+                  title: { display: true, text: 'Equity ($)', color: '#a6adbb' },
+                  ticks: { color: '#a6adbb' },
+                  grid: { color: 'rgba(166,173,187,0.1)' }
+                }
+              }
+            }
+          });
+        })();
+        </script>
+        {% else %}
+        <p class="text-sm text-base-content/60 text-center py-4">Equity chart will appear after a few cycles...</p>
+        {% endif %}
+      </div>
+    </div>
   </div>
 </div>

@@ -20,6 +20,13 @@ from aurex_trade.ports.repository import RepositoryPort
 log = structlog.get_logger()
 
 
+class EquitySnapshot(TypedDict):
+    """A single equity reading at a point in time."""
+
+    timestamp: str
+    equity: float
+
+
 class EngineMetrics(TypedDict):
     """Snapshot of engine state, safe to read from any thread (GIL-protected)."""
 
@@ -78,6 +85,8 @@ class TradingEngine:
         # Observability (read by web layer via get_metrics())
         self._cycle_count: int = 0
         self._started_at: datetime | None = None
+        # Equity history for live chart
+        self._equity_history: list[EquitySnapshot] = []
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -150,6 +159,10 @@ class TradingEngine:
     def kill_switch(self, value: bool) -> None:
         self._risk_engine.kill_switch = value
 
+    def get_equity_history(self) -> list[EquitySnapshot]:
+        """Return the equity history for charting. Thread-safe (GIL)."""
+        return list(self._equity_history)
+
     def get_metrics(self) -> EngineMetrics:
         """Return a snapshot of current engine metrics.
 
@@ -174,6 +187,15 @@ class TradingEngine:
 
     def _run_cycle(self) -> None:
         """Execute one complete trading cycle."""
+        # Record equity snapshot for live chart
+        current_eq = self._broker.equity
+        self._equity_history.append(
+            EquitySnapshot(
+                timestamp=datetime.now(UTC).isoformat(),
+                equity=current_eq,
+            )
+        )
+
         # Step 1: Fetch market data
         bars = self._market_data.get_latest_bars(self._symbol, self._bar_count)
 

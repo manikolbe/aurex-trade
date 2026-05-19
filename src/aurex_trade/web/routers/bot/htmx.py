@@ -130,6 +130,7 @@ async def htmx_start_bot(
             "granularity": session.granularity,
             "strategy_params": session.strategy_params,
             "risk_params": session.risk_params,
+            "equity_history": [],
         },
     )
 
@@ -184,6 +185,7 @@ def htmx_poll_status(
             "granularity": session.granularity,
             "strategy_params": session.strategy_params,
             "risk_params": session.risk_params,
+            "equity_history": session.engine.get_equity_history(),
         },
     )
 
@@ -221,6 +223,7 @@ def htmx_toggle_kill_switch(
             "granularity": session.granularity,
             "strategy_params": session.strategy_params,
             "risk_params": session.risk_params,
+            "equity_history": session.engine.get_equity_history(),
         },
     )
 
@@ -241,4 +244,23 @@ def htmx_poll_metrics(
     metrics = session.engine.get_metrics()
     return templates.TemplateResponse(
         request, "partials/bot_metrics.html", {"metrics": metrics}
+    )
+
+
+@router.get("/equity/poll", response_class=HTMLResponse)
+def htmx_poll_equity(
+    request: Request,
+    user: User = Depends(get_current_user),
+    session_manager: BotSessionManager = Depends(get_bot_session_manager),
+) -> HTMLResponse:
+    """Poll equity history for live chart rendering."""
+    templates = _get_templates(request)
+    session = session_manager.get(user.id)
+
+    if session is None:
+        return HTMLResponse("")
+
+    history = session.engine.get_equity_history()
+    return templates.TemplateResponse(
+        request, "partials/bot_equity_chart.html", {"equity_history": history}
     )
