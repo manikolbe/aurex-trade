@@ -22,6 +22,18 @@
           </div>
 
           <div class="form-control mb-2">
+            <label class="label label-text tooltip tooltip-top" data-tip="Time period each price bar covers (e.g. M1 = 1 minute, M5 = 5 minutes, H1 = 1 hour)">Granularity</label>
+            <select name="granularity" class="select select-bordered select-sm w-full">
+              <option value="M1" selected>M1 (1 minute)</option>
+              <option value="M5">M5 (5 minutes)</option>
+              <option value="M15">M15 (15 minutes)</option>
+              <option value="H1">H1 (1 hour)</option>
+              <option value="H4">H4 (4 hours)</option>
+              <option value="D">D (1 day)</option>
+            </select>
+          </div>
+
+          <div class="form-control mb-2">
             <label class="label label-text tooltip tooltip-top" data-tip="How often the bot checks for signals (seconds between cycles)">Interval (seconds)</label>
             <input type="number" name="interval_seconds" value="60" min="5" max="3600" class="input input-bordered input-sm w-full">
           </div>

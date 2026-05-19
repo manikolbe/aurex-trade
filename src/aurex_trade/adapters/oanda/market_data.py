@@ -17,16 +17,19 @@ class OANDAMarketDataAdapter:
     Only returns complete (closed) candles — the in-progress bar is excluded.
     """
 
-    def __init__(self, connection: OANDAConnection, account_id: str) -> None:
+    def __init__(
+        self, connection: OANDAConnection, account_id: str, granularity: str = "M1"
+    ) -> None:
         self._connection = connection
         self._account_id = account_id
+        self._granularity = granularity
 
     def get_latest_bars(self, symbol: str, count: int) -> list[BarData]:
-        """Fetch the most recent completed 1-minute bars for a symbol."""
+        """Fetch the most recent completed bars for a symbol."""
         data = self._connection.get(
             f"/v3/accounts/{self._account_id}/instruments/{symbol}/candles",
             params={
-                "granularity": "M1",
+                "granularity": self._granularity,
                 "count": str(count),
                 "price": "B",  # Bid prices
             },

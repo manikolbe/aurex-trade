@@ -56,6 +56,7 @@ def start_bot_session(
         symbol=body.symbol,
         interval_seconds=body.interval_seconds,
         credential_store=credential_store,
+        granularity=body.granularity,
     )
 
     try:

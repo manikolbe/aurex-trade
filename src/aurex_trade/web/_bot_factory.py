@@ -33,6 +33,7 @@ def create_bot_engine(
     interval_seconds: int,
     credential_store: CredentialStorePort,
     *,
+    granularity: str = "M1",
     db_path: Path = _DB_PATH,
 ) -> tuple[TradingEngine, OANDAConnection]:
     """Create a TradingEngine wired to OANDA practice accounts.
@@ -92,7 +93,7 @@ def create_bot_engine(
         )
 
         broker = OANDABrokerAdapter(connection, creds.account_id)
-        market_data = OANDAMarketDataAdapter(connection, creds.account_id)
+        market_data = OANDAMarketDataAdapter(connection, creds.account_id, granularity)
         repository = SQLiteRepository(db_path)
 
         engine = TradingEngine(
@@ -115,6 +116,7 @@ def create_bot_engine(
         user_id=user_id,
         strategy=strategy_name,
         symbol=symbol,
+        granularity=granularity,
         interval=interval_seconds,
     )
 

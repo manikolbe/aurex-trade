@@ -100,3 +100,14 @@ class TestGetLatestBars:
             "/v3/accounts/101-001-123/instruments/XAU_USD/candles",
             params={"granularity": "M1", "count": "50", "price": "B"},
         )
+
+    def test_custom_granularity_passed_to_api(self) -> None:
+        adapter = OANDAMarketDataAdapter(
+            connection=self.conn, account_id="101-001-123", granularity="H1"
+        )
+        self.conn.get.return_value = _make_candles_response(count=1)
+        adapter.get_latest_bars("XAU_USD", 50)
+        self.conn.get.assert_called_once_with(
+            "/v3/accounts/101-001-123/instruments/XAU_USD/candles",
+            params={"granularity": "H1", "count": "50", "price": "B"},
+        )

@@ -330,7 +330,17 @@ class BotStartRequest(BaseModel):
     strategy_params: dict[str, int | float] = Field(default_factory=dict)
     risk_params: dict[str, int | float | bool] = Field(default_factory=dict)
     symbol: Symbol = "XAU_USD"
+    granularity: Granularity = "M1"
     interval_seconds: int = Field(default=60, ge=5, le=3600)
+
+    @field_validator("granularity")
+    @classmethod
+    def validate_granularity(cls, v: str) -> str:
+        """Validate granularity is a known OANDA value."""
+        if v not in _GRANULARITY_VALUES:
+            msg = f"Unknown granularity: {v}"
+            raise ValueError(msg)
+        return v
 
 
 class BotMetricsResponse(BaseModel):

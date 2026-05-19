@@ -51,6 +51,7 @@ async def _parse_start_form(request: Request) -> BotStartRequest:
 
     body["strategy_name"] = str(form.get("strategy_name", ""))
     body["symbol"] = str(form.get("symbol", "XAU_USD"))
+    body["granularity"] = str(form.get("granularity", "M1"))
 
     interval = str(form.get("interval_seconds", "60"))
     body["interval_seconds"] = int(interval) if interval else 60
