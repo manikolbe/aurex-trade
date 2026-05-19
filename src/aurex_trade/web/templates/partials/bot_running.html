@@ -4,8 +4,12 @@
       <div class="card-body">
         <h2 class="card-title text-lg">Controls</h2>
         <div class="flex items-center gap-3 mb-3">
+          {% if kill_switch_active %}
+          <div class="badge badge-warning">Paused</div>
+          {% else %}
           <div class="badge badge-success">Running</div>
-          <span class="text-sm">{{ strategy_name }} on {{ symbol }}</span>
+          {% endif %}
+          <span class="text-sm">{{ strategy_name }} on {{ symbol }} ({{ granularity }})</span>
         </div>
         {% if started_at %}
         <p class="text-sm text-base-content/60">Started: {{ started_at.strftime('%Y-%m-%d %H:%M UTC') }}</p>
@@ -62,6 +66,44 @@
           <span class="text-sm">Waiting for first cycle...</span>
         </div>
         {% endif %}
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
+      <div class="card-body">
+        <h2 class="card-title text-lg">Configuration</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3 class="text-sm font-semibold mb-2">Strategy Parameters</h3>
+            <table class="table table-xs">
+              <tbody>
+                {% for key, value in strategy_params.items() %}
+                <tr>
+                  <td class="text-base-content/60">{{ key.replace('_', ' ').title() }}</td>
+                  <td class="font-mono">{{ value }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold mb-2">Risk Settings</h3>
+            <table class="table table-xs">
+              <tbody>
+                {% for key, value in risk_params.items() %}
+                {% if key != 'kill_switch' %}
+                <tr>
+                  <td class="text-base-content/60">{{ key.replace('_', ' ').title() }}</td>
+                  <td class="font-mono">
+                    {% if value is sameas true %}Yes{% elif value is sameas false %}No{% else %}{{ value }}{% endif %}
+                  </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>

@@ -66,6 +66,9 @@ def start_bot_session(
             connection=connection,
             symbol=body.symbol,
             strategy_name=body.strategy_name,
+            granularity=body.granularity,
+            strategy_params=body.strategy_params,
+            risk_params=body.risk_params,
         )
     except BotAlreadyRunningError:
         connection.disconnect()

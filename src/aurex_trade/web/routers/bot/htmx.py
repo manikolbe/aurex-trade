@@ -127,6 +127,9 @@ async def htmx_start_bot(
             "started_at": session.started_at,
             "metrics": None,
             "kill_switch_active": False,
+            "granularity": session.granularity,
+            "strategy_params": session.strategy_params,
+            "risk_params": session.risk_params,
         },
     )
 
@@ -178,6 +181,9 @@ def htmx_poll_status(
             "started_at": session.started_at,
             "metrics": metrics,
             "kill_switch_active": session.engine.kill_switch,
+            "granularity": session.granularity,
+            "strategy_params": session.strategy_params,
+            "risk_params": session.risk_params,
         },
     )
 
@@ -212,6 +218,9 @@ def htmx_toggle_kill_switch(
             "started_at": session.started_at,
             "metrics": metrics,
             "kill_switch_active": new_state,
+            "granularity": session.granularity,
+            "strategy_params": session.strategy_params,
+            "risk_params": session.risk_params,
         },
     )
 

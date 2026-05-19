@@ -31,6 +31,7 @@ class TestBotStatusPoll:
             "peak_equity": 10000.0,
             "uptime_seconds": 60.0,
         }
+        engine.kill_switch = False
         connection = MagicMock()
         manager.start(
             user_id="test-user-id",
@@ -38,6 +39,9 @@ class TestBotStatusPoll:
             connection=connection,
             symbol="XAU_USD",
             strategy_name="sma_crossover",
+            granularity="M1",
+            strategy_params={"short_window": 10, "long_window": 30},
+            risk_params={"max_position_size": 10, "risk_per_trade": 0.02},
         )
         try:
             resp = client.get("/htmx/bot/status/poll")

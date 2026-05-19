@@ -36,6 +36,9 @@ class ActiveBotSession:
     started_at: datetime
     symbol: str
     strategy_name: str
+    granularity: str
+    strategy_params: dict[str, int | float]
+    risk_params: dict[str, int | float | bool]
 
 
 class BotSessionManager:
@@ -52,6 +55,9 @@ class BotSessionManager:
         connection: Disconnectable,
         symbol: str,
         strategy_name: str,
+        granularity: str = "M1",
+        strategy_params: dict[str, int | float] | None = None,
+        risk_params: dict[str, int | float | bool] | None = None,
     ) -> ActiveBotSession:
         """Register a new bot session. Raises BotAlreadyRunningError if one exists."""
         with self._lock:
@@ -64,6 +70,9 @@ class BotSessionManager:
                 started_at=datetime.now(UTC),
                 symbol=symbol,
                 strategy_name=strategy_name,
+                granularity=granularity,
+                strategy_params=strategy_params or {},
+                risk_params=risk_params or {},
             )
             self._sessions[user_id] = session
 
