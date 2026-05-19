@@ -265,20 +265,3 @@ def htmx_poll_metrics(
     )
 
 
-@router.get("/equity/poll", response_class=HTMLResponse)
-def htmx_poll_equity(
-    request: Request,
-    user: User = Depends(get_current_user),
-    session_manager: BotSessionManager = Depends(get_bot_session_manager),
-) -> HTMLResponse:
-    """Poll equity history for live chart rendering."""
-    templates = _get_templates(request)
-    session = session_manager.get(user.id)
-
-    if session is None:
-        return HTMLResponse("")
-
-    history = session.engine.get_equity_history()
-    return templates.TemplateResponse(
-        request, "partials/bot_equity_chart.html", {"equity_history": history}
-    )
