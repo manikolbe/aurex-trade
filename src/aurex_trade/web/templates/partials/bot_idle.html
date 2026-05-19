@@ -22,8 +22,8 @@
           </div>
 
           <div class="form-control mb-2">
-            <label class="label label-text tooltip tooltip-top" data-tip="Time period each price bar covers (e.g. M1 = 1 minute, M5 = 5 minutes, H1 = 1 hour)">Granularity</label>
-            <select name="granularity" class="select select-bordered select-sm w-full">
+            <label class="label label-text tooltip tooltip-top" data-tip="Time period each price bar covers. The bot checks once per bar period.">Granularity</label>
+            <select name="granularity" id="bot-granularity-select" class="select select-bordered select-sm w-full" onchange="updateBotInterval()">
               <option value="M1" selected>M1 (1 minute)</option>
               <option value="M5">M5 (5 minutes)</option>
               <option value="M15">M15 (15 minutes)</option>
@@ -31,12 +31,9 @@
               <option value="H4">H4 (4 hours)</option>
               <option value="D">D (1 day)</option>
             </select>
+            <span id="bot-interval-hint" class="text-xs text-base-content/50 mt-1">Checks every 60 seconds</span>
           </div>
-
-          <div class="form-control mb-2">
-            <label class="label label-text tooltip tooltip-top" data-tip="How often the bot checks for signals (seconds between cycles)">Interval (seconds)</label>
-            <input type="number" name="interval_seconds" value="60" min="5" max="3600" class="input input-bordered input-sm w-full">
-          </div>
+          <input type="hidden" name="interval_seconds" id="bot-interval-value" value="60">
 
           <div class="collapse collapse-arrow bg-base-200 mt-3">
             <input type="checkbox">
@@ -112,6 +109,22 @@ const BOT_RISK_DEFAULTS = {
   max_consecutive_losses: 5,
   require_stop_loss: true
 };
+
+var GRANULARITY_INTERVALS = {
+  M1: 60, M5: 300, M15: 900, H1: 3600, H4: 3600, D: 3600
+};
+
+function updateBotInterval() {
+  var gran = document.getElementById('bot-granularity-select').value;
+  var seconds = GRANULARITY_INTERVALS[gran] || 60;
+  document.getElementById('bot-interval-value').value = seconds;
+  var label = seconds >= 3600 ? (seconds / 3600) + ' hour' : (seconds / 60) + ' minute';
+  if (seconds > 60 && seconds < 3600) label = (seconds / 60) + ' minutes';
+  if (seconds === 60) label = '60 seconds';
+  if (seconds === 3600 && gran === 'H4') label = '1 hour (new bar every 4h)';
+  if (seconds === 3600 && gran === 'D') label = '1 hour (new bar daily)';
+  document.getElementById('bot-interval-hint').textContent = 'Checks every ' + label;
+}
 
 function updateBotParams() {
   var select = document.getElementById('bot-strategy-select');
