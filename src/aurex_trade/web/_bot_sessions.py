@@ -1,7 +1,5 @@
 """Per-user bot session manager — thread-safe, in-memory registry."""
 
-from __future__ import annotations
-
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
