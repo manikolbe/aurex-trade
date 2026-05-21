@@ -88,6 +88,7 @@ class TradingEngine:
         self._bar_count = bar_count
         self._fallback_position_size = fallback_position_size
         self._user_id = user_id
+        self._log = log.bind(user_id=user_id)
         self._running = False
         # Session stats for periodic summary
         self._session_signals = 0
@@ -118,7 +119,7 @@ class TradingEngine:
         # Initialize peak equity
         self._peak_equity = self._broker.equity
 
-        log.info(
+        self._log.info(
             "engine_started",
             symbol=self._symbol,
             strategy=self._strategy.name,
@@ -128,20 +129,20 @@ class TradingEngine:
 
         while self._running:
             if max_cycles is not None and self._cycle_count >= max_cycles:
-                log.info("max_cycles_reached", cycles=self._cycle_count)
+                self._log.info("max_cycles_reached", cycles=self._cycle_count)
                 break
 
             try:
                 self._run_cycle()
             except Exception:
-                log.exception("cycle_error", cycle=self._cycle_count)
+                self._log.exception("cycle_error", cycle=self._cycle_count)
 
             self._cycle_count += 1
 
             # Periodic session summary
             if self._cycle_count > 0 and self._cycle_count % self._SUMMARY_INTERVAL == 0:
                 position = self._broker.get_positions(self._symbol)
-                log.info(
+                self._log.info(
                     "session_summary",
                     cycles=self._cycle_count,
                     signals=self._session_signals,
@@ -159,12 +160,12 @@ class TradingEngine:
 
         self._running = False
         self._started_at = None
-        log.info("engine_stopped", total_cycles=self._cycle_count)
+        self._log.info("engine_stopped", total_cycles=self._cycle_count)
 
     def stop(self) -> None:
         """Signal the engine to stop after the current cycle."""
         self._running = False
-        log.info("stop_requested")
+        self._log.info("stop_requested")
 
     @property
     def kill_switch(self) -> bool:
@@ -229,7 +230,7 @@ class TradingEngine:
         bars = self._market_data.get_latest_bars(self._symbol, self._bar_count)
 
         if not bars:
-            log.warning("no_bars_returned", symbol=self._symbol)
+            self._log.warning("no_bars_returned", symbol=self._symbol)
             return
 
         latest_close = bars[-1].close
@@ -242,7 +243,7 @@ class TradingEngine:
                 price=latest_close,
             )
         )
-        log.info(
+        self._log.info(
             "bars_fetched",
             symbol=self._symbol,
             count=len(bars),
@@ -254,11 +255,11 @@ class TradingEngine:
         signal = self._strategy.generate(bars)
 
         if signal is None:
-            log.debug("no_signal", strategy=self._strategy.name)
+            self._log.debug("no_signal", strategy=self._strategy.name)
             return
 
         self._session_signals += 1
-        log.info(
+        self._log.info(
             "signal_generated",
             signal_type=signal.signal_type.value,
             strength=signal.strength,
@@ -284,7 +285,7 @@ class TradingEngine:
             equity=current_equity, peak_equity=self._peak_equity
         )
 
-        log.debug(
+        self._log.debug(
             "risk_eval_context",
             position_qty=position.quantity if position else 0.0,
             position_avg_cost=position.average_cost if position else 0.0,
@@ -301,7 +302,7 @@ class TradingEngine:
             recent_trade_pnls=self._trade_pnls,
         )
 
-        log.info(
+        self._log.info(
             "risk_decision",
             action=decision.action.value,
             reason=decision.reason,
@@ -335,7 +336,7 @@ class TradingEngine:
         trade = self._broker.place_order(order)
         self._session_trades += 1
         slippage = trade.price - latest_close
-        log.info(
+        self._log.info(
             "trade_executed",
             side=trade.side.value,
             quantity=trade.quantity,
@@ -373,7 +374,7 @@ class TradingEngine:
 
         if updated_position:
             self._repository.save_position(updated_position, user_id=self._user_id)
-            log.info(
+            self._log.info(
                 "position_updated",
                 quantity=updated_position.quantity,
                 avg_cost=updated_position.average_cost,
@@ -382,7 +383,7 @@ class TradingEngine:
             )
         elif prev_position and prev_position.quantity != 0.0:
             # Position was closed — log round-trip result
-            log.info(
+            self._log.info(
                 "position_closed",
                 symbol=self._symbol,
                 realized_pnl=prev_position.realized_pnl,
