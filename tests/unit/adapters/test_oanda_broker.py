@@ -65,7 +65,7 @@ class TestPlaceOrder:
 
         call_args = self.conn.post.call_args
         body = call_args[1]["json"]
-        assert body["order"]["units"] == "10.0"
+        assert body["order"]["units"] == "10"
 
     def test_sell_sends_negative_units(self) -> None:
         self.conn.post.return_value = _make_fill_response(price="2050.50", units="-10")
@@ -74,7 +74,7 @@ class TestPlaceOrder:
 
         call_args = self.conn.post.call_args
         body = call_args[1]["json"]
-        assert body["order"]["units"] == "-10.0"
+        assert body["order"]["units"] == "-10"
 
     def test_returns_trade_with_fill_price(self) -> None:
         self.conn.post.return_value = _make_fill_response(price="2050.50")

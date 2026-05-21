@@ -41,7 +41,12 @@ class OANDABrokerAdapter:
 
     def place_order(self, order: Order) -> Trade:
         """Place a market order and return the resulting Trade."""
-        units = order.quantity if order.side == OrderSide.BUY else -order.quantity
+        raw_units = order.quantity if order.side == OrderSide.BUY else -order.quantity
+        # OANDA requires integer units for most instruments (including XAU_USD)
+        units = int(raw_units)
+        if units == 0:
+            msg = f"Order quantity too small to trade: {order.quantity}"
+            raise ValueError(msg)
 
         body = {
             "order": {
