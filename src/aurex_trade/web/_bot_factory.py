@@ -104,7 +104,7 @@ def create_bot_engine(
             repository=repository,
             symbol=symbol,
             interval_seconds=interval_seconds,
-            bar_count=strategy.min_bars,
+            bar_count=max(50, strategy.min_bars),
             user_id=user_id,
         )
     except Exception:
