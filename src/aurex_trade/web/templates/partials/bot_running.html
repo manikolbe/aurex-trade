@@ -103,6 +103,21 @@
         </div>
       </div>
     </div>
+
+    <div id="bot-strategy-panel" class="card bg-base-100 shadow-md col-span-1 md:col-span-2" style="display:none;">
+      <div class="card-body">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div id="bot-grid-levels">
+            <h2 class="card-title text-lg mb-3">Grid Levels</h2>
+            <div id="bot-grid-content"></div>
+          </div>
+          <div id="bot-risk-summary">
+            <h2 class="card-title text-lg mb-3">Risk Summary</h2>
+            <div id="bot-risk-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Detect bot stop — if bot stops, this swaps the whole view to idle -->
@@ -299,5 +314,93 @@
 
   updateEquityChart();
   setInterval(updateEquityChart, 30000);
+})();
+</script>
+
+<script>
+(function() {
+  var panel = document.getElementById('bot-strategy-panel');
+  var gridContent = document.getElementById('bot-grid-content');
+  var riskContent = document.getElementById('bot-risk-content');
+
+  function renderGridLevels(state) {
+    if (!state || state.type !== 'grid') {
+      gridContent.innerHTML = '<p class="text-sm text-base-content/60">Waiting for grid initialization...</p>';
+      return;
+    }
+
+    var html = '<div class="text-sm text-base-content/60 mb-2">Anchor: <span class="font-mono font-semibold text-base-content">' + state.anchor_price.toFixed(2) + '</span></div>';
+    html += '<div class="text-sm text-base-content/60 mb-3">Triggered: <span class="font-mono font-semibold text-base-content">' + state.filled_count + '/' + state.max_levels + '</span></div>';
+    html += '<table class="table table-xs w-full"><thead><tr><th>Level</th><th>Direction</th><th>Status</th></tr></thead><tbody>';
+
+    var levels = state.levels;
+    var foundAnchor = false;
+    for (var i = 0; i < levels.length; i++) {
+      var lv = levels[i];
+
+      // Insert anchor separator when crossing from buy to sell
+      if (!foundAnchor && lv.direction === 'sell') {
+        foundAnchor = true;
+        html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="3">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
+      }
+
+      var statusIcon, statusClass;
+      if (lv.status === 'triggered') {
+        statusIcon = '●';
+        statusClass = lv.direction === 'buy' ? 'text-success' : 'text-error';
+      } else {
+        statusIcon = '○';
+        statusClass = 'text-base-content/40';
+      }
+
+      var dirClass = lv.direction === 'buy' ? 'text-success' : 'text-error';
+
+      html += '<tr>';
+      html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
+      html += '<td class="text-sm ' + dirClass + '">' + lv.direction.toUpperCase() + '</td>';
+      html += '<td class="' + statusClass + '">' + statusIcon + ' ' + (lv.status === 'triggered' ? 'Triggered' : 'Waiting') + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    gridContent.innerHTML = html;
+  }
+
+  function renderRiskSummary(risk) {
+    if (!risk) {
+      riskContent.innerHTML = '';
+      return;
+    }
+
+    var headroomClass = risk.headroom >= 0 ? 'text-success' : 'text-error';
+    var html = '<div class="grid grid-cols-1 gap-3">';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Units per trade</span><span class="font-mono">' + risk.units_per_trade + ' <span class="text-base-content/40">(max ' + risk.max_position_size + ')</span></span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Stop distance</span><span class="font-mono">' + risk.stop_distance + ' pts</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Worst case loss</span><span class="font-mono text-error">$' + risk.worst_case_loss.toLocaleString() + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Drawdown limit</span><span class="font-mono">$' + risk.drawdown_limit.toLocaleString() + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Headroom</span><span class="font-mono ' + headroomClass + '">$' + risk.headroom.toLocaleString() + '</span></div>';
+    html += '</div>';
+    riskContent.innerHTML = html;
+  }
+
+  function updateStrategyState() {
+    fetch('/api/bot/strategy-state')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) { panel.style.display = 'none'; return; }
+
+        var hasContent = data.strategy_state || data.risk_summary;
+        panel.style.display = hasContent ? '' : 'none';
+
+        if (data.strategy_state) {
+          renderGridLevels(data.strategy_state);
+        }
+        renderRiskSummary(data.risk_summary);
+      })
+      .catch(function() {});
+  }
+
+  updateStrategyState();
+  setInterval(updateStrategyState, 5000);
 })();
 </script>

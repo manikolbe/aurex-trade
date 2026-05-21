@@ -166,6 +166,32 @@ class CibyGridHedgingStrategy:
 
         return None
 
+    def get_display_state(self) -> dict[str, object] | None:
+        """Return strategy-specific state for UI display.
+
+        Returns None if the grid hasn't been initialized yet.
+        """
+        if self._anchor_price is None:
+            return None
+
+        levels: list[dict[str, object]] = []
+        for level in reversed(self._grid_levels):
+            direction = "buy" if level > self._anchor_price else "sell"
+            status = "triggered" if level in self._filled_levels else "waiting"
+            levels.append({
+                "price": level,
+                "direction": direction,
+                "status": status,
+            })
+
+        return {
+            "type": "grid",
+            "anchor_price": self._anchor_price,
+            "levels": levels,
+            "filled_count": len(self._filled_levels),
+            "max_levels": self._max_levels,
+        }
+
     def _build_grid(self, anchor: float) -> list[float]:
         """Compute sorted grid levels around the anchor price."""
         levels: list[float] = []

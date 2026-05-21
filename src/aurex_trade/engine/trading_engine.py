@@ -190,6 +190,51 @@ class TradingEngine:
         """Return trade markers for chart overlay. Thread-safe (GIL)."""
         return list(self._trade_markers)
 
+    def get_strategy_state(self) -> dict[str, object] | None:
+        """Return strategy-specific display state, if available."""
+        get_state = getattr(self._strategy, "get_display_state", None)
+        if get_state is not None:
+            result: dict[str, object] | None = get_state()
+            return result
+        return None
+
+    def get_risk_summary(self) -> dict[str, float]:
+        """Return risk summary calculations for UI display."""
+        equity = self._broker.equity
+        stop_distance = 30.0  # Default; could be extracted from strategy
+
+        # Extract stop_distance from strategy if available
+        strategy_stop = getattr(self._strategy, "_stop_distance", None)
+        if strategy_stop is not None:
+            stop_distance = float(strategy_stop)
+
+        risk_per_trade = self._risk_engine._risk_per_trade
+        max_position_size = float(self._risk_engine._max_position_size)
+        max_drawdown_pct = self._risk_engine._max_drawdown_pct
+
+        # Dynamic position size calculation
+        raw_units = (equity * risk_per_trade) / stop_distance if stop_distance > 0 else 0
+        units_per_trade = min(raw_units, max_position_size)
+
+        # Worst case: all available levels triggered, all hit stop
+        max_trades = 10  # Default
+        strategy_max_levels = getattr(self._strategy, "_max_levels", None)
+        if strategy_max_levels is not None:
+            max_trades = int(strategy_max_levels)
+
+        worst_case_loss = max_trades * units_per_trade * stop_distance
+        drawdown_limit = equity * max_drawdown_pct
+        headroom = drawdown_limit - worst_case_loss
+
+        return {
+            "units_per_trade": round(units_per_trade, 1),
+            "max_position_size": max_position_size,
+            "worst_case_loss": round(worst_case_loss, 2),
+            "drawdown_limit": round(drawdown_limit, 2),
+            "headroom": round(headroom, 2),
+            "stop_distance": stop_distance,
+        }
+
     def get_metrics(self) -> EngineMetrics:
         """Return a snapshot of current engine metrics.
 

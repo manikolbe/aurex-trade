@@ -135,3 +135,18 @@ def bot_equity(
         "equity_history": session.engine.get_equity_history(),
         "trade_markers": session.engine.get_trade_markers(),
     })
+
+
+@router.get("/strategy-state", response_model=None)
+def bot_strategy_state(
+    user: User = Depends(get_current_user),
+    session_manager: BotSessionManager = Depends(get_bot_session_manager),
+) -> JSONResponse:
+    """Get strategy-specific state and risk summary for UI display."""
+    session = session_manager.get(user.id)
+    if session is None:
+        return JSONResponse(status_code=404, content={"detail": "No bot running"})
+    return JSONResponse(content={
+        "strategy_state": session.engine.get_strategy_state(),
+        "risk_summary": session.engine.get_risk_summary(),
+    })
