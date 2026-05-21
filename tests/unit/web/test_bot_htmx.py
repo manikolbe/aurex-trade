@@ -60,7 +60,7 @@ class TestBotStatusPoll:
 class TestBotStopHtmx:
     """Tests for POST /htmx/bot/stop."""
 
-    def test_stop_returns_idle_partial(self, client: TestClient) -> None:
+    def test_stop_redirects_to_bot_page(self, client: TestClient) -> None:
         manager: BotSessionManager = client.app.state.bot_session_manager  # type: ignore[union-attr]
         engine = MagicMock()
         connection = MagicMock()
@@ -71,10 +71,9 @@ class TestBotStopHtmx:
             symbol="XAU_USD",
             strategy_name="sma_crossover",
         )
-        resp = client.post("/htmx/bot/stop")
+        resp = client.post("/htmx/bot/stop", follow_redirects=False)
         assert resp.status_code == 200
-        assert "text/html" in resp.headers["content-type"]
-        assert "Idle" in resp.text
+        assert resp.headers["hx-redirect"] == "/bot"
         assert not manager.is_running("test-user-id")
 
 

@@ -142,13 +142,12 @@ def htmx_stop_bot(
     user: User = Depends(get_current_user),
     session_manager: BotSessionManager = Depends(get_bot_session_manager),
 ) -> HTMLResponse:
-    """Stop the bot and return idle partial."""
-    templates = _get_templates(request)
+    """Stop the bot and redirect to bot page (avoids HTMX swap race)."""
     session_manager.stop(user.id)
     logger.info("htmx.bot.stop_requested", user_id=user.id)
-    return templates.TemplateResponse(
-        request, "partials/bot_idle.html", {"strategies_json": _get_strategies_json()}
-    )
+    response = HTMLResponse(content="", status_code=200)
+    response.headers["HX-Redirect"] = "/bot"
+    return response
 
 
 @router.get("/state-check", response_class=HTMLResponse)
