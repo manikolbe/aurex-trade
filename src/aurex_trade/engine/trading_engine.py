@@ -304,10 +304,8 @@ class TradingEngine:
         )
         self._repository.save_signal(signal, user_id=self._user_id)
 
-        # Step 3: Risk evaluation
-        position = self._repository.get_current_position(
-            self._symbol, user_id=self._user_id
-        )
+        # Step 3: Risk evaluation — broker is source of truth for position
+        position = self._broker.get_positions(self._symbol)
         trades_today = self._repository.get_trades_today(
             self._symbol, user_id=self._user_id
         )
