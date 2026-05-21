@@ -116,7 +116,6 @@ def test_different_window_sizes(short_window: int, long_window: int) -> None:
     assert strategy.generate(flat_bars) is None
 
 
-
 def _crossover_up_bars_with_spread() -> list[BarData]:
     """Bars that trigger a LONG crossover with non-zero OHLC spread.
 
@@ -188,9 +187,7 @@ class TestStopLossCalculation:
 
     def test_long_signal_stop_loss_below_entry(self) -> None:
         """LONG signal stop-loss should be below entry price."""
-        strategy = SMACrossover(
-            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3
-        )
+        strategy = SMACrossover(short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3)
         bars = _crossover_up_bars_with_spread()
         signal = strategy.generate(bars)
         assert signal is not None
@@ -200,9 +197,7 @@ class TestStopLossCalculation:
 
     def test_short_signal_stop_loss_above_entry(self) -> None:
         """SHORT signal stop-loss should be above entry price."""
-        strategy = SMACrossover(
-            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3
-        )
+        strategy = SMACrossover(short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3)
         bars = _crossover_down_bars_with_spread()
         signal = strategy.generate(bars)
         assert signal is not None
@@ -212,9 +207,7 @@ class TestStopLossCalculation:
 
     def test_stop_loss_none_when_insufficient_bars_for_atr(self) -> None:
         """When not enough bars for ATR period, stop_loss should be None."""
-        strategy = SMACrossover(
-            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=20
-        )
+        strategy = SMACrossover(short_window=3, long_window=5, atr_multiplier=2.0, atr_period=20)
         # Only 6 bars — not enough for atr_period=20 (needs 21)
         bars = _make_bars([100.0, 100.0, 100.0, 100.0, 100.0, 110.0])
         signal = strategy.generate(bars)
@@ -223,9 +216,7 @@ class TestStopLossCalculation:
 
     def test_atr_metadata_present(self) -> None:
         """Signal metadata should include ATR and entry price."""
-        strategy = SMACrossover(
-            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3
-        )
+        strategy = SMACrossover(short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3)
         bars = _crossover_up_bars_with_spread()
         signal = strategy.generate(bars)
         assert signal is not None

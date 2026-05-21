@@ -75,7 +75,7 @@ class Order:
     order_type: OrderType = OrderType.MARKET
     quantity: float = 0.0
     limit_price: float | None = None  # Required for LIMIT orders, None for MARKET
-    stop_loss: float | None = None    # Stop-loss price level (for broker to respect)
+    stop_loss: float | None = None  # Stop-loss price level (for broker to respect)
     status: OrderStatus = OrderStatus.PENDING
     timestamp: datetime = field(default_factory=_utc_now)
 

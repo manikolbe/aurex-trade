@@ -39,9 +39,7 @@ def save_strategy_defaults(
     store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> StrategyDefaultsResponse:
     """Save params for a specific strategy."""
-    store.save_strategy_defaults(
-        user.id, strategy_name, req.params, is_preferred=req.is_preferred
-    )
+    store.save_strategy_defaults(user.id, strategy_name, req.params, is_preferred=req.is_preferred)
     return StrategyDefaultsResponse(
         preferred_strategy=store.get_preferred_strategy(user.id),
         strategies=store.get_all_strategy_defaults(user.id),

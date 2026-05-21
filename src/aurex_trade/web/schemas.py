@@ -15,8 +15,29 @@ from aurex_trade.web.tasks import TaskInfo, TaskStatus
 
 # Constrained types for safe string inputs
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_GRANULARITY_VALUES = {"S5", "S10", "S15", "S30", "M1", "M2", "M4", "M5", "M10",
-                       "M15", "M30", "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D", "W", "M"}
+_GRANULARITY_VALUES = {
+    "S5",
+    "S10",
+    "S15",
+    "S30",
+    "M1",
+    "M2",
+    "M4",
+    "M5",
+    "M10",
+    "M15",
+    "M30",
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H6",
+    "H8",
+    "H12",
+    "D",
+    "W",
+    "M",
+}
 
 Symbol = Annotated[str, Field(pattern=r"^[A-Z0-9_]{1,20}$")]
 Granularity = Annotated[str, Field(pattern=r"^[A-Z0-9]{1,3}$")]
@@ -182,9 +203,7 @@ class SweepRequest(BaseModel):
 
     @field_validator("params")
     @classmethod
-    def validate_params(
-        cls, v: dict[str, list[int | float]]
-    ) -> dict[str, list[int | float]]:
+    def validate_params(cls, v: dict[str, list[int | float]]) -> dict[str, list[int | float]]:
         """Limit parameter grid size to prevent combinatorial explosion."""
         total_combos = 1
         for values in v.values():
@@ -263,9 +282,7 @@ class WalkForwardRequest(BaseModel):
 
     @field_validator("params")
     @classmethod
-    def validate_params(
-        cls, v: dict[str, list[int | float]]
-    ) -> dict[str, list[int | float]]:
+    def validate_params(cls, v: dict[str, list[int | float]]) -> dict[str, list[int | float]]:
         """Limit parameter grid size to prevent combinatorial explosion."""
         total_combos = 1
         for values in v.values():

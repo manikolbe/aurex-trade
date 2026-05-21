@@ -17,10 +17,7 @@ class HistoricalMarketDataAdapter:
 
     def __init__(self, bars: list[BarData], bar_count: int = 50) -> None:
         if len(bars) < bar_count:
-            msg = (
-                f"Need at least {bar_count} bars for replay, "
-                f"got {len(bars)}"
-            )
+            msg = f"Need at least {bar_count} bars for replay, got {len(bars)}"
             raise ValueError(msg)
 
         self._bars = bars

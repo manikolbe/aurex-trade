@@ -114,7 +114,10 @@ async def save_credentials(
     assert info is not None  # just stored, must exist
 
     return _render_broker_form(
-        request, info.has_credentials, info.account_id_masked, info.server,
+        request,
+        info.has_credentials,
+        info.account_id_masked,
+        info.server,
         just_saved=True,
     )
 
@@ -147,7 +150,8 @@ async def test_connection(
             creds = store.retrieve(user.id, req.broker)
         except CredentialDecryptionError:
             return _render_test_result(
-                request, False,
+                request,
+                False,
                 "Cannot decrypt stored credentials. The encryption key may have changed.",
             )
         if creds is None:
@@ -159,9 +163,7 @@ async def test_connection(
         server = creds.server
     else:
         if not req.account_id or not req.access_token:
-            return _render_test_result(
-                request, False, "Account ID and API token are required."
-            )
+            return _render_test_result(request, False, "Account ID and API token are required.")
         account_id = req.account_id
         access_token = req.access_token
         server = req.server

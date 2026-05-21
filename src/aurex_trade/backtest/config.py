@@ -10,9 +10,7 @@ class BacktestConfig(BaseSettings):
     constructed directly in code.
     """
 
-    model_config = SettingsConfigDict(
-        env_prefix="BACKTEST_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="BACKTEST_", env_file=".env", extra="ignore")
 
     symbol: str = "XAU_USD"
     granularity: str = "M1"

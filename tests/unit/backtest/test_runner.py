@@ -81,9 +81,7 @@ class TestBacktestRunner:
         broker = SimulatedBrokerAdapter(
             initial_capital=100_000.0, spread=0.0, slippage=0.0, seed=42
         )
-        risk = RiskEngine(
-            max_position_size=10, max_daily_loss=500.0, max_trades_per_day=100
-        )
+        risk = RiskEngine(max_position_size=10, max_daily_loss=500.0, max_trades_per_day=100)
         repo = InMemoryRepository()
 
         runner = BacktestRunner(
@@ -108,9 +106,7 @@ class TestBacktestRunner:
         broker = SimulatedBrokerAdapter(
             initial_capital=100_000.0, spread=0.0, slippage=0.0, seed=42
         )
-        risk = RiskEngine(
-            max_position_size=100, max_daily_loss=50_000.0, max_trades_per_day=1000
-        )
+        risk = RiskEngine(max_position_size=100, max_daily_loss=50_000.0, max_trades_per_day=1000)
         repo = InMemoryRepository()
 
         runner = BacktestRunner(
@@ -147,8 +143,11 @@ class TestBacktestRunner:
             )
             market_data = HistoricalMarketDataAdapter(bars, bar_count=10)
             broker = SimulatedBrokerAdapter(
-                initial_capital=100_000.0, spread=0.5, slippage=0.2,
-                commission_per_trade=1.0, seed=123
+                initial_capital=100_000.0,
+                spread=0.5,
+                slippage=0.2,
+                commission_per_trade=1.0,
+                seed=123,
             )
             risk = RiskEngine(
                 max_position_size=100, max_daily_loss=50_000.0, max_trades_per_day=1000
@@ -176,9 +175,7 @@ class TestBacktestRunner:
         broker = SimulatedBrokerAdapter(
             initial_capital=100_000.0, spread=0.0, slippage=0.0, seed=42
         )
-        risk = RiskEngine(
-            max_position_size=100, max_daily_loss=50_000.0, max_trades_per_day=1000
-        )
+        risk = RiskEngine(max_position_size=100, max_daily_loss=50_000.0, max_trades_per_day=1000)
         repo = InMemoryRepository()
 
         runner = BacktestRunner(

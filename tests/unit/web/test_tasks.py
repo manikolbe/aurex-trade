@@ -204,9 +204,7 @@ class TestSubmitWithTaskId:
         registry = TaskRegistry(max_workers=1)
         try:
             expected_id = uuid4()
-            returned_id = registry.submit(
-                lambda: "done", task_type="test", task_id=expected_id
-            )
+            returned_id = registry.submit(lambda: "done", task_type="test", task_id=expected_id)
             assert returned_id == expected_id
             info = registry.get(expected_id)
             assert info is not None

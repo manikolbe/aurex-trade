@@ -21,7 +21,13 @@ class HistoricalDataStore:
     """
 
     _FIELDNAMES: ClassVar[list[str]] = [
-        "timestamp", "open", "high", "low", "close", "volume", "symbol",
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "symbol",
     ]
 
     def __init__(self, data_dir: Path) -> None:
@@ -101,9 +107,7 @@ class HistoricalDataStore:
 
         return bars
 
-    def get_date_range(
-        self, symbol: str, granularity: str
-    ) -> tuple[datetime, datetime] | None:
+    def get_date_range(self, symbol: str, granularity: str) -> tuple[datetime, datetime] | None:
         """Return (min, max) timestamps from the CSV, or None if no data."""
         try:
             bars = self.load_bars(symbol, granularity)

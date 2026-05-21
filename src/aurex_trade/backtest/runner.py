@@ -103,9 +103,7 @@ class BacktestRunner:
     def _run_step(self, bar_index: int) -> BacktestTradeRecord | None:
         """Execute one trading step. Returns a trade record if a trade was placed."""
         # Step 1: Get bars for strategy
-        bars = self._market_data.get_latest_bars(
-            self._config.symbol, self._config.bar_count
-        )
+        bars = self._market_data.get_latest_bars(self._config.symbol, self._config.bar_count)
         if not bars:
             return None
 
@@ -125,9 +123,7 @@ class BacktestRunner:
         )
 
         current_equity = self._broker.equity
-        account_state = AccountState(
-            equity=current_equity, peak_equity=self._peak_equity
-        )
+        account_state = AccountState(equity=current_equity, peak_equity=self._peak_equity)
 
         decision = self._risk_engine.evaluate(
             signal,
@@ -145,9 +141,7 @@ class BacktestRunner:
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
         entry_price = bars[-1].close
 
-        quantity = self._risk_engine.calculate_position_size(
-            signal, account_state, entry_price
-        )
+        quantity = self._risk_engine.calculate_position_size(signal, account_state, entry_price)
         if quantity <= 0.0:
             quantity = self._config.position_size
 

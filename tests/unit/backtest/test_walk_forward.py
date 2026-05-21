@@ -68,9 +68,7 @@ def _risk_engine() -> RiskEngine:
 
 
 def _sma_factory(params: dict[str, int]) -> SMACrossover:
-    return SMACrossover(
-        short_window=params["short_window"], long_window=params["long_window"]
-    )
+    return SMACrossover(short_window=params["short_window"], long_window=params["long_window"])
 
 
 class TestAggregateMetricsEqualWinsLosses:
@@ -99,12 +97,8 @@ class TestAggregateMetricsEqualWinsLosses:
         result = validator.run()
 
         # The aggregate total_pnl must equal the sum of per-window test PnLs
-        expected_pnl = sum(
-            w.test_result.metrics.total_pnl for w in result.windows
-        )
-        assert result.aggregate_test_metrics.total_pnl == pytest.approx(
-            expected_pnl, abs=0.01
-        )
+        expected_pnl = sum(w.test_result.metrics.total_pnl for w in result.windows)
+        assert result.aggregate_test_metrics.total_pnl == pytest.approx(expected_pnl, abs=0.01)
 
 
 class TestWalkForwardValidator:

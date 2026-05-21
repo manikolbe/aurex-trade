@@ -120,13 +120,9 @@ class TestRSIMeanReversion:
     ("period", "overbought", "oversold"),
     [(7, 80, 20), (14, 70, 30), (3, 75, 25)],
 )
-def test_different_parameter_sizes(
-    period: int, overbought: int, oversold: int
-) -> None:
+def test_different_parameter_sizes(period: int, overbought: int, oversold: int) -> None:
     """Strategy works with various parameter combinations."""
-    strategy = RSIMeanReversion(
-        period=period, overbought=overbought, oversold=oversold
-    )
+    strategy = RSIMeanReversion(period=period, overbought=overbought, oversold=oversold)
     flat_bars = _make_bars([100.0] * (period + 10))
     assert strategy.generate(flat_bars) is None
 

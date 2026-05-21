@@ -33,9 +33,7 @@ class FakeCredentialStore:
     def has_credentials(self, user_id: str, broker: str) -> bool:
         return self._creds is not None
 
-    def get_masked_info(
-        self, user_id: str, broker: str
-    ) -> BrokerCredentialInfo | None:
+    def get_masked_info(self, user_id: str, broker: str) -> BrokerCredentialInfo | None:
         return None
 
 

@@ -6,13 +6,9 @@ from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.web.schemas import BacktestRequest, SweepRequest, WalkForwardRequest
 
 
-def save_user_defaults(
-    store: UserDefaultsStore, user_id: str, req: BacktestRequest
-) -> None:
+def save_user_defaults(store: UserDefaultsStore, user_id: str, req: BacktestRequest) -> None:
     """Auto-save strategy params and risk/cost settings from a backtest submit."""
-    store.save_strategy_defaults(
-        user_id, req.strategy, req.params, is_preferred=True
-    )
+    store.save_strategy_defaults(user_id, req.strategy, req.params, is_preferred=True)
     store.save_risk_defaults(user_id, extract_risk_settings(req))
 
 
@@ -22,9 +18,7 @@ def save_preferred_and_risk(
     req: SweepRequest | WalkForwardRequest,
 ) -> None:
     """Auto-save preferred strategy + risk/cost from sweep/walk-forward submit."""
-    store.save_strategy_defaults(
-        user_id, req.strategy, {}, is_preferred=True
-    )
+    store.save_strategy_defaults(user_id, req.strategy, {}, is_preferred=True)
     store.save_risk_defaults(user_id, extract_risk_settings(req))
 
 

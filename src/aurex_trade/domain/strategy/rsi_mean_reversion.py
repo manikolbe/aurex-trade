@@ -159,11 +159,7 @@ class RSIMeanReversion:
 
         # Strength: distance from threshold normalized to 0-1
         if signal_type == SignalType.LONG:
-            strength = (
-                (self._oversold - curr_rsi) / self._oversold
-                if self._oversold > 0
-                else 0.0
-            )
+            strength = (self._oversold - curr_rsi) / self._oversold if self._oversold > 0 else 0.0
         else:
             strength = (
                 (curr_rsi - self._overbought) / (100 - self._overbought)

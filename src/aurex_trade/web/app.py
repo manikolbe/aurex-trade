@@ -100,9 +100,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     bot_session_manager.stop_all()
 
     # Shutdown: close stores
-    market_data_store: SQLiteMarketDataStore | None = getattr(
-        app.state, "market_data_store", None
-    )
+    market_data_store: SQLiteMarketDataStore | None = getattr(app.state, "market_data_store", None)
     if market_data_store:
         market_data_store.close()
     preferences_store: UserDataPreferencesStore | None = getattr(
@@ -110,9 +108,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     if preferences_store:
         preferences_store.close()
-    credential_store: FernetCredentialStore | None = getattr(
-        app.state, "credential_store", None
-    )
+    credential_store: FernetCredentialStore | None = getattr(app.state, "credential_store", None)
     if credential_store:
         credential_store.close()
     if session_store:
@@ -137,9 +133,7 @@ def create_app() -> FastAPI:
 
     # User-facing documentation (built by mkdocs build)
     if _DOCS_SITE_DIR.is_dir():
-        app.mount(
-            "/guide", StaticFiles(directory=str(_DOCS_SITE_DIR), html=True), name="guide"
-        )
+        app.mount("/guide", StaticFiles(directory=str(_DOCS_SITE_DIR), html=True), name="guide")
 
     # Templates
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -233,9 +227,7 @@ def create_app() -> FastAPI:
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request, "pages/settings.html", _user_context(request)
-        )
+        return templates.TemplateResponse(request, "pages/settings.html", _user_context(request))
 
     return app
 

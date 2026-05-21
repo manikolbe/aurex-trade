@@ -71,11 +71,13 @@ class FernetCredentialStore:
         server: str,
     ) -> None:
         """Encrypt and store credentials. Overwrites any existing entry."""
-        payload = json.dumps({
-            "account_id": account_id,
-            "access_token": access_token,
-            "server": server,
-        })
+        payload = json.dumps(
+            {
+                "account_id": account_id,
+                "access_token": access_token,
+                "server": server,
+            }
+        )
         encrypted_data = self._fernet.encrypt(payload.encode())
         account_id_masked = self._mask_account_id(account_id)
         now = datetime.now(tz=UTC).isoformat()

@@ -131,9 +131,7 @@ class TestHtmxTestConnection:
     """POST /htmx/broker/test accepts form data, returns status HTML."""
 
     def test_success_returns_success_html(self, client: TestClient) -> None:
-        with patch(
-            "aurex_trade.web.routers.broker.htmx.OANDAConnection"
-        ) as mock_conn_cls:
+        with patch("aurex_trade.web.routers.broker.htmx.OANDAConnection") as mock_conn_cls:
             mock_conn = mock_conn_cls.return_value
             mock_conn.connect.return_value = None
             mock_conn.disconnect.return_value = None
@@ -154,9 +152,7 @@ class TestHtmxTestConnection:
         assert "Connected successfully" in resp.text
 
     def test_failure_returns_error_html(self, client: TestClient) -> None:
-        with patch(
-            "aurex_trade.web.routers.broker.htmx.OANDAConnection"
-        ) as mock_conn_cls:
+        with patch("aurex_trade.web.routers.broker.htmx.OANDAConnection") as mock_conn_cls:
             from aurex_trade.adapters.oanda.connection import OANDAConnectionError
 
             mock_conn = mock_conn_cls.return_value
@@ -187,9 +183,7 @@ class TestHtmxTestConnection:
                 "server": "practice",
             },
         )
-        with patch(
-            "aurex_trade.web.routers.broker.htmx.OANDAConnection"
-        ) as mock_conn_cls:
+        with patch("aurex_trade.web.routers.broker.htmx.OANDAConnection") as mock_conn_cls:
             mock_conn = mock_conn_cls.return_value
             mock_conn.connect.return_value = None
             mock_conn.disconnect.return_value = None

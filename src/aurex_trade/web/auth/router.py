@@ -60,9 +60,7 @@ def create_auth_router(
     """Create auth router with injected dependencies."""
 
     @router.get("/login", response_class=HTMLResponse)
-    def login_page(
-        request: Request, redirect_to: str = Query("/", alias="next")
-    ) -> HTMLResponse:
+    def login_page(request: Request, redirect_to: str = Query("/", alias="next")) -> HTMLResponse:
         templates = request.app.state.templates
         response: HTMLResponse = templates.TemplateResponse(
             request, "pages/login.html", {"next_path": redirect_to}

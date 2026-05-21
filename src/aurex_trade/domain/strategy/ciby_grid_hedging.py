@@ -178,11 +178,13 @@ class CibyGridHedgingStrategy:
         for level in reversed(self._grid_levels):
             direction = "buy" if level > self._anchor_price else "sell"
             status = "triggered" if level in self._filled_levels else "waiting"
-            levels.append({
-                "price": level,
-                "direction": direction,
-                "status": status,
-            })
+            levels.append(
+                {
+                    "price": level,
+                    "direction": direction,
+                    "status": status,
+                }
+            )
 
         return {
             "type": "grid",
@@ -201,9 +203,7 @@ class CibyGridHedgingStrategy:
             levels.append(round(anchor + i * self._grid_spacing, 2))
         return sorted(levels)
 
-    def _create_signal(
-        self, bar: BarData, level: float, signal_type: SignalType
-    ) -> Signal:
+    def _create_signal(self, bar: BarData, level: float, signal_type: SignalType) -> Signal:
         """Create a Signal with fixed stop-loss distance."""
         entry_price = bar.close
         if signal_type == SignalType.LONG:

@@ -101,9 +101,7 @@ def _ensure_data_available(
 
     # Update task progress
     if task_id is not None and registry is not None:
-        registry.update_message(
-            task_id, f"Downloading {symbol} ({granularity}) data..."
-        )
+        registry.update_message(task_id, f"Downloading {symbol} ({granularity}) data...")
 
     # Determine what gaps to download
     from aurex_trade.adapters.oanda.connection import OANDAConnection
@@ -132,7 +130,9 @@ def _ensure_data_available(
             if total > 0:
                 _logger.info(
                     "Downloaded %d candles (gap-fill) for %s (%s)",
-                    total, symbol, granularity,
+                    total,
+                    symbol,
+                    granularity,
                 )
     finally:
         connection.disconnect()
@@ -215,9 +215,15 @@ def create_backtest_runner(
                 else None
             )
             bars = _ensure_data_available(
-                data_store, config.symbol, config.granularity, start, end,
-                task_id=task_id, registry=registry,
-                credential_store=credential_store, user_id=user_id,
+                data_store,
+                config.symbol,
+                config.granularity,
+                start,
+                end,
+                task_id=task_id,
+                registry=registry,
+                credential_store=credential_store,
+                user_id=user_id,
             )
         finally:
             data_store.close()
@@ -319,9 +325,15 @@ def create_sweep_runner(
                 else None
             )
             bars = _ensure_data_available(
-                data_store, config.symbol, config.granularity, start, end,
-                task_id=task_id, registry=registry,
-                credential_store=credential_store, user_id=user_id,
+                data_store,
+                config.symbol,
+                config.granularity,
+                start,
+                end,
+                task_id=task_id,
+                registry=registry,
+                credential_store=credential_store,
+                user_id=user_id,
             )
         finally:
             data_store.close()
@@ -401,9 +413,15 @@ def create_walk_forward_runner(
                 else None
             )
             bars = _ensure_data_available(
-                data_store, config.symbol, config.granularity, start, end,
-                task_id=task_id, registry=registry,
-                credential_store=credential_store, user_id=user_id,
+                data_store,
+                config.symbol,
+                config.granularity,
+                start,
+                end,
+                task_id=task_id,
+                registry=registry,
+                credential_store=credential_store,
+                user_id=user_id,
             )
         finally:
             data_store.close()

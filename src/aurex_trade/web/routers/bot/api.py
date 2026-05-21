@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
+from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.domain.models import User
 from aurex_trade.web._bot_sessions import BotAlreadyRunningError, BotSessionManager
 from aurex_trade.web.auth.dependencies import get_current_user
@@ -14,6 +15,7 @@ from aurex_trade.web.dependencies import (
     get_bot_session_manager,
     get_credential_store,
     get_task_registry,
+    get_user_defaults_store,
 )
 from aurex_trade.web.ratelimit import limiter, ratelimit_config
 from aurex_trade.web.routers.bot._common import start_bot_session
@@ -25,9 +27,7 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api/bot", tags=["bot"])
 
 
-def _build_status(
-    session_manager: BotSessionManager, user_id: str
-) -> BotStatusResponse:
+def _build_status(session_manager: BotSessionManager, user_id: str) -> BotStatusResponse:
     """Build a BotStatusResponse from the current session state."""
     session = session_manager.get(user_id)
     if session is None:
@@ -61,14 +61,15 @@ def start_bot(
     session_manager: BotSessionManager = Depends(get_bot_session_manager),
     credential_store: FernetCredentialStore = Depends(get_credential_store),
     registry: TaskRegistry = Depends(get_task_registry),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> BotStatusResponse | JSONResponse:
     """Start the trading bot in background."""
     if session_manager.is_running(user.id):
         return JSONResponse(
             status_code=409,
-            content=BotStatusResponse(
-                running=True, error="Bot already running"
-            ).model_dump(mode="json"),
+            content=BotStatusResponse(running=True, error="Bot already running").model_dump(
+                mode="json"
+            ),
         )
 
     try:
@@ -78,20 +79,17 @@ def start_bot(
             session_manager=session_manager,
             credential_store=credential_store,
             registry=registry,
+            user_defaults_store=defaults_store,
         )
     except ValueError as exc:
         return JSONResponse(
             status_code=422,
-            content=BotStatusResponse(running=False, error=str(exc)).model_dump(
-                mode="json"
-            ),
+            content=BotStatusResponse(running=False, error=str(exc)).model_dump(mode="json"),
         )
     except BotAlreadyRunningError as exc:
         return JSONResponse(
             status_code=409,
-            content=BotStatusResponse(running=True, error=str(exc)).model_dump(
-                mode="json"
-            ),
+            content=BotStatusResponse(running=True, error=str(exc)).model_dump(mode="json"),
         )
 
     return _build_status(session_manager, user.id)
@@ -131,10 +129,12 @@ def bot_equity(
     session = session_manager.get(user.id)
     if session is None:
         return JSONResponse(status_code=404, content={"detail": "No bot running"})
-    return JSONResponse(content={
-        "equity_history": session.engine.get_equity_history(),
-        "trade_markers": session.engine.get_trade_markers(),
-    })
+    return JSONResponse(
+        content={
+            "equity_history": session.engine.get_equity_history(),
+            "trade_markers": session.engine.get_trade_markers(),
+        }
+    )
 
 
 @router.get("/strategy-state", response_model=None)
@@ -146,7 +146,9 @@ def bot_strategy_state(
     session = session_manager.get(user.id)
     if session is None:
         return JSONResponse(status_code=404, content={"detail": "No bot running"})
-    return JSONResponse(content={
-        "strategy_state": session.engine.get_strategy_state(),
-        "risk_summary": session.engine.get_risk_summary(),
-    })
+    return JSONResponse(
+        content={
+            "strategy_state": session.engine.get_strategy_state(),
+            "risk_summary": session.engine.get_risk_summary(),
+        }
+    )

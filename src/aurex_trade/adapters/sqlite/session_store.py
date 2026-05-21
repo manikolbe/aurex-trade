@@ -121,8 +121,6 @@ class SQLiteSessionStore:
 
     def cleanup_expired(self) -> int:
         now = datetime.now(UTC).isoformat()
-        cursor = self._conn.execute(
-            "DELETE FROM sessions WHERE expires_at <= ?", (now,)
-        )
+        cursor = self._conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
         self._conn.commit()
         return cursor.rowcount

@@ -36,9 +36,7 @@ def _make_trending_bars(count: int) -> list[BarData]:
 
 
 def _sma_factory(params: dict[str, int]) -> SMACrossover:
-    return SMACrossover(
-        short_window=params["short_window"], long_window=params["long_window"]
-    )
+    return SMACrossover(short_window=params["short_window"], long_window=params["long_window"])
 
 
 @pytest.mark.integration
@@ -142,7 +140,4 @@ class TestSweepEndToEnd:
         )
         result2 = validator2.run()
 
-        assert (
-            result.aggregate_test_metrics.total_pnl
-            == result2.aggregate_test_metrics.total_pnl
-        )
+        assert result.aggregate_test_metrics.total_pnl == result2.aggregate_test_metrics.total_pnl

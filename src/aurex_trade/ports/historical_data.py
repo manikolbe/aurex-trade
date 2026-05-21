@@ -27,8 +27,6 @@ class HistoricalDataPort(Protocol):
         """Load bars, optionally filtered by date range. Returns sorted by timestamp."""
         ...
 
-    def get_date_range(
-        self, symbol: str, granularity: str
-    ) -> tuple[datetime, datetime] | None:
+    def get_date_range(self, symbol: str, granularity: str) -> tuple[datetime, datetime] | None:
         """Return (min_timestamp, max_timestamp) for stored data, or None if empty."""
         ...

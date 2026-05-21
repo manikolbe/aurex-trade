@@ -53,9 +53,7 @@ def _risk_engine() -> RiskEngine:
 
 
 def _sma_factory(params: dict[str, int]) -> SMACrossover:
-    return SMACrossover(
-        short_window=params["short_window"], long_window=params["long_window"]
-    )
+    return SMACrossover(short_window=params["short_window"], long_window=params["long_window"])
 
 
 class TestParameterSweep:

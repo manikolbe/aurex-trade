@@ -75,9 +75,7 @@ class ParameterSweep:
             )
 
         # Sort by metric (descending — higher is better)
-        results.sort(
-            key=lambda r: getattr(r.metrics, self._rank_by), reverse=True
-        )
+        results.sort(key=lambda r: getattr(r.metrics, self._rank_by), reverse=True)
 
         log.info("sweep_complete", total_results=len(results))
 
@@ -93,10 +91,7 @@ class ParameterSweep:
         keys = list(self._param_grid.keys())
         values = [self._param_grid[k] for k in keys]
 
-        all_combos = [
-            dict(zip(keys, combo, strict=True))
-            for combo in itertools.product(*values)
-        ]
+        all_combos = [dict(zip(keys, combo, strict=True)) for combo in itertools.product(*values)]
 
         # Filter invalid combinations
         if self._param_validator is not None:

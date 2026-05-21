@@ -90,11 +90,21 @@ class TestRiskDefaultsEndpoints:
     def test_delete_risk_defaults(self, client: TestClient) -> None:
         client.put(
             "/api/user-defaults/risk",
-            json={"max_position": 10, "max_daily_loss": 500, "risk_per_trade": 0.02,
-                  "max_drawdown_pct": 0.2, "max_trades_per_day": 100,
-                  "max_consecutive_losses": 5, "require_stop_loss": True,
-                  "capital": 100000, "position_size": 1.0, "spread": 0.6,
-                  "slippage": 0.2, "commission": 0.0, "seed": 42},
+            json={
+                "max_position": 10,
+                "max_daily_loss": 500,
+                "risk_per_trade": 0.02,
+                "max_drawdown_pct": 0.2,
+                "max_trades_per_day": 100,
+                "max_consecutive_losses": 5,
+                "require_stop_loss": True,
+                "capital": 100000,
+                "position_size": 1.0,
+                "spread": 0.6,
+                "slippage": 0.2,
+                "commission": 0.0,
+                "seed": 42,
+            },
         )
         resp = client.delete("/api/user-defaults/risk")
         assert resp.status_code == 204
@@ -120,11 +130,21 @@ class TestAllDefaultsEndpoint:
         )
         client.put(
             "/api/user-defaults/risk",
-            json={"max_position": 20, "max_daily_loss": 1000, "risk_per_trade": 0.02,
-                  "max_drawdown_pct": 0.2, "max_trades_per_day": 100,
-                  "max_consecutive_losses": 5, "require_stop_loss": True,
-                  "capital": 100000, "position_size": 1.0, "spread": 0.6,
-                  "slippage": 0.2, "commission": 0.0, "seed": 42},
+            json={
+                "max_position": 20,
+                "max_daily_loss": 1000,
+                "risk_per_trade": 0.02,
+                "max_drawdown_pct": 0.2,
+                "max_trades_per_day": 100,
+                "max_consecutive_losses": 5,
+                "require_stop_loss": True,
+                "capital": 100000,
+                "position_size": 1.0,
+                "spread": 0.6,
+                "slippage": 0.2,
+                "commission": 0.0,
+                "seed": 42,
+            },
         )
 
         data = client.get("/api/user-defaults/all").json()

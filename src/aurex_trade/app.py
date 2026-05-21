@@ -72,14 +72,10 @@ def main() -> None:
         from aurex_trade.adapters.sqlite.repository import SQLiteRepository
 
         if not config.oanda.access_token:
-            log.critical(
-                "oanda_config_error", reason="OANDA_ACCESS_TOKEN is required"
-            )
+            log.critical("oanda_config_error", reason="OANDA_ACCESS_TOKEN is required")
             sys.exit(1)
         if not config.oanda.account_id:
-            log.critical(
-                "oanda_config_error", reason="OANDA_ACCOUNT_ID is required"
-            )
+            log.critical("oanda_config_error", reason="OANDA_ACCOUNT_ID is required")
             sys.exit(1)
 
         oanda_conn = _OANDAConnection(config.oanda)
@@ -89,9 +85,7 @@ def main() -> None:
             log.critical("oanda_connection_failed", error=str(exc))
             sys.exit(1)
 
-        broker = OANDABrokerAdapter(
-            connection=oanda_conn, account_id=config.oanda.account_id
-        )
+        broker = OANDABrokerAdapter(connection=oanda_conn, account_id=config.oanda.account_id)
         market_data = OANDAMarketDataAdapter(
             connection=oanda_conn, account_id=config.oanda.account_id
         )

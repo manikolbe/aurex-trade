@@ -100,9 +100,7 @@ class BotSessionManager:
         try:
             session.connection.disconnect()
         except Exception:
-            log.exception(
-                "bot_session.connection_disconnect_failed", user_id=user_id
-            )
+            log.exception("bot_session.connection_disconnect_failed", user_id=user_id)
 
         log.info("bot_session.stopped", user_id=user_id)
 

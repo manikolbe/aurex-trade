@@ -103,9 +103,7 @@ class TestAutoDownload:
             )[1]
             mock_dl_cls.return_value = mock_dl
 
-            result = _ensure_data_available(
-                data_store, "XAU_USD", "M1", start, end
-            )
+            result = _ensure_data_available(data_store, "XAU_USD", "M1", start, end)
 
         assert len(result) == 2
         mock_conn.connect.assert_called_once()
@@ -148,15 +146,14 @@ class TestAutoDownload:
             mock_dl.download.return_value = 0  # No new bars (market closed)
             mock_dl_cls.return_value = mock_dl
 
-            result = _ensure_data_available(
-                data_store, "XAU_USD", "M1", start, end
-            )
+            result = _ensure_data_available(data_store, "XAU_USD", "M1", start, end)
 
         # Returns existing bars for the requested range
         assert len(result) == 2
         # Download attempted for the gap after stored_max
         mock_dl.download.assert_called_once_with(
-            "XAU_USD", "M1",
+            "XAU_USD",
+            "M1",
             datetime(2025, 1, 2, tzinfo=UTC),
             end,
         )
@@ -194,8 +191,13 @@ class TestAutoDownload:
             mock_dl_cls.return_value = mock_dl
 
             _ensure_data_available(
-                data_store, "XAU_USD", "M1", start, end,
-                task_id=task_id, registry=registry,
+                data_store,
+                "XAU_USD",
+                "M1",
+                start,
+                end,
+                task_id=task_id,
+                registry=registry,
             )
 
         registry.update_message.assert_called_once_with(
@@ -219,9 +221,7 @@ class TestCredentialsMissing:
             mock_config_cls.return_value = mock_config
 
             with pytest.raises(ValueError, match="OANDA credentials not configured"):
-                _ensure_data_available(
-                    data_store, "XAU_USD", "M1", start, end
-                )
+                _ensure_data_available(data_store, "XAU_USD", "M1", start, end)
 
     def test_raises_when_token_missing(self, tmp_path: Path) -> None:
         """Error when only access_token is empty."""
@@ -236,9 +236,7 @@ class TestCredentialsMissing:
             mock_config_cls.return_value = mock_config
 
             with pytest.raises(ValueError, match="OANDA credentials not configured"):
-                _ensure_data_available(
-                    data_store, "XAU_USD", "M1", start, end
-                )
+                _ensure_data_available(data_store, "XAU_USD", "M1", start, end)
 
 
 class TestNoDatesProvided:
@@ -292,9 +290,7 @@ class TestDownloadError:
             mock_dl_cls.return_value = mock_dl
 
             with pytest.raises(RuntimeError, match="OANDA API timeout"):
-                _ensure_data_available(
-                    data_store, "XAU_USD", "M1", start, end
-                )
+                _ensure_data_available(data_store, "XAU_USD", "M1", start, end)
 
         # Connection should still be disconnected even on error
         mock_conn.disconnect.assert_called_once()

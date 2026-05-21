@@ -89,16 +89,14 @@ class RiskEngine:
             return RiskDecision(
                 signal_id=signal.id,
                 action=RiskAction.REJECTED,
-                reason="Signal rejected — no stop-loss provided "
-                "(require_stop_loss is enabled)",
+                reason="Signal rejected — no stop-loss provided (require_stop_loss is enabled)",
             )
 
         # Rule 3: Max drawdown circuit breaker
         if account_state is not None and account_state.peak_equity > 0:
             drawdown_pct = (
-                (account_state.peak_equity - account_state.equity)
-                / account_state.peak_equity
-            )
+                account_state.peak_equity - account_state.equity
+            ) / account_state.peak_equity
             if drawdown_pct >= self._max_drawdown_pct:
                 return RiskDecision(
                     signal_id=signal.id,
@@ -115,8 +113,7 @@ class RiskEngine:
                 return RiskDecision(
                     signal_id=signal.id,
                     action=RiskAction.REJECTED,
-                    reason=f"Consecutive loss pause — last {n} trades "
-                    f"were all losses",
+                    reason=f"Consecutive loss pause — last {n} trades were all losses",
                 )
 
         # Rule 5: Max position size

@@ -26,13 +26,16 @@ class TestBotStart:
     """Tests for POST /api/bot/start."""
 
     def test_missing_credentials_returns_422(self, client: TestClient) -> None:
-        resp = client.post("/api/bot/start", json={
-            "strategy_name": "sma_crossover",
-            "strategy_params": {"short_window": 10, "long_window": 30},
-            "risk_params": {},
-            "symbol": "XAU_USD",
-            "interval_seconds": 60,
-        })
+        resp = client.post(
+            "/api/bot/start",
+            json={
+                "strategy_name": "sma_crossover",
+                "strategy_params": {"short_window": 10, "long_window": 30},
+                "risk_params": {},
+                "symbol": "XAU_USD",
+                "interval_seconds": 60,
+            },
+        )
         assert resp.status_code == 422
         data = resp.json()
         assert data["running"] is False
@@ -51,13 +54,16 @@ class TestBotStart:
             strategy_name="sma_crossover",
         )
         try:
-            resp = client.post("/api/bot/start", json={
-                "strategy_name": "sma_crossover",
-                "strategy_params": {},
-                "risk_params": {},
-                "symbol": "XAU_USD",
-                "interval_seconds": 60,
-            })
+            resp = client.post(
+                "/api/bot/start",
+                json={
+                    "strategy_name": "sma_crossover",
+                    "strategy_params": {},
+                    "risk_params": {},
+                    "symbol": "XAU_USD",
+                    "interval_seconds": 60,
+                },
+            )
             assert resp.status_code == 409
             data = resp.json()
             assert data["running"] is True
@@ -93,13 +99,16 @@ class TestBotStart:
         mock_connection = MagicMock()
         mock_factory.return_value = (mock_engine, mock_connection)
 
-        resp = client.post("/api/bot/start", json={
-            "strategy_name": "sma_crossover",
-            "strategy_params": {"short_window": 10, "long_window": 30},
-            "risk_params": {},
-            "symbol": "XAU_USD",
-            "interval_seconds": 60,
-        })
+        resp = client.post(
+            "/api/bot/start",
+            json={
+                "strategy_name": "sma_crossover",
+                "strategy_params": {"short_window": 10, "long_window": 30},
+                "risk_params": {},
+                "symbol": "XAU_USD",
+                "interval_seconds": 60,
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["running"] is True

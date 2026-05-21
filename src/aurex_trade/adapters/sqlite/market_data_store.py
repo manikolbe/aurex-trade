@@ -107,9 +107,7 @@ class SQLiteMarketDataStore:
             )
         return bars
 
-    def get_date_range(
-        self, symbol: str, granularity: str
-    ) -> tuple[datetime, datetime] | None:
+    def get_date_range(self, symbol: str, granularity: str) -> tuple[datetime, datetime] | None:
         """Return (min_timestamp, max_timestamp) for stored data, or None if empty."""
         cursor = self._conn.execute(
             "SELECT MIN(timestamp) AS min_ts, MAX(timestamp) AS max_ts "

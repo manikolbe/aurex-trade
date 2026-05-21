@@ -191,9 +191,7 @@ class TestRulePriority:
     def test_stop_loss_over_drawdown(self) -> None:
         engine = _engine(require_stop_loss=True, max_drawdown_pct=0.01)
         account = AccountState(equity=80_000, peak_equity=100_000)
-        result = engine.evaluate(
-            _signal(stop_loss=None), None, [], account_state=account
-        )
+        result = engine.evaluate(_signal(stop_loss=None), None, [], account_state=account)
         assert "no stop-loss" in result.reason
 
     def test_position_size_over_daily_loss(self) -> None:
@@ -272,26 +270,20 @@ class TestConsecutiveLossPause:
     def test_rejected_after_n_consecutive_losses(self) -> None:
         engine = _engine(max_consecutive_losses=3)
         pnls = [-10.0, -5.0, -8.0]
-        result = engine.evaluate(
-            _signal(), None, [], recent_trade_pnls=pnls
-        )
+        result = engine.evaluate(_signal(), None, [], recent_trade_pnls=pnls)
         assert result.action == RiskAction.REJECTED
         assert "Consecutive loss" in result.reason
 
     def test_approved_when_win_breaks_streak(self) -> None:
         engine = _engine(max_consecutive_losses=3)
         pnls = [-10.0, -5.0, 2.0]  # Last trade was a win
-        result = engine.evaluate(
-            _signal(), None, [], recent_trade_pnls=pnls
-        )
+        result = engine.evaluate(_signal(), None, [], recent_trade_pnls=pnls)
         assert result.action == RiskAction.APPROVED
 
     def test_approved_when_fewer_trades_than_limit(self) -> None:
         engine = _engine(max_consecutive_losses=5)
         pnls = [-10.0, -5.0]  # Only 2 losses, need 5
-        result = engine.evaluate(
-            _signal(), None, [], recent_trade_pnls=pnls
-        )
+        result = engine.evaluate(_signal(), None, [], recent_trade_pnls=pnls)
         assert result.action == RiskAction.APPROVED
 
     def test_skipped_when_no_pnls_provided(self) -> None:

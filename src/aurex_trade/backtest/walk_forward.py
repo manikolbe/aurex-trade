@@ -78,9 +78,7 @@ class WalkForwardValidator:
         for i in range(num_windows):
             offset = i * window_size
             train_slice = self._bars[offset : offset + self._train_bars]
-            test_slice = self._bars[
-                offset + self._train_bars : offset + window_size
-            ]
+            test_slice = self._bars[offset + self._train_bars : offset + window_size]
 
             log.info(
                 "walk_forward_window",
@@ -162,9 +160,7 @@ class WalkForwardValidator:
             symbol=self._config.symbol,
         )
 
-    def _run_test(
-        self, params: dict[str, int | float], bars: list[BarData]
-    ) -> BacktestResult:
+    def _run_test(self, params: dict[str, int | float], bars: list[BarData]) -> BacktestResult:
         """Run a single backtest with given params on test bars."""
 
         strategy = self._strategy_factory(params)
@@ -214,9 +210,7 @@ class WalkForwardValidator:
             parameters={k: str(v) for k, v in params.items()},
         )
 
-    def _aggregate_test_metrics(
-        self, windows: list[WalkForwardWindow]
-    ) -> PerformanceMetrics:
+    def _aggregate_test_metrics(self, windows: list[WalkForwardWindow]) -> PerformanceMetrics:
         """Combine test results across all windows into aggregate metrics."""
         if not windows:
             return calculate_metrics(
@@ -256,9 +250,7 @@ class WalkForwardValidator:
                 raw_sum = total_wins - total_losses
                 if raw_sum != 0:
                     scale = total_pnl / raw_sum
-                    combined_pnls = (
-                        [scale] * total_wins + [-scale] * total_losses
-                    )
+                    combined_pnls = [scale] * total_wins + [-scale] * total_losses
                 else:
                     # Equal wins/losses — distribute asymmetrically
                     # so sum equals total_pnl and signs stay correct
@@ -271,9 +263,7 @@ class WalkForwardValidator:
                     else:
                         avg_win = 1.0
                         avg_loss = 1.0 + abs(total_pnl) / n
-                    combined_pnls = (
-                        [avg_win] * total_wins + [-avg_loss] * total_losses
-                    )
+                    combined_pnls = [avg_win] * total_wins + [-avg_loss] * total_losses
             elif total_wins > 0:
                 combined_pnls = [total_pnl / total_wins] * total_wins
             else:

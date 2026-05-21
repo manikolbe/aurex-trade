@@ -79,9 +79,7 @@ class TestCalculateMetrics:
 
     def test_commission_tracked(self) -> None:
         curve = [100_000.0, 99_990.0]
-        result = calculate_metrics(
-            curve, [-10.0], initial_capital=100_000.0, total_commission=5.0
-        )
+        result = calculate_metrics(curve, [-10.0], initial_capital=100_000.0, total_commission=5.0)
         assert result.total_commission == 5.0
 
     def test_result_is_frozen(self) -> None:

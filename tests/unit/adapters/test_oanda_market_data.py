@@ -39,9 +39,7 @@ def _make_candles_response(count: int = 3, incomplete: bool = False) -> dict:  #
 class TestGetLatestBars:
     def setup_method(self) -> None:
         self.conn = MagicMock(spec=OANDAConnection)
-        self.adapter = OANDAMarketDataAdapter(
-            connection=self.conn, account_id="101-001-123"
-        )
+        self.adapter = OANDAMarketDataAdapter(connection=self.conn, account_id="101-001-123")
 
     def test_returns_correct_count(self) -> None:
         self.conn.get.return_value = _make_candles_response(count=5)

@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
+from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
 from aurex_trade.domain.models import User
 from aurex_trade.web._bot_sessions import BotAlreadyRunningError, BotSessionManager
 from aurex_trade.web.auth.dependencies import get_current_user
@@ -19,6 +20,7 @@ from aurex_trade.web.dependencies import (
     get_bot_session_manager,
     get_credential_store,
     get_task_registry,
+    get_user_defaults_store,
 )
 from aurex_trade.web.ratelimit import limiter, ratelimit_config
 from aurex_trade.web.routers.bot._common import start_bot_session
@@ -60,7 +62,7 @@ async def _parse_start_form(request: Request) -> BotStartRequest:
     strategy_params: dict[str, int | float] = {}
     for key, value in form.items():
         if key.startswith("param_") and value:
-            param_name = key[len("param_"):]
+            param_name = key[len("param_") :]
             str_val = str(value)
             try:
                 strategy_params[param_name] = int(str_val)
@@ -72,7 +74,7 @@ async def _parse_start_form(request: Request) -> BotStartRequest:
     risk_params: dict[str, int | float | bool] = {}
     for key, value in form.items():
         if key.startswith("risk_") and value:
-            param_name = key[len("risk_"):]
+            param_name = key[len("risk_") :]
             str_val = str(value)
             if str_val.lower() in ("true", "false"):
                 risk_params[param_name] = str_val.lower() == "true"
@@ -94,6 +96,7 @@ async def htmx_start_bot(
     session_manager: BotSessionManager = Depends(get_bot_session_manager),
     credential_store: FernetCredentialStore = Depends(get_credential_store),
     registry: TaskRegistry = Depends(get_task_registry),
+    defaults_store: UserDefaultsStore = Depends(get_user_defaults_store),
 ) -> HTMLResponse:
     """Start the bot and return a running status partial."""
     templates = _get_templates(request)
@@ -101,9 +104,7 @@ async def htmx_start_bot(
     try:
         body = await _parse_start_form(request)
     except (ValidationError, ValueError) as exc:
-        return templates.TemplateResponse(
-            request, "partials/bot_error.html", {"error": str(exc)}
-        )
+        return templates.TemplateResponse(request, "partials/bot_error.html", {"error": str(exc)})
 
     try:
         session = start_bot_session(
@@ -112,11 +113,10 @@ async def htmx_start_bot(
             session_manager=session_manager,
             credential_store=credential_store,
             registry=registry,
+            user_defaults_store=defaults_store,
         )
     except (ValueError, BotAlreadyRunningError) as exc:
-        return templates.TemplateResponse(
-            request, "partials/bot_error.html", {"error": str(exc)}
-        )
+        return templates.TemplateResponse(request, "partials/bot_error.html", {"error": str(exc)})
 
     return templates.TemplateResponse(
         request,
@@ -259,8 +259,4 @@ def htmx_poll_metrics(
         return HTMLResponse("")
 
     metrics = session.engine.get_metrics()
-    return templates.TemplateResponse(
-        request, "partials/bot_metrics.html", {"metrics": metrics}
-    )
-
-
+    return templates.TemplateResponse(request, "partials/bot_metrics.html", {"metrics": metrics})

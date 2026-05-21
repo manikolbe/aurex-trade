@@ -96,9 +96,7 @@ class UserDefaultsStore:
         result: str = row["strategy_name"]
         return result
 
-    def get_all_strategy_defaults(
-        self, user_id: str
-    ) -> dict[str, dict[str, int | float]]:
+    def get_all_strategy_defaults(self, user_id: str) -> dict[str, dict[str, int | float]]:
         """Return all saved strategy params as {strategy_name: params_dict}."""
         cursor = self._conn.execute(
             "SELECT strategy_name, params_json FROM user_strategy_defaults WHERE user_id = ?",

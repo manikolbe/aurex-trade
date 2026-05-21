@@ -58,7 +58,10 @@ def htmx_submit_backtest(
     """Submit a backtest and return a loading fragment that polls for results."""
     task_id = uuid4()
     runner = create_backtest_runner(
-        req, task_id=task_id, registry=registry, user_id=user.id,
+        req,
+        task_id=task_id,
+        registry=registry,
+        user_id=user.id,
         credential_store=cred_store,
     )
     registry.submit(runner, task_type="backtest", task_id=task_id)
@@ -119,7 +122,10 @@ def htmx_submit_sweep(
     """Submit a sweep and return a loading fragment that polls for results."""
     task_id = uuid4()
     runner = create_sweep_runner(
-        req, task_id=task_id, registry=registry, user_id=user.id,
+        req,
+        task_id=task_id,
+        registry=registry,
+        user_id=user.id,
         credential_store=cred_store,
     )
     registry.submit(runner, task_type="sweep", task_id=task_id)
@@ -180,7 +186,10 @@ def htmx_submit_walk_forward(
     """Submit walk-forward validation and return a loading fragment."""
     task_id = uuid4()
     runner = create_walk_forward_runner(
-        req, task_id=task_id, registry=registry, user_id=user.id,
+        req,
+        task_id=task_id,
+        registry=registry,
+        user_id=user.id,
         credential_store=cred_store,
     )
     registry.submit(runner, task_type="walk_forward", task_id=task_id)
@@ -217,9 +226,7 @@ def htmx_poll_walk_forward(
 
         result: WalkForwardResult = info.result  # type: ignore[assignment]
         response = walk_forward_result_to_response(result)
-        return templates.TemplateResponse(
-            request, "partials/wf_result.html", {"result": response}
-        )
+        return templates.TemplateResponse(request, "partials/wf_result.html", {"result": response})
 
     return templates.TemplateResponse(
         request, "partials/wf_loading.html", {"task_id": task_id, "message": info.message}

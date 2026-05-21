@@ -87,9 +87,7 @@ def create_bot_engine(
             require_stop_loss=bool(risk_params.get("require_stop_loss", True)),
             risk_per_trade=float(risk_params.get("risk_per_trade", 0.02)),
             max_drawdown_pct=float(risk_params.get("max_drawdown_pct", 0.20)),
-            max_consecutive_losses=int(
-                risk_params.get("max_consecutive_losses", 5)
-            ),
+            max_consecutive_losses=int(risk_params.get("max_consecutive_losses", 5)),
         )
 
         broker = OANDABrokerAdapter(connection, creds.account_id)

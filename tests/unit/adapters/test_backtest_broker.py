@@ -96,8 +96,7 @@ class TestPositionTracking:
 
     def test_commission_deducted(self) -> None:
         broker = SimulatedBrokerAdapter(
-            initial_capital=100_000.0, spread=0.0, slippage=0.0,
-            commission_per_trade=5.0, seed=42
+            initial_capital=100_000.0, spread=0.0, slippage=0.0, commission_per_trade=5.0, seed=42
         )
         broker.set_current_bar(_bar(close=100.0))
         trade = broker.place_order(_order(OrderSide.BUY))

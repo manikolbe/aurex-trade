@@ -83,9 +83,7 @@ class TaskRegistry:
     def list_all(self) -> list[TaskInfo]:
         """List all tasks, most recent first."""
         with self._lock:
-            return sorted(
-                self._tasks.values(), key=lambda t: t.created_at, reverse=True
-            )
+            return sorted(self._tasks.values(), key=lambda t: t.created_at, reverse=True)
 
     def shutdown(self) -> None:
         """Shut down the executor (wait for running tasks)."""

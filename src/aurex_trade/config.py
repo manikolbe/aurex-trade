@@ -11,21 +11,17 @@ from aurex_trade.domain.enums import TradingMode
 class OANDAConfig(BaseSettings):
     """OANDA connection settings."""
 
-    model_config = SettingsConfigDict(
-        env_prefix="OANDA_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="OANDA_", env_file=".env", extra="ignore")
 
-    access_token: str = ""       # OANDA API access token (from env var OANDA_ACCESS_TOKEN)
-    account_id: str = ""         # OANDA account ID (from env var OANDA_ACCOUNT_ID)
-    server: str = "practice"     # "practice" or "live"
+    access_token: str = ""  # OANDA API access token (from env var OANDA_ACCESS_TOKEN)
+    account_id: str = ""  # OANDA account ID (from env var OANDA_ACCOUNT_ID)
+    server: str = "practice"  # "practice" or "live"
 
 
 class RiskConfig(BaseSettings):
     """Risk management parameters."""
 
-    model_config = SettingsConfigDict(
-        env_prefix="RISK_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="RISK_", env_file=".env", extra="ignore")
 
     max_position_size: int = 10
     max_daily_loss: float = 500.0
@@ -40,9 +36,7 @@ class RiskConfig(BaseSettings):
 class StrategyConfig(BaseSettings):
     """Strategy parameters (SMA Crossover)."""
 
-    model_config = SettingsConfigDict(
-        env_prefix="STRATEGY_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="STRATEGY_", env_file=".env", extra="ignore")
 
     sma_short_window: int = 10
     sma_long_window: int = 30

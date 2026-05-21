@@ -155,5 +155,3 @@ class SMACrossover:
 def _sma(values: list[float], window: int) -> float:
     """Compute simple moving average over the last `window` values."""
     return sum(values[-window:]) / window
-
-

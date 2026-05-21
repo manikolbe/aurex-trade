@@ -88,6 +88,7 @@ class TestCancelOrder:
     def test_cancel_returns_false(self) -> None:
         """Paper broker fills immediately — nothing to cancel."""
         from uuid import uuid4
+
         adapter = PaperBrokerAdapter()
         assert adapter.cancel_order(uuid4()) is False
 

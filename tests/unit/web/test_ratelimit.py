@@ -48,7 +48,6 @@ class TestRateLimitConfig:
         assert config.enabled is False
 
 
-
 class TestParseRetryAfter:
     """Test Retry-After header value parsing from slowapi detail strings."""
 

@@ -10,9 +10,7 @@ from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 
 class TestParamMeta:
     def test_frozen(self) -> None:
-        param = ParamMeta(
-            key="x", label="X", tooltip="tip", default=5, min_value=1, max_value=10
-        )
+        param = ParamMeta(key="x", label="X", tooltip="tip", default=5, min_value=1, max_value=10)
         assert param.key == "x"
         # Frozen — assignment should raise
         try:
@@ -24,9 +22,7 @@ class TestParamMeta:
 
 class TestStrategyMetadata:
     def test_frozen(self) -> None:
-        meta = StrategyMetadata(
-            display_name="Test", description="Desc", params=()
-        )
+        meta = StrategyMetadata(display_name="Test", description="Desc", params=())
         try:
             meta.display_name = "Other"  # type: ignore[misc]
             raise AssertionError("Should have raised FrozenInstanceError")

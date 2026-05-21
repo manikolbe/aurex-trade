@@ -26,16 +26,12 @@ class OANDABrokerAdapter:
     @property
     def equity(self) -> float:
         """Return account NAV (balance + unrealized P&L) from OANDA."""
-        data = self._connection.get(
-            f"/v3/accounts/{self._account_id}/summary"
-        )
+        data = self._connection.get(f"/v3/accounts/{self._account_id}/summary")
         return float(data["account"]["NAV"])
 
     def get_account_summary(self) -> dict[str, float | int]:
         """Return account balance, unrealized P&L, and open position count."""
-        data = self._connection.get(
-            f"/v3/accounts/{self._account_id}/summary"
-        )
+        data = self._connection.get(f"/v3/accounts/{self._account_id}/summary")
         account = data["account"]
         return {
             "balance": float(account["balance"]),
@@ -57,9 +53,7 @@ class OANDABrokerAdapter:
             }
         }
 
-        data = self._connection.post(
-            f"/v3/accounts/{self._account_id}/orders", json=body
-        )
+        data = self._connection.post(f"/v3/accounts/{self._account_id}/orders", json=body)
 
         fill = data["orderFillTransaction"]
 
@@ -88,9 +82,7 @@ class OANDABrokerAdapter:
 
     def get_positions(self, symbol: str) -> Position | None:
         """Return the current net position for a symbol, or None if flat."""
-        data = self._connection.get(
-            f"/v3/accounts/{self._account_id}/positions/{symbol}"
-        )
+        data = self._connection.get(f"/v3/accounts/{self._account_id}/positions/{symbol}")
 
         pos = data["position"]
         long_units = float(pos["long"]["units"])

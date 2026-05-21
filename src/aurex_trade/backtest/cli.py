@@ -50,8 +50,7 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
 PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
     "sma_crossover": lambda p: p["short_window"] < p["long_window"],
     "rsi_mean_reversion": lambda p: (
-        p.get("period", 14) > 0
-        and 0 < p.get("oversold", 30) < p.get("overbought", 70) < 100
+        p.get("period", 14) > 0 and 0 < p.get("oversold", 30) < p.get("overbought", 70) < 100
     ),
     "ciby_grid_hedging": lambda p: (
         p.get("grid_spacing", 10.0) > 0
@@ -94,9 +93,7 @@ def main() -> None:
     dl_parser.add_argument("--granularity", default="M1", help="Candle granularity")
     dl_parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
     dl_parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
-    dl_parser.add_argument(
-        "--db-path", default="data/aurex_trade.db", help="SQLite database path"
-    )
+    dl_parser.add_argument("--db-path", default="data/aurex_trade.db", help="SQLite database path")
 
     # run subcommand
     run_parser = subparsers.add_parser("run", help="Run a backtest")
@@ -117,21 +114,11 @@ def main() -> None:
     run_parser.add_argument("--granularity", default="M1", help="Bar granularity")
     run_parser.add_argument("--start", default="", help="Start date filter (YYYY-MM-DD)")
     run_parser.add_argument("--end", default="", help="End date filter (YYYY-MM-DD)")
-    run_parser.add_argument(
-        "--capital", type=float, default=100_000.0, help="Initial capital"
-    )
-    run_parser.add_argument(
-        "--position-size", type=float, default=1.0, help="Units per trade"
-    )
-    run_parser.add_argument(
-        "--spread", type=float, default=1.5, help="Spread in price units"
-    )
-    run_parser.add_argument(
-        "--slippage", type=float, default=0.5, help="Slippage in price units"
-    )
-    run_parser.add_argument(
-        "--commission", type=float, default=0.0, help="Commission per trade"
-    )
+    run_parser.add_argument("--capital", type=float, default=100_000.0, help="Initial capital")
+    run_parser.add_argument("--position-size", type=float, default=1.0, help="Units per trade")
+    run_parser.add_argument("--spread", type=float, default=1.5, help="Spread in price units")
+    run_parser.add_argument("--slippage", type=float, default=0.5, help="Slippage in price units")
+    run_parser.add_argument("--commission", type=float, default=0.0, help="Commission per trade")
     run_parser.add_argument("--seed", type=int, default=42, help="Random seed")
     run_parser.add_argument(
         "--db-path", default="data/aurex_trade.db", help="SQLite database path"
@@ -161,9 +148,7 @@ def main() -> None:
     )
 
     # sweep subcommand
-    sweep_parser = subparsers.add_parser(
-        "sweep", help="Run parameter sweep (grid search)"
-    )
+    sweep_parser = subparsers.add_parser("sweep", help="Run parameter sweep (grid search)")
     sweep_parser.add_argument(
         "--strategy",
         default="sma_crossover",
@@ -203,9 +188,7 @@ def main() -> None:
     )
 
     # walk-forward subcommand
-    wf_parser = subparsers.add_parser(
-        "walk-forward", help="Run walk-forward validation"
-    )
+    wf_parser = subparsers.add_parser("walk-forward", help="Run walk-forward validation")
     wf_parser.add_argument(
         "--strategy",
         default="sma_crossover",
@@ -381,9 +364,7 @@ def _load_bars(config: BacktestConfig, db_path: Path) -> list[BarData]:
         else None
     )
 
-    bars: list[BarData] = data_store.load_bars(
-        config.symbol, config.granularity, start, end
-    )
+    bars: list[BarData] = data_store.load_bars(config.symbol, config.granularity, start, end)
     data_store.close()
     if not bars:
         print(f"No data found for {config.symbol} ({config.granularity})")
@@ -566,18 +547,12 @@ def _print_results(result: BacktestResult) -> None:
     print("=" * 60)
     print(f"  Symbol:           {result.symbol}")
     if result.start_date and result.end_date:
-        print(
-            f"  Period:           {result.start_date.date()} to"
-            f" {result.end_date.date()}"
-        )
+        print(f"  Period:           {result.start_date.date()} to {result.end_date.date()}")
     print()
     print("  --- Performance ---")
     print(f"  Total P&L:        ${m.total_pnl:,.2f}")
     print(f"  Final Capital:    ${m.final_capital:,.2f}")
-    print(
-        f"  Return:           "
-        f"{((m.final_capital / m.initial_capital) - 1) * 100:.2f}%"
-    )
+    print(f"  Return:           {((m.final_capital / m.initial_capital) - 1) * 100:.2f}%")
     print()
     print("  --- Trades ---")
     print(f"  Total Trades:     {m.trade_count}")
@@ -587,10 +562,7 @@ def _print_results(result: BacktestResult) -> None:
     print(f"  Profit Factor:    {m.profit_factor:.2f}")
     print()
     print("  --- Risk ---")
-    print(
-        f"  Max Drawdown:     ${m.max_drawdown:,.2f}"
-        f" ({m.max_drawdown_pct * 100:.2f}%)"
-    )
+    print(f"  Max Drawdown:     ${m.max_drawdown:,.2f} ({m.max_drawdown_pct * 100:.2f}%)")
     print(f"  Sharpe Ratio:     {m.sharpe_ratio:.2f}")
     print()
     print("  --- Costs ---")
@@ -610,8 +582,7 @@ def _print_sweep_results(result: SweepResult) -> None:
 
     # Header
     print(
-        f"{'Rank':<5} {'Params':<25} {'P&L':>10} {'Win%':>7}"
-        f" {'Sharpe':>8} {'PF':>7} {'Trades':>7}"
+        f"{'Rank':<5} {'Params':<25} {'P&L':>10} {'Win%':>7} {'Sharpe':>8} {'PF':>7} {'Trades':>7}"
     )
     print("-" * 69)
 
@@ -634,17 +605,13 @@ def _print_sweep_results(result: SweepResult) -> None:
 def _print_walk_forward_results(result: WalkForwardResult) -> None:
     """Print walk-forward results with per-window and aggregate."""
     print("=" * 80)
-    print(
-        f"  WALK-FORWARD VALIDATION - {result.strategy_name}"
-        f" ({len(result.windows)} windows)"
-    )
+    print(f"  WALK-FORWARD VALIDATION - {result.strategy_name} ({len(result.windows)} windows)")
     print("=" * 80)
     print()
 
     # Per-window table
     print(
-        f"{'Window':<8} {'Best Params':<25} {'Train P&L':>11}"
-        f" {'Test P&L':>10} {'Test Sharpe':>12}"
+        f"{'Window':<8} {'Best Params':<25} {'Train P&L':>11} {'Test P&L':>10} {'Test Sharpe':>12}"
     )
     print("-" * 66)
 
@@ -668,5 +635,3 @@ def _print_walk_forward_results(result: WalkForwardResult) -> None:
     print(f"  Trade Count:  {agg.trade_count}")
     print(f"  Max Drawdown: ${agg.max_drawdown:,.2f} ({agg.max_drawdown_pct * 100:.2f}%)")
     print("=" * 80)
-
-

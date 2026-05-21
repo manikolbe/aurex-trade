@@ -62,14 +62,10 @@ class OANDAConnection:
             self.get(f"/v3/accounts/{self._config.account_id}")
         except OANDAAPIError as exc:
             self.disconnect()
-            raise OANDAConnectionError(
-                f"Failed to validate OANDA credentials: {exc}"
-            ) from exc
+            raise OANDAConnectionError(f"Failed to validate OANDA credentials: {exc}") from exc
         except httpx.HTTPError as exc:
             self.disconnect()
-            raise OANDAConnectionError(
-                f"Network error connecting to OANDA: {exc}"
-            ) from exc
+            raise OANDAConnectionError(f"Network error connecting to OANDA: {exc}") from exc
 
         log.info(
             "oanda_connected",
@@ -89,9 +85,7 @@ class OANDAConnection:
         """Return True if the HTTP client is active."""
         return self._client is not None
 
-    def get(
-        self, path: str, params: dict[str, str] | None = None
-    ) -> dict[str, Any]:
+    def get(self, path: str, params: dict[str, str] | None = None) -> dict[str, Any]:
         """Send a GET request to the OANDA API."""
         client = self._require_client()
         response = client.get(path, params=params)

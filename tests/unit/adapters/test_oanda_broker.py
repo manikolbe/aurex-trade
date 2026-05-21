@@ -56,9 +56,7 @@ def _make_position_response(
 class TestPlaceOrder:
     def setup_method(self) -> None:
         self.conn = MagicMock(spec=OANDAConnection)
-        self.adapter = OANDABrokerAdapter(
-            connection=self.conn, account_id="101-001-123"
-        )
+        self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
 
     def test_buy_sends_positive_units(self) -> None:
         self.conn.post.return_value = _make_fill_response(price="2050.50", units="10")
@@ -128,9 +126,7 @@ class TestCancelOrder:
 class TestGetPositions:
     def setup_method(self) -> None:
         self.conn = MagicMock(spec=OANDAConnection)
-        self.adapter = OANDABrokerAdapter(
-            connection=self.conn, account_id="101-001-123"
-        )
+        self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
 
     def test_long_position(self) -> None:
         self.conn.get.return_value = _make_position_response(
@@ -156,9 +152,7 @@ class TestGetPositions:
         assert pos.unrealized_pnl == 75.0
 
     def test_flat_returns_none(self) -> None:
-        self.conn.get.return_value = _make_position_response(
-            long_units="0", short_units="0"
-        )
+        self.conn.get.return_value = _make_position_response(long_units="0", short_units="0")
         pos = self.adapter.get_positions("XAU_USD")
         assert pos is None
 
@@ -173,9 +167,7 @@ class TestGetPositions:
     def test_calls_correct_endpoint(self) -> None:
         self.conn.get.return_value = _make_position_response()
         self.adapter.get_positions("XAU_USD")
-        self.conn.get.assert_called_once_with(
-            "/v3/accounts/101-001-123/positions/XAU_USD"
-        )
+        self.conn.get.assert_called_once_with("/v3/accounts/101-001-123/positions/XAU_USD")
 
     def test_api_error_propagates(self) -> None:
         self.conn.get.side_effect = OANDAAPIError(404, "No such position")

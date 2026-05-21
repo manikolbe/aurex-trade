@@ -351,17 +351,13 @@ class TradingEngine:
 
         # Step 3: Risk evaluation — broker is source of truth for position
         position = self._broker.get_positions(self._symbol)
-        trades_today = self._repository.get_trades_today(
-            self._symbol, user_id=self._user_id
-        )
+        trades_today = self._repository.get_trades_today(self._symbol, user_id=self._user_id)
 
         # Assemble account state for risk engine
         current_equity = self._broker.equity
         if current_equity > self._peak_equity:
             self._peak_equity = current_equity
-        account_state = AccountState(
-            equity=current_equity, peak_equity=self._peak_equity
-        )
+        account_state = AccountState(equity=current_equity, peak_equity=self._peak_equity)
 
         self._log.debug(
             "risk_eval_context",
@@ -394,9 +390,7 @@ class TradingEngine:
         # Step 4: Calculate position size and create order
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
 
-        quantity = self._risk_engine.calculate_position_size(
-            signal, account_state, latest_close
-        )
+        quantity = self._risk_engine.calculate_position_size(signal, account_state, latest_close)
         if quantity <= 0.0:
             quantity = min(
                 self._fallback_position_size,
