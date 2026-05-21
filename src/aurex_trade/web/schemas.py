@@ -358,6 +358,11 @@ class BotMetricsResponse(BaseModel):
     open_position_count: int
     peak_equity: float
     uptime_seconds: float | None = None
+    open_units: float = 0.0
+    open_side: str = "flat"
+    realized_pnl: float = 0.0
+    win_rate: float | None = None
+    avg_slippage: float | None = None
 
 
 class BotStatusResponse(BaseModel):

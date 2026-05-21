@@ -52,6 +52,11 @@ class EngineMetrics(TypedDict):
     open_position_count: int
     peak_equity: float
     uptime_seconds: float | None
+    open_units: float
+    open_side: str
+    realized_pnl: float
+    win_rate: float | None
+    avg_slippage: float | None
 
 
 class TradingEngine:
@@ -97,6 +102,7 @@ class TradingEngine:
         # Account state tracking for risk engine
         self._peak_equity: float = 0.0
         self._trade_pnls: list[float] = []
+        self._slippages: list[float] = []
         # Observability (read by web layer via get_metrics())
         self._cycle_count: int = 0
         self._started_at: datetime | None = None
@@ -209,6 +215,30 @@ class TradingEngine:
         else:
             balance = current_equity
 
+        # Open units from broker position
+        position = self._broker.get_positions(self._symbol)
+        open_units = position.quantity if position else 0.0
+        if open_units > 0:
+            open_side = "long"
+        elif open_units < 0:
+            open_side = "short"
+        else:
+            open_side = "flat"
+
+        # Realized P&L from broker
+        realized_pnl = position.realized_pnl if position else 0.0
+
+        # Win rate from session trade P&Ls
+        win_rate: float | None = None
+        if self._trade_pnls:
+            wins = sum(1 for p in self._trade_pnls if p > 0)
+            win_rate = wins / len(self._trade_pnls)
+
+        # Average slippage
+        avg_slippage: float | None = None
+        if self._slippages:
+            avg_slippage = sum(self._slippages) / len(self._slippages)
+
         return EngineMetrics(
             cycle_count=self._cycle_count,
             started_at=self._started_at,
@@ -222,6 +252,11 @@ class TradingEngine:
             open_position_count=open_position_count,
             peak_equity=self._peak_equity,
             uptime_seconds=uptime,
+            open_units=abs(open_units),
+            open_side=open_side,
+            realized_pnl=realized_pnl,
+            win_rate=win_rate,
+            avg_slippage=avg_slippage,
         )
 
     def _run_cycle(self) -> None:
@@ -336,6 +371,7 @@ class TradingEngine:
         trade = self._broker.place_order(order)
         self._session_trades += 1
         slippage = trade.price - latest_close
+        self._slippages.append(abs(slippage))
         self._log.info(
             "trade_executed",
             side=trade.side.value,

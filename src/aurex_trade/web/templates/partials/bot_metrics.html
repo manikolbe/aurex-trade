@@ -1,25 +1,60 @@
 {% if metrics %}
-<div class="stats stats-vertical shadow w-full">
-  <div class="stat py-2">
-    <div class="stat-title">Cash Balance</div>
-    <div class="stat-value text-lg">${{ "%.2f" | format(metrics['balance']) }}</div>
+<div class="grid grid-cols-2 gap-x-6 gap-y-3">
+  <div>
+    <div class="text-xs text-base-content/60">Cash Balance</div>
+    <div class="text-lg font-semibold">${{ "%.2f" | format(metrics['balance']) }}</div>
   </div>
-  <div class="stat py-2">
-    <div class="stat-title">Unrealised P&L</div>
-    <div class="stat-value text-lg {% if metrics['unrealized_pnl'] >= 0 %}text-success{% else %}text-error{% endif %}">
+  <div>
+    <div class="text-xs text-base-content/60">Unrealised P&L</div>
+    <div class="text-lg font-semibold {% if metrics['unrealized_pnl'] >= 0 %}text-success{% else %}text-error{% endif %}">
       {{ "%+.2f" | format(metrics['unrealized_pnl']) }}
     </div>
-    <div class="stat-desc">{{ metrics['open_position_count'] }} open position{{ 's' if metrics['open_position_count'] != 1 else '' }}</div>
   </div>
-  <div class="stat py-2">
-    <div class="stat-title">Signals / Trades / Rejections</div>
-    <div class="stat-value text-lg">{{ metrics['session_signals'] }} / {{ metrics['session_trades'] }} / {{ metrics['session_rejections'] }}</div>
+  <div>
+    <div class="text-xs text-base-content/60">Realised P&L</div>
+    <div class="text-lg font-semibold {% if metrics['realized_pnl'] >= 0 %}text-success{% else %}text-error{% endif %}">
+      {{ "%+.2f" | format(metrics['realized_pnl']) }}
+    </div>
   </div>
-  <div class="stat py-2">
-    <div class="stat-title">Cycles</div>
-    <div class="stat-value text-lg">{{ metrics['cycle_count'] }}</div>
+  <div>
+    <div class="text-xs text-base-content/60">Open Position</div>
+    <div class="text-lg font-semibold">
+      {% if metrics['open_side'] == 'flat' %}
+        Flat
+      {% else %}
+        {{ "%.1f" | format(metrics['open_units']) }} {{ metrics['open_side'] }}
+      {% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="text-xs text-base-content/60">Signals / Trades / Rejections</div>
+    <div class="text-lg font-semibold">{{ metrics['session_signals'] }} / {{ metrics['session_trades'] }} / {{ metrics['session_rejections'] }}</div>
+  </div>
+  <div>
+    <div class="text-xs text-base-content/60">Win Rate</div>
+    <div class="text-lg font-semibold">
+      {% if metrics['win_rate'] is not none %}
+        {{ "%.0f" | format(metrics['win_rate'] * 100) }}%
+      {% else %}
+        —
+      {% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="text-xs text-base-content/60">Avg Slippage</div>
+    <div class="text-lg font-semibold">
+      {% if metrics['avg_slippage'] is not none %}
+        {{ "%.2f" | format(metrics['avg_slippage']) }} pts
+      {% else %}
+        —
+      {% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="text-xs text-base-content/60">Uptime</div>
     {% set _up = (metrics['uptime_seconds'] or 0)|int %}
-    <div class="stat-desc">{{ _up // 3600 }}h {{ (_up % 3600) // 60 }}m {{ _up % 60 }}s uptime</div>
+    <div class="text-lg font-semibold">{{ _up // 3600 }}h {{ (_up % 3600) // 60 }}m {{ _up % 60 }}s</div>
+    <div class="text-xs text-base-content/50">{{ metrics['cycle_count'] }} cycles</div>
   </div>
 </div>
 {% endif %}

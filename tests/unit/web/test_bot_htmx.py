@@ -34,6 +34,11 @@ class TestBotStatusPoll:
             "open_position_count": 0,
             "peak_equity": 10000.0,
             "uptime_seconds": 60.0,
+            "open_units": 0.0,
+            "open_side": "flat",
+            "realized_pnl": 0.0,
+            "win_rate": None,
+            "avg_slippage": None,
         }
         engine.kill_switch = False
         connection = MagicMock()
@@ -101,6 +106,11 @@ class TestBotMetricsPoll:
             "open_position_count": 0,
             "peak_equity": 11000.0,
             "uptime_seconds": 600.0,
+            "open_units": 5.0,
+            "open_side": "long",
+            "realized_pnl": 50.0,
+            "win_rate": 0.5,
+            "avg_slippage": 0.3,
         }
         connection = MagicMock()
         manager.start(
