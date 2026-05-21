@@ -138,7 +138,7 @@ function updateBotParams() {
       '<label class="label label-text tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + '</label>' +
       '<input type="number" name="param_' + p.key + '" value="' + p.default +
       '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value +
-      '" class="input input-bordered input-sm">' +
+      '" title="' + p.tooltip.replace(/"/g, '&quot;') + '" class="input input-bordered input-sm">' +
       '</div>';
   }).join('');
 }

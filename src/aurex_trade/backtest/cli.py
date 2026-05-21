@@ -17,6 +17,7 @@ from aurex_trade.config import OANDAConfig
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
+from aurex_trade.domain.strategy.ciby_grid_hedging import CibyGridHedgingStrategy
 from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 from aurex_trade.metrics import RANKABLE_METRICS
@@ -36,6 +37,13 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         atr_multiplier=float(p.get("atr_multiplier", 2.0)),
         atr_period=int(p.get("atr_period", 14)),
     ),
+    "ciby_grid_hedging": lambda p: CibyGridHedgingStrategy(
+        grid_spacing=float(p.get("grid_spacing", 10.0)),
+        max_levels=int(p.get("max_levels", 6)),
+        stop_distance=float(p.get("stop_distance", 30.0)),
+        num_levels_above=int(p.get("num_levels_above", 3)),
+        num_levels_below=int(p.get("num_levels_below", 3)),
+    ),
 }
 
 # Per-strategy validators — filters out invalid param combos
@@ -45,12 +53,20 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
         p.get("period", 14) > 0
         and 0 < p.get("oversold", 30) < p.get("overbought", 70) < 100
     ),
+    "ciby_grid_hedging": lambda p: (
+        p.get("grid_spacing", 10.0) > 0
+        and p.get("max_levels", 6) >= 2
+        and p.get("stop_distance", 30.0) > 0
+        and p.get("num_levels_above", 3) >= 1
+        and p.get("num_levels_below", 3) >= 1
+    ),
 }
 
 # Maps strategy names to their metadata accessor
 STRATEGY_METADATA: dict[str, Callable[[], StrategyMetadata]] = {
     "sma_crossover": SMACrossover.metadata,
     "rsi_mean_reversion": RSIMeanReversion.metadata,
+    "ciby_grid_hedging": CibyGridHedgingStrategy.metadata,
 }
 
 

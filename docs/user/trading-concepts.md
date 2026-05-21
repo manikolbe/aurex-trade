@@ -30,9 +30,9 @@ rules every time — no emotions, no second-guessing.
 Think of it like a recipe: given specific ingredients (market data), follow these
 steps, and you get a specific output (a buy or sell decision).
 
-## The Two Strategies
+## The Three Strategies
 
-AurexTrade currently offers two strategies. They work in opposite ways, which means
+AurexTrade currently offers three strategies. They work in different ways, which means
 they perform best in different market conditions.
 
 ### SMA Crossover (Trend-Following)
@@ -79,13 +79,50 @@ on a scale of 0 to 100:
 **Analogy:** It's like a rubber band. The further you stretch it from the middle,
 the harder it snaps back.
 
+### Ciby Grid Hedging (Direction-Neutral)
+
+**The idea:** Don't predict direction at all. Instead, place a grid of price
+levels above and below the current price, and let the market reveal which way
+it wants to go. Losing positions get stopped out; winning positions accumulate.
+
+**How it works:**
+
+Imagine drawing horizontal lines on a price chart at regular intervals (e.g.,
+every 10 points) above and below where the price is right now. These are your
+**grid levels**.
+
+- When price crosses a level **upward** — **buy** (the market is breaking out higher)
+- When price crosses a level **downward** — **sell** (the market is breaking out lower)
+
+Each position gets a **wide stop-loss** (e.g., 30 points) to give it room to
+breathe. Positions that go the wrong way get stopped out. Positions that go the
+right way survive and accumulate — gradually shifting your total exposure in the
+direction the market is actually moving.
+
+**When it works best:** Choppy or slowly trending markets. Gold (XAU/USD) is a
+natural fit due to its tendency to oscillate within ranges before breaking out.
+
+**When it struggles:** Fast, strong directional moves where price blows through
+multiple grid levels at once, triggering stops on several positions in rapid
+succession.
+
+**Key risk:** Multiple stops can trigger in quick succession during strong trends.
+The wide stop distance and max-levels cap are your defences against this.
+
+**Analogy:** It's like casting a net in both directions and seeing which side
+catches fish. You don't need to know which way the fish are swimming — the net
+does the work.
+
+---
+
 ## Which Strategy Should I Use?
 
 | Market Condition | Best Strategy |
 |-----------------|---------------|
 | Clear trends (up or down for weeks) | SMA Crossover |
 | Choppy, sideways, range-bound | RSI Mean-Reversion |
-| Not sure | Test both with a backtest and compare results |
+| Uncertain direction, want to capture either way | Ciby Grid Hedging |
+| Not sure | Test all three with a backtest and compare results |
 
 In practice, no one knows in advance what the market will do. That's why testing
 matters — you can see which strategy worked better on recent data.

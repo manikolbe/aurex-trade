@@ -148,9 +148,9 @@ function renderSweepParams(strategyKey) {
     div.innerHTML =
       '<label class="label label-text text-xs tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + ' (start, end, step)</label>' +
       '<div class="grid grid-cols-3 gap-1">' +
-        '<input type="number" data-param="' + p.key + '" data-role="start" value="' + p.min_value + '" step="' + step + '" class="input input-bordered input-sm">' +
-        '<input type="number" data-param="' + p.key + '" data-role="end" value="' + p.max_value + '" step="' + step + '" class="input input-bordered input-sm">' +
-        '<input type="number" data-param="' + p.key + '" data-role="step" value="' + rangeStep + '" step="' + step + '" class="input input-bordered input-sm">' +
+        '<input type="number" data-param="' + p.key + '" data-role="start" value="' + p.min_value + '" step="' + step + '" title="' + p.tooltip.replace(/"/g, '&quot;') + '" class="input input-bordered input-sm">' +
+        '<input type="number" data-param="' + p.key + '" data-role="end" value="' + p.max_value + '" step="' + step + '" title="' + p.tooltip.replace(/"/g, '&quot;') + '" class="input input-bordered input-sm">' +
+        '<input type="number" data-param="' + p.key + '" data-role="step" value="' + rangeStep + '" step="' + step + '" title="' + p.tooltip.replace(/"/g, '&quot;') + '" class="input input-bordered input-sm">' +
       '</div>';
     container.appendChild(div);
   });

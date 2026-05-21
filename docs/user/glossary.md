@@ -6,6 +6,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## A
 
+**Anchor Price**
+:   The center price around which a grid is built. When the grid strategy starts,
+    it uses the current market price as the anchor and places grid levels at fixed
+    intervals above and below it.
+
 **API Token**
 :   A secret key that authorises AurexTrade to communicate with your broker account
     on your behalf. Generated in the OANDA Hub and entered once in Settings → Broker.
@@ -16,6 +21,12 @@ Quick definitions of terms you'll encounter in AurexTrade.
     volatile market.
 
 ## B
+
+**Breakout Reinforcement**
+:   A technique where positions are added in the direction of a price breakout.
+    In grid trading, when price breaks through levels in one direction, the
+    surviving positions on that side accumulate while the losing side gets stopped
+    out, reinforcing the emerging trend.
 
 **Broker**
 :   A service that connects you to financial markets and executes trades. AurexTrade
@@ -81,6 +92,20 @@ Quick definitions of terms you'll encounter in AurexTrade.
     makes money on average.
 
 ## G
+
+**Grid Level**
+:   A specific price point in a grid trading strategy where an order is placed.
+    When price crosses a grid level, it triggers a buy or sell signal depending
+    on the direction of the crossing.
+
+**Grid Spacing**
+:   The fixed distance (in price points) between adjacent grid levels. For gold
+    trading, 10 points is a common spacing.
+
+**Grid Trading**
+:   A strategy that places orders at regular price intervals (a "grid") above and
+    below the current price. Captures movement in either direction without
+    predicting which way the market will go.
 
 **Granularity**
 :   The time period each price bar represents. M1 = 1 minute, M5 = 5 minutes,
