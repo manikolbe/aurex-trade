@@ -25,6 +25,11 @@ def bot_runner(session_manager: BotSessionManager, user_id: str) -> None:
     Submitted to TaskRegistry as the background callable. When the engine
     exits (normally or via crash), the session is removed so the user can
     start a new bot.
+
+    Guards against a race condition: if the user stops this bot and starts a
+    new one before this runner's thread exits, the finally block must NOT
+    kill the new session. We compare session identity to ensure we only clean
+    up our own session.
     """
     session = session_manager.get(user_id)
     if session is None:
@@ -32,7 +37,12 @@ def bot_runner(session_manager: BotSessionManager, user_id: str) -> None:
     try:
         session.engine.run()
     finally:
-        session_manager.stop(user_id)
+        # Only clean up if OUR session is still the active one.
+        # If the user already stopped us and started a new bot, the active
+        # session will be a different instance — leave it alone.
+        current = session_manager.get(user_id)
+        if current is session:
+            session_manager.stop(user_id)
 
 
 def start_bot_session(
