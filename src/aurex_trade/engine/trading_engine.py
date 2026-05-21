@@ -28,6 +28,15 @@ class EquitySnapshot(TypedDict):
     price: float
 
 
+class TradeMarker(TypedDict):
+    """A trade event for chart overlay."""
+
+    timestamp: str
+    price: float
+    side: str
+    quantity: float
+
+
 class EngineMetrics(TypedDict):
     """Snapshot of engine state, safe to read from any thread (GIL-protected)."""
 
@@ -92,6 +101,8 @@ class TradingEngine:
         self._started_at: datetime | None = None
         # Equity history for live chart
         self._equity_history: list[EquitySnapshot] = []
+        # Trade markers for chart overlay
+        self._trade_markers: list[TradeMarker] = []
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -167,6 +178,10 @@ class TradingEngine:
     def get_equity_history(self) -> list[EquitySnapshot]:
         """Return the equity history for charting. Thread-safe (GIL)."""
         return list(self._equity_history)
+
+    def get_trade_markers(self) -> list[TradeMarker]:
+        """Return trade markers for chart overlay. Thread-safe (GIL)."""
+        return list(self._trade_markers)
 
     def get_metrics(self) -> EngineMetrics:
         """Return a snapshot of current engine metrics.
@@ -329,6 +344,16 @@ class TradingEngine:
             slippage=round(slippage, 4),
         )
         self._repository.save_trade(trade, user_id=self._user_id)
+
+        # Record marker for chart overlay
+        self._trade_markers.append(
+            TradeMarker(
+                timestamp=datetime.now(UTC).isoformat(),
+                price=trade.price,
+                side=trade.side.value,
+                quantity=trade.quantity,
+            )
+        )
 
         # Step 5: Update position and track P&L
         prev_position = position

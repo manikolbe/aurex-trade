@@ -116,26 +116,89 @@
   var placeholder = document.getElementById('bot-equity-placeholder');
   canvas.style.display = 'none';
 
+  function toTimeLabel(ts) {
+    var d = new Date(ts);
+    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+  }
+
+  function buildTradeDatasets(tradeMarkers, labels) {
+    var buys = new Array(labels.length).fill(null);
+    var sells = new Array(labels.length).fill(null);
+
+    tradeMarkers.forEach(function(t) {
+      var label = toTimeLabel(t.timestamp);
+      var idx = labels.lastIndexOf(label);
+      if (idx === -1) {
+        // Find closest label
+        var tTime = new Date(t.timestamp).getTime();
+        var minDiff = Infinity;
+        for (var i = 0; i < labels.length; i++) {
+          // labels are HH:MM, compare by index proximity to trade time
+          var diff = Math.abs(i - (labels.length - 1));
+          if (labels[i] === label) { idx = i; break; }
+        }
+        if (idx === -1) {
+          // Place at closest time by scanning equity timestamps
+          idx = labels.length - 1;
+        }
+      }
+      if (t.side === 'buy') {
+        buys[idx] = t.price;
+      } else {
+        sells[idx] = t.price;
+      }
+    });
+
+    return [
+      {
+        label: 'Buy',
+        data: buys,
+        borderColor: 'hsl(145, 70%, 50%)',
+        backgroundColor: 'hsl(145, 70%, 50%)',
+        pointStyle: 'triangle',
+        pointRadius: 8,
+        pointHoverRadius: 11,
+        showLine: false,
+        yAxisID: 'y1'
+      },
+      {
+        label: 'Sell',
+        data: sells,
+        borderColor: 'hsl(0, 70%, 55%)',
+        backgroundColor: 'hsl(0, 70%, 55%)',
+        pointStyle: 'triangle',
+        rotation: 180,
+        pointRadius: 8,
+        pointHoverRadius: 11,
+        showLine: false,
+        yAxisID: 'y1'
+      }
+    ];
+  }
+
   function updateEquityChart() {
     fetch('/api/bot/equity')
       .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(data) {
-        if (!data || data.length < 2) return;
+      .then(function(resp) {
+        if (!resp) return;
+        var data = resp.equity_history || [];
+        var tradeMarkers = resp.trade_markers || [];
+        if (data.length < 2) return;
 
         placeholder.style.display = 'none';
         canvas.style.display = '';
 
-        var labels = data.map(function(p) {
-          var d = new Date(p.timestamp);
-          return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-        });
+        var labels = data.map(function(p) { return toTimeLabel(p.timestamp); });
         var equityValues = data.map(function(p) { return p.equity; });
         var priceValues = data.map(function(p) { return p.price; });
+        var tradeSets = buildTradeDatasets(tradeMarkers, labels);
 
         if (chart) {
           chart.data.labels = labels;
           chart.data.datasets[0].data = equityValues;
           chart.data.datasets[1].data = priceValues;
+          chart.data.datasets[2].data = tradeSets[0].data;
+          chart.data.datasets[3].data = tradeSets[1].data;
           chart.update('none');
         } else {
           chart = new Chart(canvas.getContext('2d'), {
@@ -164,16 +227,46 @@
                   borderWidth: 1.5,
                   tension: 0.1,
                   yAxisID: 'y1'
-                }
+                },
+                tradeSets[0],
+                tradeSets[1]
               ]
             },
             options: {
               responsive: true,
               animation: false,
-              interaction: { mode: 'index', intersect: false },
+              interaction: { mode: 'nearest', intersect: true },
               plugins: {
-                legend: { display: true, labels: { color: '#a6adbb' } },
-                title: { display: false }
+                legend: { display: true, labels: { color: '#a6adbb', usePointStyle: true } },
+                title: { display: false },
+                tooltip: {
+                  callbacks: {
+                    label: function(ctx) {
+                      if (ctx.datasetIndex === 2 && ctx.raw !== null) {
+                        var t = tradeMarkers.filter(function(m) { return m.side === 'buy'; });
+                        var marker = t.length > 0 ? t[t.length - 1] : null;
+                        // Find the matching marker for this index
+                        for (var i = 0; i < tradeMarkers.length; i++) {
+                          if (tradeMarkers[i].side === 'buy' && toTimeLabel(tradeMarkers[i].timestamp) === ctx.label) {
+                            marker = tradeMarkers[i];
+                            break;
+                          }
+                        }
+                        if (marker) return 'BUY ' + marker.quantity + ' @ ' + marker.price.toFixed(2);
+                        return 'Buy: ' + ctx.formattedValue;
+                      }
+                      if (ctx.datasetIndex === 3 && ctx.raw !== null) {
+                        for (var j = 0; j < tradeMarkers.length; j++) {
+                          if (tradeMarkers[j].side === 'sell' && toTimeLabel(tradeMarkers[j].timestamp) === ctx.label) {
+                            return 'SELL ' + tradeMarkers[j].quantity + ' @ ' + tradeMarkers[j].price.toFixed(2);
+                          }
+                        }
+                        return 'Sell: ' + ctx.formattedValue;
+                      }
+                      return ctx.dataset.label + ': ' + ctx.formattedValue;
+                    }
+                  }
+                }
               },
               scales: {
                 x: {
