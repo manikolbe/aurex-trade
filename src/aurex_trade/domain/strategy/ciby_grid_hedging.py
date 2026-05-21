@@ -142,17 +142,14 @@ class CibyGridHedgingStrategy:
         current_price = bars[-1].close
         prev_price = bars[-2].close
 
-        # Initialize grid on first meaningful call
         if self._anchor_price is None:
             self._anchor_price = current_price
             self._grid_levels = self._build_grid(current_price)
             return None
 
-        # Self-limit: don't generate if max levels reached
         if len(self._filled_levels) >= self._max_levels:
             return None
 
-        # Check each unfilled level for a crossing
         for level in self._grid_levels:
             if level in self._filled_levels:
                 continue
@@ -195,7 +192,7 @@ class CibyGridHedgingStrategy:
             strength=1.0,
             metadata={
                 "grid_level": f"{level:.2f}",
-                "anchor_price": f"{self._anchor_price:.2f}" if self._anchor_price else "",
+                "anchor_price": f"{self._anchor_price:.2f}",
                 "filled_count": str(len(self._filled_levels)),
                 "max_levels": str(self._max_levels),
                 "entry_price": f"{entry_price:.5f}",
