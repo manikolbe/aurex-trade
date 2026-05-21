@@ -136,9 +136,11 @@ function updateBotParams() {
     var step = Number.isInteger(p.default) ? '1' : '0.1';
     return '<div class="form-control">' +
       '<label class="label label-text tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + '</label>' +
+      '<div class="tooltip tooltip-top w-full" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' +
       '<input type="number" name="param_' + p.key + '" value="' + p.default +
       '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value +
-      '" title="' + p.tooltip.replace(/"/g, '&quot;') + '" class="input input-bordered input-sm">' +
+      '" class="input input-bordered input-sm w-full">' +
+      '</div>' +
       '</div>';
   }).join('');
 }

@@ -203,7 +203,9 @@ function renderParams(strategyKey) {
     div.className = 'form-control';
     div.innerHTML =
       '<label class="label label-text tooltip tooltip-top" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' + p.label + '</label>' +
-      '<input type="number" name="param__' + p.key + '" value="' + p.default + '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value + '" title="' + p.tooltip.replace(/"/g, '&quot;') + '" class="input input-bordered input-sm">';
+      '<div class="tooltip tooltip-top w-full" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' +
+      '<input type="number" name="param__' + p.key + '" value="' + p.default + '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value + '" class="input input-bordered input-sm w-full">' +
+      '</div>';
     container.appendChild(div);
   });
 }
