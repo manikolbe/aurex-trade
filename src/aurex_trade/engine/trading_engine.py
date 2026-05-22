@@ -479,10 +479,22 @@ class TradingEngine:
             take_profit=signal.take_profit,
         )
 
+        # Snapshot open trades before order to resolve new trade ID via diff
+        open_before = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
+
         trade = self._broker.place_order(order)
         self._session_trades += 1
         slippage = trade.price - latest_close
         self._slippages.append(abs(slippage))
+
+        # Resolve broker trade ID: prefer tradeOpened from fill, fall back to diff
+        broker_trade_id = trade.broker_trade_id
+        if not broker_trade_id:
+            open_after = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
+            new_ids = open_after - open_before
+            if new_ids:
+                broker_trade_id = new_ids.pop()
+
         self._log.info(
             "trade_executed",
             side=trade.side.value,
@@ -490,6 +502,7 @@ class TradingEngine:
             price=trade.price,
             trigger_price=latest_close,
             slippage=round(slippage, 4),
+            broker_trade_id=broker_trade_id,
         )
         self._repository.save_trade(trade, user_id=self._user_id)
 
@@ -502,14 +515,14 @@ class TradingEngine:
                 quantity=trade.quantity,
                 stop_loss=signal.stop_loss,
                 take_profit=signal.take_profit,
-                broker_trade_id=trade.broker_trade_id,
+                broker_trade_id=broker_trade_id,
             )
         )
 
         # Track grid level → broker trade ID for closure detection
         grid_level_str = signal.metadata.get("grid_level")
-        if grid_level_str and trade.broker_trade_id:
-            self._grid_trade_map[float(grid_level_str)] = trade.broker_trade_id
+        if grid_level_str and broker_trade_id:
+            self._grid_trade_map[float(grid_level_str)] = broker_trade_id
 
         # Step 5: Update position and track P&L
         prev_position = position
