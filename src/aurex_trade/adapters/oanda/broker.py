@@ -65,7 +65,20 @@ class OANDABrokerAdapter:
 
         data = self._connection.post(f"/v3/accounts/{self._account_id}/orders", json=body)
 
-        fill = data["orderFillTransaction"]
+        fill = data.get("orderFillTransaction")
+        if fill is None:
+            # Order was not filled — OANDA rejected or cancelled it (e.g., FOK timeout)
+            cancel = data.get("orderCancelTransaction", {})
+            reason = cancel.get("reason", "UNKNOWN")
+            msg = f"OANDA order not filled: {reason}"
+            log.warning(
+                "oanda_order_not_filled",
+                symbol=order.symbol,
+                side=order.side.value,
+                reason=reason,
+                response_keys=list(data.keys()),
+            )
+            raise RuntimeError(msg)
 
         # OANDA returns tradeOpened only when a new trade is created.
         # Position-reducing fills (closing/flipping) don't open a new trade.
