@@ -106,10 +106,12 @@ class SMACrossover:
                     label="Reward Ratio",
                     tooltip=(
                         "Controls where the trade automatically closes for "
-                        "profit relative to the stop-loss. A ratio of 2 means "
-                        "the profit target is twice as far from your entry as "
-                        "the stop-loss. Example: if stop-loss is 10 points "
-                        "below entry, take-profit is 20 points above. "
+                        "profit. Your stop-loss is set automatically based on "
+                        "market volatility (ATR Multiplier above). The ratio "
+                        "decides how much further to place take-profit. "
+                        "Example: if stop-loss ends up 10 points below entry, "
+                        "a ratio of 2 places take-profit 20 points above. "
+                        "Both levels appear on the chart when a trade opens. "
                         "Set to 0 to never auto-close winners."
                     ),
                     default=2.0,
