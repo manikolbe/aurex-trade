@@ -496,7 +496,18 @@ class TradingEngine:
         # Snapshot open trades before order to resolve new trade ID via diff
         open_before = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
 
-        trade = self._broker.place_order(order)
+        try:
+            trade = self._broker.place_order(order)
+        except Exception:
+            self._log.exception("order_execution_failed", symbol=self._symbol, side=side.value)
+            # Release grid level — no trade was placed
+            grid_level_str = signal.metadata.get("grid_level")
+            if grid_level_str:
+                release = getattr(self._strategy, "release_level", None)
+                if release is not None:
+                    release(float(grid_level_str))
+            return
+
         self._session_trades += 1
         slippage = trade.price - latest_close
         self._slippages.append(abs(slippage))
