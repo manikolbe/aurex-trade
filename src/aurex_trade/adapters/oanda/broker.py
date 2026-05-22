@@ -192,14 +192,24 @@ class OANDABrokerAdapter:
             close_reason=trade.get("closeReason"),
         )
 
-        close_reason = trade.get("closeReason", "UNKNOWN")
+        close_reason = trade.get("closeReason") or ""
         # Map OANDA close reasons to simplified labels
         if "TAKE_PROFIT" in close_reason:
             reason = "TAKE_PROFIT"
         elif "STOP_LOSS" in close_reason:
             reason = "STOP_LOSS"
-        else:
+        elif close_reason:
             reason = close_reason
+        else:
+            # closeReason missing — infer from attached order states
+            tp_order = trade.get("takeProfitOrder", {})
+            sl_order = trade.get("stopLossOrder", {})
+            if tp_order.get("state") == "FILLED":
+                reason = "TAKE_PROFIT"
+            elif sl_order.get("state") == "FILLED":
+                reason = "STOP_LOSS"
+            else:
+                reason = "UNKNOWN"
 
         return ClosedTradeInfo(
             broker_trade_id=broker_trade_id,
