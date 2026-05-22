@@ -10,7 +10,14 @@ import random
 from uuid import UUID
 
 from aurex_trade.domain.enums import OrderSide
-from aurex_trade.domain.models import BarData, Order, Position, Trade
+from aurex_trade.domain.models import (
+    BarData,
+    ClosedTradeInfo,
+    OpenBrokerTrade,
+    Order,
+    Position,
+    Trade,
+)
 
 
 class SimulatedBrokerAdapter:
@@ -119,6 +126,14 @@ class SimulatedBrokerAdapter:
             return round(mid_price + half_spread + slip, 5)
         else:
             return round(mid_price - half_spread - slip, 5)
+
+    def get_open_trades(self, symbol: str) -> list[OpenBrokerTrade]:
+        """Backtest broker does not track individual open trades."""
+        return []
+
+    def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None:
+        """Backtest broker does not track closed trade details."""
+        return None
 
     def _update_position(
         self, symbol: str, side: OrderSide, quantity: float, price: float

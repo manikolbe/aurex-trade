@@ -363,3 +363,74 @@ class TestCibyGridHedgingTakeProfit:
 
         assert signal is not None
         assert signal.take_profit is None
+
+
+class TestCibyGridHedgingReleaseLevel:
+    """Tests for releasing triggered grid levels back to waiting."""
+
+    def test_release_triggered_level_returns_true(self) -> None:
+        """Releasing a triggered level should return True and free it."""
+        strategy = CibyGridHedgingStrategy(
+            grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
+            num_levels_above=3, num_levels_below=3,
+        )
+        bars = _make_bars([100.0, 100.0])
+        strategy.generate(bars)  # Initialize grid at anchor 100
+
+        # Trigger a level by crossing it
+        bars = _make_bars([109.0, 111.0])
+        signal = strategy.generate(bars)
+        assert signal is not None
+
+        # Level 110.0 should now be triggered
+        state = strategy.get_display_state()
+        assert state is not None
+        levels = state["levels"]
+        assert isinstance(levels, list)
+        triggered = [lv for lv in levels if lv["status"] == "triggered"]
+        assert len(triggered) == 1
+
+        # Release it
+        assert strategy.release_level(110.0) is True
+
+        # Now it should be back to waiting
+        state = strategy.get_display_state()
+        assert state is not None
+        levels = state["levels"]
+        assert isinstance(levels, list)
+        triggered = [lv for lv in levels if lv["status"] == "triggered"]
+        assert len(triggered) == 0
+
+    def test_release_non_triggered_level_returns_false(self) -> None:
+        """Releasing a level that isn't triggered should return False."""
+        strategy = CibyGridHedgingStrategy(
+            grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
+            num_levels_above=3, num_levels_below=3,
+        )
+        bars = _make_bars([100.0, 100.0])
+        strategy.generate(bars)  # Initialize grid
+
+        assert strategy.release_level(110.0) is False
+
+    def test_released_level_can_be_retriggered(self) -> None:
+        """After release, a level should be available for re-entry."""
+        strategy = CibyGridHedgingStrategy(
+            grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
+            num_levels_above=3, num_levels_below=3,
+        )
+        bars = _make_bars([100.0, 100.0])
+        strategy.generate(bars)  # Initialize grid at anchor 100
+
+        # Trigger level 110
+        bars = _make_bars([109.0, 111.0])
+        signal = strategy.generate(bars)
+        assert signal is not None
+
+        # Release it
+        strategy.release_level(110.0)
+
+        # Cross it again — should trigger again
+        bars = _make_bars([109.0, 111.0])
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.signal_type == SignalType.LONG

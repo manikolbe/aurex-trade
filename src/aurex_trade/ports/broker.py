@@ -3,7 +3,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from aurex_trade.domain.models import Order, Position, Trade
+from aurex_trade.domain.models import ClosedTradeInfo, OpenBrokerTrade, Order, Position, Trade
 
 
 class BrokerPort(Protocol):
@@ -20,3 +20,7 @@ class BrokerPort(Protocol):
     def cancel_order(self, order_id: UUID) -> bool: ...
 
     def get_positions(self, symbol: str) -> Position | None: ...
+
+    def get_open_trades(self, symbol: str) -> list[OpenBrokerTrade]: ...
+
+    def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None: ...

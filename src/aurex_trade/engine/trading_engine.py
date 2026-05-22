@@ -37,6 +37,7 @@ class TradeMarker(TypedDict):
     quantity: float
     stop_loss: float | None
     take_profit: float | None
+    broker_trade_id: str
 
 
 class EngineMetrics(TypedDict):
@@ -112,6 +113,8 @@ class TradingEngine:
         self._equity_history: list[EquitySnapshot] = []
         # Trade markers for chart overlay
         self._trade_markers: list[TradeMarker] = []
+        # Grid level → broker trade ID mapping for closure detection
+        self._grid_trade_map: dict[float, str] = {}
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -306,8 +309,76 @@ class TradingEngine:
             avg_slippage=avg_slippage,
         )
 
+    def _check_closures(self) -> None:
+        """Detect trades closed by the broker (TP/SL hit) and release grid levels."""
+        if not self._grid_trade_map:
+            return
+
+        open_trades = self._broker.get_open_trades(self._symbol)
+        open_trade_ids = {t.broker_trade_id for t in open_trades}
+
+        levels_to_free: list[tuple[float, str]] = []
+        for grid_level, broker_id in self._grid_trade_map.items():
+            if broker_id not in open_trade_ids:
+                levels_to_free.append((grid_level, broker_id))
+
+        for grid_level, broker_id in levels_to_free:
+            # Query close details from broker (best-effort — don't block release)
+            side = "close_sl"
+            close_price = 0.0
+            realized_pnl = 0.0
+            try:
+                details = self._broker.get_closed_trade_details(broker_id)
+                if details:
+                    close_reason = details.close_reason
+                    side = "close_tp" if "TAKE_PROFIT" in close_reason else "close_sl"
+                    close_price = details.close_price
+                    realized_pnl = details.realized_pnl
+            except Exception:
+                self._log.warning(
+                    "closed_trade_details_unavailable",
+                    broker_trade_id=broker_id,
+                )
+
+            # Remove from map and release level (always runs)
+            del self._grid_trade_map[grid_level]
+
+            # Track P&L for consecutive loss detection in risk engine
+            if realized_pnl != 0.0:
+                self._trade_pnls.append(realized_pnl)
+
+            # Release the grid level back to 'waiting'
+            release = getattr(self._strategy, "release_level", None)
+            if release is not None:
+                release(grid_level)
+
+            # Record close marker for chart
+            self._trade_markers.append(
+                TradeMarker(
+                    timestamp=datetime.now(UTC).isoformat(),
+                    price=close_price,
+                    side=side,
+                    quantity=0.0,
+                    stop_loss=None,
+                    take_profit=None,
+                    broker_trade_id=broker_id,
+                )
+            )
+
+            self._log.info(
+                "trade_closed_by_broker",
+                grid_level=grid_level,
+                broker_trade_id=broker_id,
+                close_reason=side,
+                close_price=close_price,
+                realized_pnl=realized_pnl,
+            )
+
     def _run_cycle(self) -> None:
         """Execute one complete trading cycle."""
+        # Step 0: Check for broker-side closures (TP/SL hits)
+        self._check_closures()
+
         # Step 1: Fetch market data
         bars = self._market_data.get_latest_bars(self._symbol, self._bar_count)
 
@@ -431,8 +502,14 @@ class TradingEngine:
                 quantity=trade.quantity,
                 stop_loss=signal.stop_loss,
                 take_profit=signal.take_profit,
+                broker_trade_id=trade.broker_trade_id,
             )
         )
+
+        # Track grid level → broker trade ID for closure detection
+        grid_level_str = signal.metadata.get("grid_level")
+        if grid_level_str and trade.broker_trade_id:
+            self._grid_trade_map[float(grid_level_str)] = trade.broker_trade_id
 
         # Step 5: Update position and track P&L
         prev_position = position

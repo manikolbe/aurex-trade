@@ -139,6 +139,8 @@
   function buildTradeDatasets(tradeMarkers, labels) {
     var buys = new Array(labels.length).fill(null);
     var sells = new Array(labels.length).fill(null);
+    var closeTp = new Array(labels.length).fill(null);
+    var closeSl = new Array(labels.length).fill(null);
 
     tradeMarkers.forEach(function(t) {
       var label = toTimeLabel(t.timestamp);
@@ -159,8 +161,12 @@
       }
       if (t.side === 'buy') {
         buys[idx] = t.price;
-      } else {
+      } else if (t.side === 'sell') {
         sells[idx] = t.price;
+      } else if (t.side === 'close_tp') {
+        closeTp[idx] = t.price;
+      } else if (t.side === 'close_sl') {
+        closeSl[idx] = t.price;
       }
     });
 
@@ -183,6 +189,28 @@
         backgroundColor: 'hsl(0, 70%, 55%)',
         pointStyle: 'triangle',
         rotation: 180,
+        pointRadius: 8,
+        pointHoverRadius: 11,
+        showLine: false,
+        yAxisID: 'y1'
+      },
+      {
+        label: 'Take Profit Hit',
+        data: closeTp,
+        borderColor: 'hsl(145, 70%, 50%)',
+        backgroundColor: 'hsl(145, 70%, 50%)',
+        pointStyle: 'star',
+        pointRadius: 9,
+        pointHoverRadius: 12,
+        showLine: false,
+        yAxisID: 'y1'
+      },
+      {
+        label: 'Stop Loss Hit',
+        data: closeSl,
+        borderColor: 'hsl(0, 70%, 55%)',
+        backgroundColor: 'hsl(0, 70%, 55%)',
+        pointStyle: 'crossRot',
         pointRadius: 8,
         pointHoverRadius: 11,
         showLine: false,
@@ -270,7 +298,9 @@
             chart.data.datasets[0],
             chart.data.datasets[1],
             tradeSets[0],
-            tradeSets[1]
+            tradeSets[1],
+            tradeSets[2],
+            tradeSets[3]
           ].concat(targetSets);
           datasets[0].data = equityValues;
           datasets[1].data = priceValues;
@@ -302,7 +332,9 @@
                   yAxisID: 'y1'
                 },
                 tradeSets[0],
-                tradeSets[1]
+                tradeSets[1],
+                tradeSets[2],
+                tradeSets[3]
           ].concat(targetSets);
           chart = new Chart(canvas.getContext('2d'), {
             type: 'line',
@@ -320,26 +352,22 @@
                 tooltip: {
                   callbacks: {
                     label: function(ctx) {
-                      if (ctx.datasetIndex === 2 && ctx.raw !== null) {
-                        var t = tradeMarkers.filter(function(m) { return m.side === 'buy'; });
-                        var marker = t.length > 0 ? t[t.length - 1] : null;
-                        // Find the matching marker for this index
+                      var idx = ctx.datasetIndex;
+                      var markerMeta = {
+                        2: {side: 'buy', fmt: function(m) { return 'BUY ' + m.quantity + ' @ ' + m.price.toFixed(2); }},
+                        3: {side: 'sell', fmt: function(m) { return 'SELL ' + m.quantity + ' @ ' + m.price.toFixed(2); }},
+                        4: {side: 'close_tp', fmt: function(m) { return 'TP @ ' + m.price.toFixed(2); }},
+                        5: {side: 'close_sl', fmt: function(m) { return 'SL @ ' + m.price.toFixed(2); }}
+                      };
+                      var meta = markerMeta[idx];
+                      if (meta && ctx.raw !== null) {
                         for (var i = 0; i < tradeMarkers.length; i++) {
-                          if (tradeMarkers[i].side === 'buy' && toTimeLabel(tradeMarkers[i].timestamp) === ctx.label) {
-                            marker = tradeMarkers[i];
-                            break;
+                          if (tradeMarkers[i].side === meta.side && toTimeLabel(tradeMarkers[i].timestamp) === ctx.label) {
+                            var suffix = tradeMarkers[i].broker_trade_id ? ' (#' + tradeMarkers[i].broker_trade_id + ')' : '';
+                            return meta.fmt(tradeMarkers[i]) + suffix;
                           }
                         }
-                        if (marker) return 'BUY ' + marker.quantity + ' @ ' + marker.price.toFixed(2);
-                        return 'Buy: ' + ctx.formattedValue;
-                      }
-                      if (ctx.datasetIndex === 3 && ctx.raw !== null) {
-                        for (var j = 0; j < tradeMarkers.length; j++) {
-                          if (tradeMarkers[j].side === 'sell' && toTimeLabel(tradeMarkers[j].timestamp) === ctx.label) {
-                            return 'SELL ' + tradeMarkers[j].quantity + ' @ ' + tradeMarkers[j].price.toFixed(2);
-                          }
-                        }
-                        return 'Sell: ' + ctx.formattedValue;
+                        return ctx.dataset.label + ': ' + ctx.formattedValue;
                       }
                       return ctx.dataset.label + ': ' + ctx.formattedValue;
                     }

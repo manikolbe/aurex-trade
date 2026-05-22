@@ -9,7 +9,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from aurex_trade.domain.enums import OrderSide
-from aurex_trade.domain.models import BarData, Order, Position, Trade
+from aurex_trade.domain.models import (
+    BarData,
+    ClosedTradeInfo,
+    OpenBrokerTrade,
+    Order,
+    Position,
+    Trade,
+)
 
 
 class PaperBrokerAdapter:
@@ -30,6 +37,8 @@ class PaperBrokerAdapter:
         self._positions: dict[str, Position] = {}
         self._price_history: dict[str, list[BarData]] = {}
         self._capital = initial_capital
+        self._open_trades: dict[str, OpenBrokerTrade] = {}
+        self._trade_counter = 0
 
     @property
     def equity(self) -> float:
@@ -59,6 +68,17 @@ class PaperBrokerAdapter:
 
         self._update_position(order.symbol, order.side, order.quantity, fill_price)
 
+        self._trade_counter += 1
+        broker_trade_id = str(self._trade_counter)
+
+        self._open_trades[broker_trade_id] = OpenBrokerTrade(
+            broker_trade_id=broker_trade_id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            open_price=fill_price,
+        )
+
         return Trade(
             order_id=order.id,
             symbol=order.symbol,
@@ -66,6 +86,7 @@ class PaperBrokerAdapter:
             quantity=order.quantity,
             price=fill_price,
             commission=0.0,
+            broker_trade_id=broker_trade_id,
         )
 
     def cancel_order(self, order_id: UUID) -> bool:
@@ -74,6 +95,14 @@ class PaperBrokerAdapter:
 
     def get_positions(self, symbol: str) -> Position | None:
         return self._positions.get(symbol)
+
+    def get_open_trades(self, symbol: str) -> list[OpenBrokerTrade]:
+        """Return all open trades for a symbol."""
+        return [t for t in self._open_trades.values() if t.symbol == symbol]
+
+    def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None:
+        """Paper broker does not track closed trade details."""
+        return None
 
     # -- Internal --
 

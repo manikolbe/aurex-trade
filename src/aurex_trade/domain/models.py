@@ -101,6 +101,7 @@ class Trade:
     quantity: float = 0.0
     price: float = 0.0
     commission: float = 0.0
+    broker_trade_id: str = ""
     timestamp: datetime = field(default_factory=_utc_now)
 
 
@@ -115,6 +116,27 @@ class Position:
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
     timestamp: datetime = field(default_factory=_utc_now)
+
+
+@dataclass(frozen=True)
+class OpenBrokerTrade:
+    """A currently open trade as reported by the broker."""
+
+    broker_trade_id: str
+    symbol: str
+    side: OrderSide
+    quantity: float
+    open_price: float
+
+
+@dataclass(frozen=True)
+class ClosedTradeInfo:
+    """Details of a trade closed by the broker (TP/SL hit)."""
+
+    broker_trade_id: str
+    close_price: float
+    realized_pnl: float
+    close_reason: str
 
 
 @dataclass(frozen=True)

@@ -184,6 +184,16 @@ class CibyGridHedgingStrategy:
 
         return None
 
+    def release_level(self, grid_level: float) -> bool:
+        """Free a triggered level back to 'waiting' for re-entry.
+
+        Returns True if the level was released, False if it wasn't triggered.
+        """
+        if grid_level in self._filled_levels:
+            del self._filled_levels[grid_level]
+            return True
+        return False
+
     def get_display_state(self) -> dict[str, object] | None:
         """Return strategy-specific state for UI display.
 
