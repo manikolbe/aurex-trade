@@ -116,6 +116,49 @@ class TestPlaceOrder:
             pass
 
 
+class TestStopLossAndTakeProfit:
+    def setup_method(self) -> None:
+        self.conn = MagicMock(spec=OANDAConnection)
+        self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
+
+    def test_stop_loss_included_when_set(self) -> None:
+        self.conn.post.return_value = _make_fill_response()
+        order = Order(symbol="XAU_USD", side=OrderSide.BUY, quantity=1.0, stop_loss=2040.12345)
+        self.adapter.place_order(order)
+
+        body = self.conn.post.call_args[1]["json"]
+        assert body["order"]["stopLossOnFill"] == {"price": "2040.12345"}
+
+    def test_take_profit_included_when_set(self) -> None:
+        self.conn.post.return_value = _make_fill_response()
+        order = Order(symbol="XAU_USD", side=OrderSide.BUY, quantity=1.0, take_profit=2070.50000)
+        self.adapter.place_order(order)
+
+        body = self.conn.post.call_args[1]["json"]
+        assert body["order"]["takeProfitOnFill"] == {"price": "2070.50000"}
+
+    def test_both_sl_and_tp_included(self) -> None:
+        self.conn.post.return_value = _make_fill_response()
+        order = Order(
+            symbol="XAU_USD", side=OrderSide.BUY, quantity=1.0,
+            stop_loss=2040.00000, take_profit=2070.00000,
+        )
+        self.adapter.place_order(order)
+
+        body = self.conn.post.call_args[1]["json"]
+        assert "stopLossOnFill" in body["order"]
+        assert "takeProfitOnFill" in body["order"]
+
+    def test_no_sl_tp_when_none(self) -> None:
+        self.conn.post.return_value = _make_fill_response()
+        order = Order(symbol="XAU_USD", side=OrderSide.BUY, quantity=1.0)
+        self.adapter.place_order(order)
+
+        body = self.conn.post.call_args[1]["json"]
+        assert "stopLossOnFill" not in body["order"]
+        assert "takeProfitOnFill" not in body["order"]
+
+
 class TestCancelOrder:
     def test_cancel_returns_false(self) -> None:
         conn = MagicMock(spec=OANDAConnection)

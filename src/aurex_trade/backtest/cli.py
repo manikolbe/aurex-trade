@@ -29,6 +29,7 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         long_window=int(p["long_window"]),
         atr_multiplier=float(p.get("atr_multiplier", 2.0)),
         atr_period=int(p.get("atr_period", 14)),
+        reward_ratio=float(p.get("reward_ratio", 2.0)),
     ),
     "rsi_mean_reversion": lambda p: RSIMeanReversion(
         period=int(p.get("period", 14)),
@@ -36,6 +37,7 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         oversold=int(p.get("oversold", 30)),
         atr_multiplier=float(p.get("atr_multiplier", 2.0)),
         atr_period=int(p.get("atr_period", 14)),
+        reward_ratio=float(p.get("reward_ratio", 1.5)),
     ),
     "ciby_grid_hedging": lambda p: CibyGridHedgingStrategy(
         grid_spacing=float(p.get("grid_spacing", 10.0)),
@@ -43,6 +45,7 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         stop_distance=float(p.get("stop_distance", 30.0)),
         num_levels_above=int(p.get("num_levels_above", 3)),
         num_levels_below=int(p.get("num_levels_below", 3)),
+        reward_ratio=float(p.get("reward_ratio", 1.0)),
     ),
 }
 

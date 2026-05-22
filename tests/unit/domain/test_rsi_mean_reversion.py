@@ -212,6 +212,51 @@ class TestStopLossCalculation:
         assert signal.stop_loss is None
 
 
+class TestRSITakeProfitCalculation:
+    """Tests for reward-ratio-based take-profit on RSI signals."""
+
+    def test_long_signal_take_profit_above_entry(self) -> None:
+        """LONG signal take-profit should be above entry price."""
+        strategy = RSIMeanReversion(
+            period=5, overbought=70, oversold=30,
+            atr_multiplier=2.0, atr_period=3, reward_ratio=1.5,
+        )
+        bars = _oversold_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.signal_type == SignalType.LONG
+        assert signal.take_profit is not None
+        entry = float(signal.metadata["entry_price"])
+        assert signal.take_profit > entry
+
+    def test_take_profit_distance_is_reward_ratio_times_stop_distance(self) -> None:
+        """TP distance from entry equals reward_ratio * stop distance."""
+        strategy = RSIMeanReversion(
+            period=5, overbought=70, oversold=30,
+            atr_multiplier=2.0, atr_period=3, reward_ratio=1.5,
+        )
+        bars = _oversold_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.stop_loss is not None
+        assert signal.take_profit is not None
+        entry = float(signal.metadata["entry_price"])
+        stop_distance = abs(entry - signal.stop_loss)
+        tp_distance = abs(signal.take_profit - entry)
+        assert abs(tp_distance - 1.5 * stop_distance) < 0.0001
+
+    def test_reward_ratio_zero_disables_take_profit(self) -> None:
+        """reward_ratio=0 means no take-profit."""
+        strategy = RSIMeanReversion(
+            period=5, overbought=70, oversold=30,
+            atr_multiplier=2.0, atr_period=3, reward_ratio=0.0,
+        )
+        bars = _oversold_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.take_profit is None
+
+
 class TestRSIMeanReversionMinBars:
     """Tests for the min_bars property."""
 

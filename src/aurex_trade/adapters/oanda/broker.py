@@ -48,15 +48,20 @@ class OANDABrokerAdapter:
             msg = f"Order quantity too small to trade: {order.quantity}"
             raise ValueError(msg)
 
-        body = {
-            "order": {
-                "type": "MARKET",
-                "instrument": order.symbol,
-                "units": str(units),
-                "timeInForce": "FOK",
-                "positionFill": "DEFAULT",
-            }
+        order_body: dict[str, str | dict[str, str]] = {
+            "type": "MARKET",
+            "instrument": order.symbol,
+            "units": str(units),
+            "timeInForce": "FOK",
+            "positionFill": "DEFAULT",
         }
+
+        if order.stop_loss is not None:
+            order_body["stopLossOnFill"] = {"price": f"{order.stop_loss:.5f}"}
+        if order.take_profit is not None:
+            order_body["takeProfitOnFill"] = {"price": f"{order.take_profit:.5f}"}
+
+        body = {"order": order_body}
 
         data = self._connection.post(f"/v3/accounts/{self._account_id}/orders", json=body)
 

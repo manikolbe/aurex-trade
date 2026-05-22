@@ -1,5 +1,6 @@
 """Shared technical indicators used by multiple strategies."""
 
+from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData
 
 
@@ -25,3 +26,20 @@ def calculate_atr(bars: list[BarData], period: int) -> float:
         true_ranges.append(tr)
 
     return sum(true_ranges) / len(true_ranges)
+
+
+def calculate_take_profit(
+    entry_price: float,
+    stop_distance: float,
+    reward_ratio: float,
+    signal_type: SignalType,
+) -> float | None:
+    """Calculate take-profit price from entry, stop distance, and reward ratio.
+
+    Returns None if reward_ratio is zero (TP disabled).
+    """
+    if reward_ratio <= 0:
+        return None
+    if signal_type == SignalType.LONG:
+        return entry_price + (reward_ratio * stop_distance)
+    return max(0.0, entry_price - (reward_ratio * stop_distance))

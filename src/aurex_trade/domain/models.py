@@ -46,6 +46,7 @@ class Signal:
     strength: float = 0.0
     metadata: dict[str, str] = field(default_factory=dict)
     stop_loss: float | None = None
+    take_profit: float | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ class Order:
     quantity: float = 0.0
     limit_price: float | None = None  # Required for LIMIT orders, None for MARKET
     stop_loss: float | None = None  # Stop-loss price level (for broker to respect)
+    take_profit: float | None = None  # Take-profit price level (for broker to respect)
     status: OrderStatus = OrderStatus.PENDING
     timestamp: datetime = field(default_factory=_utc_now)
 

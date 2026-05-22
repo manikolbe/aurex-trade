@@ -3,7 +3,7 @@
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData, Signal
 from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
-from aurex_trade.domain.strategy.indicators import calculate_atr
+from aurex_trade.domain.strategy.indicators import calculate_atr, calculate_take_profit
 
 
 class SMACrossover:
@@ -23,11 +23,13 @@ class SMACrossover:
         long_window: int,
         atr_multiplier: float = 2.0,
         atr_period: int = 14,
+        reward_ratio: float = 2.0,
     ) -> None:
         self._short_window = short_window
         self._long_window = long_window
         self._atr_multiplier = atr_multiplier
         self._atr_period = atr_period
+        self._reward_ratio = reward_ratio
 
     @property
     def name(self) -> str:
@@ -99,6 +101,18 @@ class SMACrossover:
                     min_value=2,
                     max_value=50,
                 ),
+                ParamMeta(
+                    key="reward_ratio",
+                    label="Reward Ratio",
+                    tooltip=(
+                        "Take-profit as a multiple of stop distance. "
+                        "E.g. 2.0 means TP is twice the stop distance from entry. "
+                        "Set to 0 to disable take-profit."
+                    ),
+                    default=2.0,
+                    min_value=0.0,
+                    max_value=5.0,
+                ),
             ),
         )
 
@@ -131,11 +145,16 @@ class SMACrossover:
 
         # Calculate stop-loss based on ATR (clamped to sensible bounds)
         stop_loss: float | None = None
+        take_profit: float | None = None
         if atr > 0:
+            stop_distance = self._atr_multiplier * atr
             if signal_type == SignalType.LONG:
-                stop_loss = max(0.0, entry_price - (self._atr_multiplier * atr))
+                stop_loss = max(0.0, entry_price - stop_distance)
             else:
-                stop_loss = entry_price + (self._atr_multiplier * atr)
+                stop_loss = entry_price + stop_distance
+            take_profit = calculate_take_profit(
+                entry_price, stop_distance, self._reward_ratio, signal_type,
+            )
 
         return Signal(
             symbol=latest.symbol,
@@ -149,6 +168,7 @@ class SMACrossover:
                 "atr": f"{atr:.5f}",
             },
             stop_loss=stop_loss,
+            take_profit=take_profit,
         )
 
 

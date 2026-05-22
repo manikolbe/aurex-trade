@@ -3,7 +3,7 @@
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData, Signal
 from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
-from aurex_trade.domain.strategy.indicators import calculate_atr
+from aurex_trade.domain.strategy.indicators import calculate_atr, calculate_take_profit
 
 
 class RSIMeanReversion:
@@ -25,12 +25,14 @@ class RSIMeanReversion:
         oversold: int = 30,
         atr_multiplier: float = 2.0,
         atr_period: int = 14,
+        reward_ratio: float = 1.5,
     ) -> None:
         self._period = period
         self._overbought = overbought
         self._oversold = oversold
         self._atr_multiplier = atr_multiplier
         self._atr_period = atr_period
+        self._reward_ratio = reward_ratio
 
     @property
     def name(self) -> str:
@@ -115,6 +117,18 @@ class RSIMeanReversion:
                     min_value=2,
                     max_value=50,
                 ),
+                ParamMeta(
+                    key="reward_ratio",
+                    label="Reward Ratio",
+                    tooltip=(
+                        "Take-profit as a multiple of stop distance. "
+                        "E.g. 1.5 means TP is 1.5x the stop distance from entry. "
+                        "Set to 0 to disable take-profit."
+                    ),
+                    default=1.5,
+                    min_value=0.0,
+                    max_value=5.0,
+                ),
             ),
         )
 
@@ -151,11 +165,16 @@ class RSIMeanReversion:
 
         # Calculate stop-loss based on ATR (clamped to sensible bounds)
         stop_loss: float | None = None
+        take_profit: float | None = None
         if atr > 0:
+            stop_distance = self._atr_multiplier * atr
             if signal_type == SignalType.LONG:
-                stop_loss = max(0.0, entry_price - (self._atr_multiplier * atr))
+                stop_loss = max(0.0, entry_price - stop_distance)
             else:
-                stop_loss = entry_price + (self._atr_multiplier * atr)
+                stop_loss = entry_price + stop_distance
+            take_profit = calculate_take_profit(
+                entry_price, stop_distance, self._reward_ratio, signal_type,
+            )
 
         # Strength: distance from threshold normalized to 0-1
         if signal_type == SignalType.LONG:
@@ -179,6 +198,7 @@ class RSIMeanReversion:
                 "atr": f"{atr:.5f}",
             },
             stop_loss=stop_loss,
+            take_profit=take_profit,
         )
 
 

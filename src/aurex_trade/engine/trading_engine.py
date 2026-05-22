@@ -35,6 +35,8 @@ class TradeMarker(TypedDict):
     price: float
     side: str
     quantity: float
+    stop_loss: float | None
+    take_profit: float | None
 
 
 class EngineMetrics(TypedDict):
@@ -403,6 +405,7 @@ class TradingEngine:
             side=side,
             quantity=quantity,
             stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
         )
 
         trade = self._broker.place_order(order)
@@ -426,6 +429,8 @@ class TradingEngine:
                 price=trade.price,
                 side=trade.side.value,
                 quantity=trade.quantity,
+                stop_loss=signal.stop_loss,
+                take_profit=signal.take_profit,
             )
         )
 

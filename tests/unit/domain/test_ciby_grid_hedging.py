@@ -58,7 +58,7 @@ class TestCibyGridHedgingBasics:
         """metadata() returns valid StrategyMetadata with all params."""
         meta = CibyGridHedgingStrategy.metadata()
         assert meta.display_name == "Ciby Grid Hedging"
-        assert len(meta.params) == 5
+        assert len(meta.params) == 6
         param_keys = [p.key for p in meta.params]
         assert "grid_spacing" in param_keys
         assert "max_levels" in param_keys
@@ -308,3 +308,58 @@ class TestCibyGridHedgingParameterVariations:
         bars = _make_bars([4619.0, 4621.0])
         signal = strategy.generate(bars)
         assert signal is None
+
+
+class TestCibyGridHedgingTakeProfit:
+    """Tests for take-profit calculation on grid signals."""
+
+    def test_long_signal_take_profit_above_entry(self) -> None:
+        """LONG signal TP should be above entry by reward_ratio * stop_distance."""
+        strategy = CibyGridHedgingStrategy(
+            grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
+            num_levels_above=3, num_levels_below=3,
+        )
+        bars = _make_bars([100.0, 100.0])
+        strategy.generate(bars)  # Initialize grid
+
+        bars = _make_bars([109.0, 111.0])
+        signal = strategy.generate(bars)
+
+        assert signal is not None
+        assert signal.signal_type == SignalType.LONG
+        assert signal.take_profit is not None
+        entry = float(signal.metadata["entry_price"])
+        assert signal.take_profit == entry + (1.0 * 30.0)
+
+    def test_short_signal_take_profit_below_entry(self) -> None:
+        """SHORT signal TP should be below entry by reward_ratio * stop_distance."""
+        strategy = CibyGridHedgingStrategy(
+            grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
+            num_levels_above=3, num_levels_below=3,
+        )
+        bars = _make_bars([100.0, 100.0])
+        strategy.generate(bars)  # Initialize grid
+
+        bars = _make_bars([91.0, 89.0])
+        signal = strategy.generate(bars)
+
+        assert signal is not None
+        assert signal.signal_type == SignalType.SHORT
+        assert signal.take_profit is not None
+        entry = float(signal.metadata["entry_price"])
+        assert signal.take_profit == entry - (1.0 * 30.0)
+
+    def test_reward_ratio_zero_disables_take_profit(self) -> None:
+        """reward_ratio=0 means no take-profit."""
+        strategy = CibyGridHedgingStrategy(
+            grid_spacing=10.0, stop_distance=30.0, reward_ratio=0.0,
+            num_levels_above=3, num_levels_below=3,
+        )
+        bars = _make_bars([100.0, 100.0])
+        strategy.generate(bars)
+
+        bars = _make_bars([109.0, 111.0])
+        signal = strategy.generate(bars)
+
+        assert signal is not None
+        assert signal.take_profit is None

@@ -191,6 +191,61 @@
     ];
   }
 
+  function buildTargetLevelDatasets(tradeMarkers, labels) {
+    var lastMarker = tradeMarkers.length > 0 ? tradeMarkers[tradeMarkers.length - 1] : null;
+    if (!lastMarker) return [];
+
+    var tpData = new Array(labels.length).fill(null);
+    var slData = new Array(labels.length).fill(null);
+
+    var startLabel = toTimeLabel(lastMarker.timestamp);
+    var startIdx = labels.lastIndexOf(startLabel);
+    if (startIdx === -1) startIdx = labels.length - 1;
+
+    // Fill TP line from trade point to end
+    if (lastMarker.take_profit !== null) {
+      for (var i = startIdx; i < labels.length; i++) {
+        tpData[i] = lastMarker.take_profit;
+      }
+    }
+
+    // Fill SL line from trade point to end
+    if (lastMarker.stop_loss !== null) {
+      for (var j = startIdx; j < labels.length; j++) {
+        slData[j] = lastMarker.stop_loss;
+      }
+    }
+
+    var datasets = [];
+    if (lastMarker.take_profit !== null) {
+      datasets.push({
+        label: 'Take Profit',
+        data: tpData,
+        borderColor: 'hsl(145, 60%, 45%)',
+        borderDash: [6, 3],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+        yAxisID: 'y1'
+      });
+    }
+    if (lastMarker.stop_loss !== null) {
+      datasets.push({
+        label: 'Stop Loss',
+        data: slData,
+        borderColor: 'hsl(0, 60%, 50%)',
+        borderDash: [6, 3],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+        yAxisID: 'y1'
+      });
+    }
+    return datasets;
+  }
+
   function updateEquityChart() {
     fetch('/api/bot/equity')
       .then(function(r) { return r.ok ? r.json() : null; })
@@ -207,20 +262,23 @@
         var equityValues = data.map(function(p) { return p.equity; });
         var priceValues = data.map(function(p) { return p.price; });
         var tradeSets = buildTradeDatasets(tradeMarkers, labels);
+        var targetSets = buildTargetLevelDatasets(tradeMarkers, labels);
 
         if (chart) {
+          // Rebuild datasets array to handle dynamic TP/SL lines
+          var datasets = [
+            chart.data.datasets[0],
+            chart.data.datasets[1],
+            tradeSets[0],
+            tradeSets[1]
+          ].concat(targetSets);
+          datasets[0].data = equityValues;
+          datasets[1].data = priceValues;
           chart.data.labels = labels;
-          chart.data.datasets[0].data = equityValues;
-          chart.data.datasets[1].data = priceValues;
-          chart.data.datasets[2].data = tradeSets[0].data;
-          chart.data.datasets[3].data = tradeSets[1].data;
+          chart.data.datasets = datasets;
           chart.update('none');
         } else {
-          chart = new Chart(canvas.getContext('2d'), {
-            type: 'line',
-            data: {
-              labels: labels,
-              datasets: [
+          var baseDatasets = [
                 {
                   label: 'Equity ($)',
                   data: equityValues,
@@ -245,7 +303,12 @@
                 },
                 tradeSets[0],
                 tradeSets[1]
-              ]
+          ].concat(targetSets);
+          chart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: baseDatasets
             },
             options: {
               responsive: true,

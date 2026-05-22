@@ -46,14 +46,16 @@ class TestSMACrossoverMetadata:
     def test_params_are_tuple_of_param_meta(self) -> None:
         meta = SMACrossover.metadata()
         assert isinstance(meta.params, tuple)
-        assert len(meta.params) == 4
+        assert len(meta.params) == 5
         for p in meta.params:
             assert isinstance(p, ParamMeta)
 
     def test_param_keys(self) -> None:
         meta = SMACrossover.metadata()
         keys = [p.key for p in meta.params]
-        assert keys == ["short_window", "long_window", "atr_multiplier", "atr_period"]
+        assert keys == [
+            "short_window", "long_window", "atr_multiplier", "atr_period", "reward_ratio",
+        ]
 
     def test_param_ranges_valid(self) -> None:
         meta = SMACrossover.metadata()
@@ -83,14 +85,16 @@ class TestRSIMeanReversionMetadata:
     def test_params_are_tuple_of_param_meta(self) -> None:
         meta = RSIMeanReversion.metadata()
         assert isinstance(meta.params, tuple)
-        assert len(meta.params) == 5
+        assert len(meta.params) == 6
         for p in meta.params:
             assert isinstance(p, ParamMeta)
 
     def test_param_keys(self) -> None:
         meta = RSIMeanReversion.metadata()
         keys = [p.key for p in meta.params]
-        assert keys == ["period", "overbought", "oversold", "atr_multiplier", "atr_period"]
+        assert keys == [
+            "period", "overbought", "oversold", "atr_multiplier", "atr_period", "reward_ratio",
+        ]
 
     def test_param_ranges_valid(self) -> None:
         meta = RSIMeanReversion.metadata()

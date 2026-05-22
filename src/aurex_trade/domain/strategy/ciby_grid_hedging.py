@@ -3,6 +3,7 @@
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData, Signal
 from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
+from aurex_trade.domain.strategy.indicators import calculate_take_profit
 
 
 class CibyGridHedgingStrategy:
@@ -28,12 +29,14 @@ class CibyGridHedgingStrategy:
         stop_distance: float = 30.0,
         num_levels_above: int = 3,
         num_levels_below: int = 3,
+        reward_ratio: float = 1.0,
     ) -> None:
         self._grid_spacing = grid_spacing
         self._max_levels = max_levels
         self._stop_distance = stop_distance
         self._num_levels_above = num_levels_above
         self._num_levels_below = num_levels_below
+        self._reward_ratio = reward_ratio
 
         # Mutable internal state
         self._anchor_price: float | None = None
@@ -127,6 +130,18 @@ class CibyGridHedgingStrategy:
                     min_value=1,
                     max_value=10,
                 ),
+                ParamMeta(
+                    key="reward_ratio",
+                    label="Reward Ratio",
+                    tooltip=(
+                        "Take-profit as a multiple of stop distance. "
+                        "E.g. 1.0 means TP equals the stop distance from entry. "
+                        "Set to 0 to disable take-profit."
+                    ),
+                    default=1.0,
+                    min_value=0.0,
+                    max_value=5.0,
+                ),
             ),
         )
 
@@ -204,12 +219,16 @@ class CibyGridHedgingStrategy:
         return sorted(levels)
 
     def _create_signal(self, bar: BarData, level: float, signal_type: SignalType) -> Signal:
-        """Create a Signal with fixed stop-loss distance."""
+        """Create a Signal with fixed stop-loss distance and optional take-profit."""
         entry_price = bar.close
         if signal_type == SignalType.LONG:
             stop_loss = entry_price - self._stop_distance
         else:
             stop_loss = entry_price + self._stop_distance
+
+        take_profit = calculate_take_profit(
+            entry_price, self._stop_distance, self._reward_ratio, signal_type,
+        )
 
         return Signal(
             symbol=bar.symbol,
@@ -224,4 +243,5 @@ class CibyGridHedgingStrategy:
                 "entry_price": f"{entry_price:.5f}",
             },
             stop_loss=stop_loss,
+            take_profit=take_profit,
         )

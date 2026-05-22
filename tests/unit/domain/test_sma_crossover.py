@@ -225,6 +225,69 @@ class TestStopLossCalculation:
         assert float(signal.metadata["atr"]) > 0
 
 
+class TestTakeProfitCalculation:
+    """Tests for reward-ratio-based take-profit on generated signals."""
+
+    def test_long_signal_take_profit_above_entry(self) -> None:
+        """LONG signal take-profit should be above entry price."""
+        strategy = SMACrossover(
+            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3, reward_ratio=2.0
+        )
+        bars = _crossover_up_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.signal_type == SignalType.LONG
+        assert signal.take_profit is not None
+        assert signal.take_profit > 110.0  # Above entry price
+
+    def test_short_signal_take_profit_below_entry(self) -> None:
+        """SHORT signal take-profit should be below entry price."""
+        strategy = SMACrossover(
+            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3, reward_ratio=2.0
+        )
+        bars = _crossover_down_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.signal_type == SignalType.SHORT
+        assert signal.take_profit is not None
+        assert signal.take_profit < 90.0  # Below entry price
+
+    def test_take_profit_distance_is_reward_ratio_times_stop_distance(self) -> None:
+        """TP distance from entry should equal reward_ratio * stop distance."""
+        strategy = SMACrossover(
+            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3, reward_ratio=2.0
+        )
+        bars = _crossover_up_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.stop_loss is not None
+        assert signal.take_profit is not None
+        entry = float(signal.metadata["entry_price"])
+        stop_distance = abs(entry - signal.stop_loss)
+        tp_distance = abs(signal.take_profit - entry)
+        assert abs(tp_distance - 2.0 * stop_distance) < 0.0001
+
+    def test_reward_ratio_zero_disables_take_profit(self) -> None:
+        """reward_ratio=0 means no take-profit."""
+        strategy = SMACrossover(
+            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=3, reward_ratio=0.0
+        )
+        bars = _crossover_up_bars_with_spread()
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.take_profit is None
+
+    def test_take_profit_none_when_atr_insufficient(self) -> None:
+        """When ATR can't be calculated, take_profit should be None."""
+        strategy = SMACrossover(
+            short_window=3, long_window=5, atr_multiplier=2.0, atr_period=20, reward_ratio=2.0
+        )
+        bars = _make_bars([100.0, 100.0, 100.0, 100.0, 100.0, 110.0])
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert signal.take_profit is None
+
+
 class TestSMACrossoverMinBars:
     """Tests for the min_bars property."""
 

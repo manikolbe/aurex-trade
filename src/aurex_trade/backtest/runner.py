@@ -154,6 +154,7 @@ class BacktestRunner:
             side=side,
             quantity=quantity,
             stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
         )
 
         trade = self._broker.place_order(order)
