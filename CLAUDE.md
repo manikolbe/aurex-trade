@@ -144,6 +144,21 @@ just deploy-local-down   # Stop local containers
 just deploy-local-logs   # View local container logs
 just deploy-prod         # Deploy to production VPS (push to main first)
 
+# Production monitoring (SSH alias: aurex, app in ~/aurex-trade)
+ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs --tail=50 app'
+
+# Useful grep filters for monitoring:
+# Bot config (strategy + risk params logged at startup):
+#   | grep "engine_started"
+# All trade activity (signals, fills, closures):
+#   | grep "info" | grep -E "signal|trade_executed|trade_closed|position_updated|cycle_error"
+# Just closure detection:
+#   | grep "trade_closed_by_broker"
+# Errors only:
+#   | grep -E "error|exception|warning"
+# Follow live (stream):
+ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs -f --tail=10 app'
+
 # Backtesting (see docs/backtesting.md for full details)
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
 just backtest --strategy sma_crossover --param short_window=10 --param long_window=30
@@ -151,6 +166,54 @@ just backtest --strategy rsi_mean_reversion --param period=14 --param overbought
 just sweep --strategy sma_crossover --param short_window=5,10,20 --param long_window=20,30,50 --spread 0.6
 just walk-forward --strategy rsi_mean_reversion --param period=7,14,21 --param overbought=70,75 --param oversold=25,30
 ```
+
+## Bot Configuration (Web UI)
+
+The bot is configured entirely through the web UI at https://aurex.manikolbe.com.
+Configuration is per-user (stored in SQLite via user preferences).
+
+### Key Settings
+
+| Setting | Description | Test Value | Notes |
+|---------|-------------|------------|-------|
+| **Strategy** | Trading strategy to use | `ciby_grid_hedging` | Selected from dropdown |
+| **Symbol** | Instrument to trade | `XAU_USD` | Gold vs USD |
+| **Interval** | Seconds between cycles | `60` | 1 min for testing, 300+ for production |
+| **Granularity** | OANDA candle granularity | `M1` | Must align with interval |
+
+### CIBY Grid Hedging Strategy Parameters
+
+| Parameter | Description | Test Value | Production Value |
+|-----------|-------------|------------|-----------------|
+| `grid_spacing` | Distance between grid levels ($) | `2` | `5–10` |
+| `num_levels` | Grid levels above/below anchor | `3` | `3–5` |
+| `stop_distance` | ATR-based stop-loss distance ($) | `5` | `10–15` |
+| `reward_ratio` | TP distance as multiple of stop | `0.5` | `1.0–2.0` |
+
+### Risk Engine Settings (environment variables)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MAX_POSITION_SIZE` | Max units per position | `10` |
+| `RISK_PER_TRADE` | Fraction of equity risked per trade | `0.02` |
+| `MAX_DRAWDOWN_PCT` | Kill switch threshold (%) | `0.10` |
+| `MAX_DAILY_LOSS` | Daily loss limit ($) | `500` |
+
+### Starting the Bot for Testing
+
+1. Navigate to web UI → Bot page
+2. Select strategy: `ciby_grid_hedging`
+3. Set params: `grid_spacing=2`, `num_levels=3`, `stop_distance=5`, `reward_ratio=0.5`
+4. Set interval: `60` (1 minute cycles for fast feedback)
+5. Click Start → bot begins trading on connected OANDA account
+6. Monitor via logs: `ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs -f --tail=10 app'`
+
+### Clean State for Testing
+
+The bot does NOT automatically reconcile pre-existing positions on startup.
+If testing closure detection, ensure a clean slate:
+- Close all open XAU_USD trades in OANDA before starting
+- Or: let the bot start fresh — it will track only trades it opens
 
 ## Risk Engine
 

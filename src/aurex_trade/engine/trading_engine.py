@@ -85,6 +85,8 @@ class TradingEngine:
         fallback_position_size: float = 1.0,
         *,
         user_id: str,
+        strategy_params: dict[str, int | float] | None = None,
+        risk_params: dict[str, int | float | bool] | None = None,
     ) -> None:
         self._strategy = strategy
         self._risk_engine = risk_engine
@@ -96,6 +98,8 @@ class TradingEngine:
         self._bar_count = bar_count
         self._fallback_position_size = fallback_position_size
         self._user_id = user_id
+        self._strategy_params = strategy_params or {}
+        self._risk_params = risk_params or {}
         self._log = log.bind(user_id=user_id)
         self._running = False
         # Session stats for periodic summary
@@ -136,6 +140,8 @@ class TradingEngine:
             strategy=self._strategy.name,
             interval=self._interval_seconds,
             initial_equity=self._peak_equity,
+            strategy_params=self._strategy_params,
+            risk_params=self._risk_params,
         )
 
         while self._running:
@@ -458,6 +464,14 @@ class TradingEngine:
 
         if decision.action != RiskAction.APPROVED:
             self._session_rejections += 1
+            # Release grid level so it can re-trigger once conditions improve.
+            # The strategy marks levels as "filled" at signal generation time,
+            # but if risk rejects the trade, no position exists to close later.
+            grid_level_str = signal.metadata.get("grid_level")
+            if grid_level_str:
+                release = getattr(self._strategy, "release_level", None)
+                if release is not None:
+                    release(float(grid_level_str))
             return
 
         # Step 4: Calculate position size and create order

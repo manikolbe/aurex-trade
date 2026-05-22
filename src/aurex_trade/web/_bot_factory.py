@@ -104,6 +104,8 @@ def create_bot_engine(
             interval_seconds=interval_seconds,
             bar_count=max(50, strategy.min_bars),
             user_id=user_id,
+            strategy_params=strategy_params,
+            risk_params=risk_params,
         )
     except Exception:
         connection.disconnect()
