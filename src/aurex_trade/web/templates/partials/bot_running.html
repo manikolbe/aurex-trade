@@ -81,7 +81,7 @@
     <div class="card bg-base-100 shadow-md">
       <div class="card-body">
         <h2 class="card-title text-lg">Live Metrics</h2>
-        <div id="bot-metrics-container" hx-get="/htmx/bot/metrics/poll" hx-trigger="every 2s" hx-swap="innerHTML">
+        <div id="bot-metrics-container" hx-get="/htmx/bot/metrics/poll" hx-trigger="every 5s" hx-swap="innerHTML">
           {% if metrics %}
           {% include "partials/bot_metrics.html" %}
           {% else %}
@@ -111,7 +111,7 @@
 
     <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
       <div class="card-body">
-        <h2 class="card-title text-lg">Equity Curve</h2>
+        <h2 class="card-title text-lg">Performance</h2>
         <div id="bot-equity-container">
           <canvas id="bot-equity-chart" height="150"></canvas>
           <p id="bot-equity-placeholder" class="text-sm text-base-content/60 text-center py-4">Chart will appear after a few cycles...</p>
@@ -372,7 +372,7 @@
   }
 
   updateEquityChart();
-  setInterval(updateEquityChart, 30000);
+  setInterval(updateEquityChart, 5000);
 })();
 </script>
 
