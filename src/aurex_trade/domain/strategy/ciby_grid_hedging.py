@@ -134,11 +134,12 @@ class CibyGridHedgingStrategy:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Controls where the trade automatically closes for "
-                        "profit. Example: stop distance is 30, ratio is 2, you "
-                        "buy at 4520. Stop-loss closes at 4490 (-30). "
-                        "Take-profit closes at 4580 (+60, which is 2 x 30). "
-                        "Set to 0 to never auto-close winners."
+                        "Sets where to automatically close for profit. "
+                        "Formula: Take-Profit = Entry Price + (Stop Distance "
+                        "x Reward Ratio). Example: you buy gold at 4520, "
+                        "Stop Distance is 30. Stop-loss = 4520 - 30 = 4490. "
+                        "With Reward Ratio 2: Take-profit = 4520 + (30 x 2) "
+                        "= 4580. Set to 0 to disable."
                     ),
                     default=1.0,
                     min_value=0.0,
