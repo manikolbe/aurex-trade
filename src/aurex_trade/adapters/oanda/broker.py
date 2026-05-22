@@ -163,7 +163,7 @@ class OANDABrokerAdapter:
         if trade is None or trade.get("state") != "CLOSED":
             return None
 
-        log.debug(
+        log.info(
             "oanda_closed_trade_raw",
             broker_trade_id=broker_trade_id,
             keys=list(trade.keys()),
