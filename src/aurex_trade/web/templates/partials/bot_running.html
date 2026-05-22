@@ -140,31 +140,42 @@
   function buildTradeDatasets(tradeMarkers, labels) {
     var buys = new Array(labels.length).fill(null);
     var sells = new Array(labels.length).fill(null);
+    var buyColors = new Array(labels.length).fill('hsl(145, 70%, 50%)');
+    var sellColors = new Array(labels.length).fill('hsl(0, 70%, 55%)');
     var closeTp = new Array(labels.length).fill(null);
     var closeSl = new Array(labels.length).fill(null);
+
+    // Collect closed trade IDs to fade their open markers
+    var closedIds = {};
+    tradeMarkers.forEach(function(t) {
+      if ((t.side === 'close_tp' || t.side === 'close_sl') && t.broker_trade_id) {
+        closedIds[t.broker_trade_id] = true;
+      }
+    });
 
     tradeMarkers.forEach(function(t) {
       var label = toTimeLabel(t.timestamp);
       var idx = labels.lastIndexOf(label);
       if (idx === -1) {
         // Find closest label
-        var tTime = new Date(t.timestamp).getTime();
-        var minDiff = Infinity;
         for (var i = 0; i < labels.length; i++) {
-          // labels are HH:MM, compare by index proximity to trade time
-          var diff = Math.abs(i - (labels.length - 1));
           if (labels[i] === label) { idx = i; break; }
         }
         if (idx === -1) {
-          // Place at closest time by scanning equity timestamps
           idx = labels.length - 1;
         }
       }
       if (t.price === 0) return;
       if (t.side === 'buy') {
         buys[idx] = t.price;
+        if (t.broker_trade_id && closedIds[t.broker_trade_id]) {
+          buyColors[idx] = 'hsla(145, 70%, 50%, 0.35)';
+        }
       } else if (t.side === 'sell') {
         sells[idx] = t.price;
+        if (t.broker_trade_id && closedIds[t.broker_trade_id]) {
+          sellColors[idx] = 'hsla(0, 70%, 55%, 0.35)';
+        }
       } else if (t.side === 'close_tp') {
         closeTp[idx] = t.price;
       } else if (t.side === 'close_sl') {
@@ -176,8 +187,8 @@
       {
         label: 'Buy',
         data: buys,
-        borderColor: 'hsl(145, 70%, 50%)',
-        backgroundColor: 'hsl(145, 70%, 50%)',
+        borderColor: buyColors,
+        backgroundColor: buyColors,
         pointStyle: 'triangle',
         pointRadius: 8,
         pointHoverRadius: 11,
@@ -187,8 +198,8 @@
       {
         label: 'Sell',
         data: sells,
-        borderColor: 'hsl(0, 70%, 55%)',
-        backgroundColor: 'hsl(0, 70%, 55%)',
+        borderColor: sellColors,
+        backgroundColor: sellColors,
         pointStyle: 'triangle',
         rotation: 180,
         pointRadius: 8,
