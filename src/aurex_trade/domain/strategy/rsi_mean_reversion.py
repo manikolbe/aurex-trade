@@ -121,14 +121,12 @@ class RSIMeanReversion:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Controls where the trade automatically closes for "
-                        "profit. Your stop-loss is set automatically based on "
-                        "market volatility (ATR Multiplier above). The ratio "
-                        "decides how much further to place take-profit. "
-                        "Example: if stop-loss ends up 10 points below entry, "
-                        "a ratio of 1.5 places take-profit 15 points above. "
-                        "Both levels appear on the chart when a trade opens. "
-                        "Set to 0 to never auto-close winners."
+                        "Sets where to automatically close for profit. "
+                        "Formula: Take-Profit = Entry Price + (ATR Multiplier "
+                        "x ATR x Reward Ratio). Example: you buy gold at 2350, "
+                        "ATR is 5, ATR Multiplier is 2. Stop-loss = 2350 - "
+                        "(2 x 5) = 2340. With Reward Ratio 1.5: Take-profit = "
+                        "2350 + (2 x 5 x 1.5) = 2365. Set to 0 to disable."
                     ),
                     default=1.5,
                     min_value=0.0,
