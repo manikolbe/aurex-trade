@@ -134,9 +134,11 @@ class CibyGridHedgingStrategy:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Take-profit as a multiple of the Stop Distance parameter "
-                        "above. E.g. 1.0 means TP is placed the same distance from "
-                        "entry as the stop-loss. Set to 0 to disable take-profit."
+                        "For every dollar you risk on a trade, how many dollars "
+                        "do you want to gain? A ratio of 1 means you aim to make "
+                        "$1 for every $1 risked. The risk per trade equals your "
+                        "Stop Distance above. Set to 0 to disable automatic "
+                        "profit-taking."
                     ),
                     default=1.0,
                     min_value=0.0,

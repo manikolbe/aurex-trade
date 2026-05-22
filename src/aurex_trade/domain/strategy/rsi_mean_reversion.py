@@ -121,9 +121,10 @@ class RSIMeanReversion:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Take-profit as a multiple of the ATR-based stop-loss distance. "
-                        "E.g. 1.5 means TP is placed 1.5x as far from entry as the stop-loss. "
-                        "Set to 0 to disable take-profit."
+                        "For every dollar you risk on a trade, how many dollars "
+                        "do you want to gain? A ratio of 1.5 means you aim to make "
+                        "$1.50 for every $1 risked. Set to 0 to disable automatic "
+                        "profit-taking and let winners run until the next signal."
                     ),
                     default=1.5,
                     min_value=0.0,
