@@ -40,6 +40,14 @@ class TradeMarker(TypedDict):
     broker_trade_id: str
 
 
+class EventLogEntry(TypedDict):
+    """A timestamped event for the UI event log."""
+
+    timestamp: str
+    event: str
+    details: str
+
+
 class EngineMetrics(TypedDict):
     """Snapshot of engine state, safe to read from any thread (GIL-protected)."""
 
@@ -120,6 +128,8 @@ class TradingEngine:
         # Grid level → broker trade ID mapping for closure detection
         self._grid_trade_map: dict[float, str] = {}
         self._grid_logged: bool = False
+        # Event log for UI
+        self._event_log: list[EventLogEntry] = []
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -201,6 +211,10 @@ class TradingEngine:
     def get_trade_markers(self) -> list[TradeMarker]:
         """Return trade markers for chart overlay. Thread-safe (GIL)."""
         return list(self._trade_markers)
+
+    def get_event_log(self) -> list[EventLogEntry]:
+        """Return event log for UI display. Thread-safe (GIL)."""
+        return list(self._event_log)
 
     def get_strategy_state(self) -> dict[str, object] | None:
         """Return strategy-specific display state, if available."""
@@ -372,6 +386,17 @@ class TradingEngine:
                 )
             )
 
+            close_label = "TP" if "tp" in side else "SL"
+            pnl_str = (
+                f"+${realized_pnl:.2f}" if realized_pnl >= 0
+                else f"-${abs(realized_pnl):.2f}"
+            )
+            self._event_log.append(EventLogEntry(
+                timestamp=datetime.now(UTC).isoformat(),
+                event=side,
+                details=f"{close_label} @ {close_price:.2f} (#{broker_id}) P&L: {pnl_str}",
+            ))
+
             self._log.info(
                 "trade_closed_by_broker",
                 grid_level=grid_level,
@@ -476,6 +501,11 @@ class TradingEngine:
 
         if decision.action != RiskAction.APPROVED:
             self._session_rejections += 1
+            self._event_log.append(EventLogEntry(
+                timestamp=datetime.now(UTC).isoformat(),
+                event="rejected",
+                details=f"{signal.signal_type.value.upper()} rejected: {decision.reason}",
+            ))
             # Release grid level so it can re-trigger once conditions improve.
             # The strategy marks levels as "filled" at signal generation time,
             # but if risk rejects the trade, no position exists to close later.
@@ -541,6 +571,14 @@ class TradingEngine:
             slippage=round(slippage, 4),
             broker_trade_id=broker_trade_id,
         )
+        self._event_log.append(EventLogEntry(
+            timestamp=datetime.now(UTC).isoformat(),
+            event="trade",
+            details=(
+                f"{trade.side.value.upper()} {trade.quantity}"
+                f" @ {trade.price:.2f} (#{broker_trade_id})"
+            ),
+        ))
         self._repository.save_trade(trade, user_id=self._user_id)
 
         # Record marker for chart overlay

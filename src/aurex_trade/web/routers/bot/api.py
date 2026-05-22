@@ -133,6 +133,7 @@ def bot_equity(
         content={
             "equity_history": session.engine.get_equity_history(),
             "trade_markers": session.engine.get_trade_markers(),
+            "event_log": session.engine.get_event_log(),
         }
     )
 

@@ -118,6 +118,15 @@
         </div>
       </div>
     </div>
+
+    <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
+      <div class="card-body p-4">
+        <h2 class="card-title text-lg">Event Log</h2>
+        <div id="bot-event-log" class="overflow-y-auto max-h-48 font-mono text-xs space-y-0.5">
+          <p class="text-base-content/60">Waiting for events...</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Detect bot stop — if bot stops, this swaps the whole view to idle -->
@@ -240,6 +249,25 @@
         if (!resp) return;
         var data = resp.equity_history || [];
         currentTradeMarkers = resp.trade_markers || [];
+        var eventLog = resp.event_log || [];
+
+        // Update event log panel
+        var logEl = document.getElementById('bot-event-log');
+        if (logEl && eventLog.length > 0) {
+          var html = '';
+          for (var i = eventLog.length - 1; i >= 0; i--) {
+            var e = eventLog[i];
+            var time = toTimeLabel(e.timestamp);
+            var color = 'text-base-content/70';
+            if (e.event === 'trade') color = 'text-info';
+            else if (e.event === 'close_tp') color = 'text-success';
+            else if (e.event === 'close_sl') color = 'text-error';
+            else if (e.event === 'rejected') color = 'text-warning';
+            html += '<div class="' + color + '">' + time + ' ' + e.details + '</div>';
+          }
+          logEl.innerHTML = html;
+        }
+
         if (data.length < 2) return;
 
         placeholder.style.display = 'none';
