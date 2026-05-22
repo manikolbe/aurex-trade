@@ -119,6 +119,7 @@ class TradingEngine:
         self._trade_markers: list[TradeMarker] = []
         # Grid level → broker trade ID mapping for closure detection
         self._grid_trade_map: dict[float, str] = {}
+        self._grid_logged: bool = False
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -412,6 +413,17 @@ class TradingEngine:
 
         # Step 2: Generate signal
         signal = self._strategy.generate(bars)
+
+        # Log grid levels once after strategy initializes
+        if not self._grid_logged:
+            state = self.get_strategy_state()
+            if state and "anchor_price" in state:
+                self._log.info(
+                    "grid_initialized",
+                    anchor_price=state["anchor_price"],
+                    levels=state.get("levels"),
+                )
+                self._grid_logged = True
 
         if signal is None:
             self._log.debug("no_signal", strategy=self._strategy.name)

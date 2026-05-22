@@ -150,6 +150,8 @@ ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs --tail=50 app
 # Useful grep filters for monitoring:
 # Bot config (strategy + risk params logged at startup):
 #   | grep "engine_started"
+# Grid levels (anchor + all levels, logged once after first bar):
+#   | grep "grid_initialized"
 # All trade activity (signals, fills, closures):
 #   | grep "info" | grep -E "signal|trade_executed|trade_closed|position_updated|cycle_error"
 # Just closure detection:
