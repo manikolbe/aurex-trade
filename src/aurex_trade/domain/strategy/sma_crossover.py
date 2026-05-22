@@ -106,14 +106,10 @@ class SMACrossover:
                     label="Reward Ratio",
                     tooltip=(
                         "Sets where to automatically close for profit. "
-                        "Stop distance is calculated as ATR Multiplier x ATR "
-                        "(ATR = average price movement per bar, measured "
-                        "automatically from recent market data). Formula: "
-                        "Take-Profit = Entry + (Stop Distance x Reward Ratio). "
-                        "Example: ATR is 5, ATR Multiplier is 2, so stop "
-                        "distance = 10. You buy at 2350. Stop-loss = 2340. "
-                        "Reward Ratio 2: Take-profit = 2350 + (10 x 2) = "
-                        "2370. Set to 0 to disable."
+                        "Formula: Take-Profit = Entry + ((ATR Multiplier x "
+                        "ATR) x Reward Ratio). Example: you buy at 2350, "
+                        "ATR Multiplier is 2, ATR is 5. Take-profit = 2350 "
+                        "+ ((2 x 5) x 2) = 2370. Set to 0 to disable."
                     ),
                     default=2.0,
                     min_value=0.0,
