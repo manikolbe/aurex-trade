@@ -93,7 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if expired:
             logger.info("web.session_cleanup", deleted=expired)
 
-    logger.info("web.startup", workers=4)
+    logger.info(
+        "web.startup",
+        git_sha=os.environ.get("GIT_SHA", "unknown"),
+    )
     yield
 
     # Stop all active bot sessions before shutting down the executor

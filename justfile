@@ -82,7 +82,7 @@ deploy-local-logs *args='':
 
 # Deploy to production VPS (requires ssh aurex configured)
 deploy-prod:
-    ssh aurex 'cd ~/aurex-trade && git pull && docker compose up --build -d'
+    ssh aurex 'cd ~/aurex-trade && git pull && docker compose build --build-arg GIT_SHA=$(git rev-parse --short HEAD) && docker compose up -d'
 
 # Clean build artifacts
 clean:

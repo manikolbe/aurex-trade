@@ -42,6 +42,10 @@ COPY --from=builder /app/site site/
 # Copy gunicorn configuration
 COPY deploy/gunicorn.conf.py ./
 
+# Build-time metadata
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 # Runtime environment
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app/src" \

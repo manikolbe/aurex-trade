@@ -9,6 +9,7 @@ services:
       WEB_RELOAD: "false"
     volumes:
       - app-data:/app/data
+      - app-logs:/app/logs
     expose:
       - "8000"
     healthcheck:
@@ -66,6 +67,7 @@ services:
 
 volumes:
   app-data:
+  app-logs:
   caddy-data:
   caddy-config:
 
