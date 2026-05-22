@@ -121,8 +121,8 @@ class RSIMeanReversion:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Take-profit as a multiple of stop distance. "
-                        "E.g. 1.5 means TP is 1.5x the stop distance from entry. "
+                        "Take-profit as a multiple of the ATR-based stop-loss distance. "
+                        "E.g. 1.5 means TP is placed 1.5x as far from entry as the stop-loss. "
                         "Set to 0 to disable take-profit."
                     ),
                     default=1.5,

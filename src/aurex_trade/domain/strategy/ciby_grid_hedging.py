@@ -134,9 +134,9 @@ class CibyGridHedgingStrategy:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Take-profit as a multiple of stop distance. "
-                        "E.g. 1.0 means TP equals the stop distance from entry. "
-                        "Set to 0 to disable take-profit."
+                        "Take-profit as a multiple of the Stop Distance parameter "
+                        "above. E.g. 1.0 means TP is placed the same distance from "
+                        "entry as the stop-loss. Set to 0 to disable take-profit."
                     ),
                     default=1.0,
                     min_value=0.0,

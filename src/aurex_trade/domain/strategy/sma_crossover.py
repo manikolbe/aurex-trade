@@ -105,8 +105,8 @@ class SMACrossover:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "Take-profit as a multiple of stop distance. "
-                        "E.g. 2.0 means TP is twice the stop distance from entry. "
+                        "Take-profit as a multiple of the ATR-based stop-loss distance. "
+                        "E.g. 2.0 means TP is placed twice as far from entry as the stop-loss. "
                         "Set to 0 to disable take-profit."
                     ),
                     default=2.0,
