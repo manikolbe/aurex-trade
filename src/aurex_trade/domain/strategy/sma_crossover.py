@@ -105,10 +105,12 @@ class SMACrossover:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "For every dollar you risk on a trade, how many dollars "
-                        "do you want to gain? A ratio of 2 means you aim to make "
-                        "$2 for every $1 risked. Set to 0 to disable automatic "
-                        "profit-taking and let winners run until the next signal."
+                        "Controls where the trade automatically closes for "
+                        "profit relative to the stop-loss. A ratio of 2 means "
+                        "the profit target is twice as far from your entry as "
+                        "the stop-loss. Example: if stop-loss is 10 points "
+                        "below entry, take-profit is 20 points above. "
+                        "Set to 0 to never auto-close winners."
                     ),
                     default=2.0,
                     min_value=0.0,

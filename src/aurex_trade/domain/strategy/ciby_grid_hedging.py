@@ -134,11 +134,11 @@ class CibyGridHedgingStrategy:
                     key="reward_ratio",
                     label="Reward Ratio",
                     tooltip=(
-                        "For every dollar you risk on a trade, how many dollars "
-                        "do you want to gain? A ratio of 1 means you aim to make "
-                        "$1 for every $1 risked. The risk per trade equals your "
-                        "Stop Distance above. Set to 0 to disable automatic "
-                        "profit-taking."
+                        "Controls where the trade automatically closes for "
+                        "profit. Example: stop distance is 30, ratio is 2, you "
+                        "buy at 4520. Stop-loss closes at 4490 (-30). "
+                        "Take-profit closes at 4580 (+60, which is 2 x 30). "
+                        "Set to 0 to never auto-close winners."
                     ),
                     default=1.0,
                     min_value=0.0,
