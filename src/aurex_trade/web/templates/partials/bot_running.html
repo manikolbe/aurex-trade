@@ -127,6 +127,7 @@
 <script>
 (function() {
   var chart = null;
+  var currentTradeMarkers = [];
   var canvas = document.getElementById('bot-equity-chart');
   var placeholder = document.getElementById('bot-equity-placeholder');
   canvas.style.display = 'none';
@@ -226,7 +227,7 @@
       .then(function(resp) {
         if (!resp) return;
         var data = resp.equity_history || [];
-        var tradeMarkers = resp.trade_markers || [];
+        currentTradeMarkers = resp.trade_markers || [];
         if (data.length < 2) return;
 
         placeholder.style.display = 'none';
@@ -235,7 +236,7 @@
         var labels = data.map(function(p) { return toTimeLabel(p.timestamp); });
         var equityValues = data.map(function(p) { return p.equity; });
         var priceValues = data.map(function(p) { return p.price; });
-        var tradeSets = buildTradeDatasets(tradeMarkers, labels);
+        var tradeSets = buildTradeDatasets(currentTradeMarkers, labels);
 
         if (chart) {
           var datasets = [
@@ -315,10 +316,10 @@
                       };
                       var meta = markerMeta[idx];
                       if (meta && ctx.raw !== null) {
-                        for (var i = 0; i < tradeMarkers.length; i++) {
-                          if (tradeMarkers[i].side === meta.side && toTimeLabel(tradeMarkers[i].timestamp) === ctx.label) {
-                            var suffix = tradeMarkers[i].broker_trade_id ? ' (#' + tradeMarkers[i].broker_trade_id + ')' : '';
-                            return meta.fmt(tradeMarkers[i]) + suffix;
+                        for (var i = 0; i < currentTradeMarkers.length; i++) {
+                          if (currentTradeMarkers[i].side === meta.side && toTimeLabel(currentTradeMarkers[i].timestamp) === ctx.label) {
+                            var suffix = currentTradeMarkers[i].broker_trade_id ? ' (#' + currentTradeMarkers[i].broker_trade_id + ')' : '';
+                            return meta.fmt(currentTradeMarkers[i]) + suffix;
                           }
                         }
                         return ctx.dataset.label + ': ' + ctx.formattedValue;

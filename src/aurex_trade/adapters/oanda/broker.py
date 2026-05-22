@@ -163,6 +163,16 @@ class OANDABrokerAdapter:
         if trade is None or trade.get("state") != "CLOSED":
             return None
 
+        log.debug(
+            "oanda_closed_trade_raw",
+            broker_trade_id=broker_trade_id,
+            keys=list(trade.keys()),
+            state=trade.get("state"),
+            average_close_price=trade.get("averageClosePrice"),
+            realized_pl=trade.get("realizedPL"),
+            close_reason=trade.get("closeReason"),
+        )
+
         close_reason = trade.get("closeReason", "UNKNOWN")
         # Map OANDA close reasons to simplified labels
         if "TAKE_PROFIT" in close_reason:
