@@ -67,6 +67,8 @@ class OANDABrokerAdapter:
 
         fill = data["orderFillTransaction"]
 
+        # OANDA returns tradeOpened only when a new trade is created.
+        # Position-reducing fills (closing/flipping) don't open a new trade.
         trade_opened = fill.get("tradeOpened")
         broker_trade_id = trade_opened["tradeID"] if trade_opened else ""
 
