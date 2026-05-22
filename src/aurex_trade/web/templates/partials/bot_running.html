@@ -160,6 +160,7 @@
           idx = labels.length - 1;
         }
       }
+      if (t.price === 0) return;
       if (t.side === 'buy') {
         buys[idx] = t.price;
       } else if (t.side === 'sell') {
@@ -346,6 +347,7 @@
                 y1: {
                   display: true,
                   position: 'right',
+                  beginAtZero: false,
                   title: { display: true, text: 'Price', color: '#a6adbb' },
                   ticks: { color: '#a6adbb' },
                   grid: { drawOnChartArea: false }

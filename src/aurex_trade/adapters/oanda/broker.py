@@ -161,6 +161,12 @@ class OANDABrokerAdapter:
         )
         trade = data.get("trade")
         if trade is None or trade.get("state") != "CLOSED":
+            log.info(
+                "oanda_trade_not_closed",
+                broker_trade_id=broker_trade_id,
+                state=trade.get("state") if trade else "missing",
+                keys=list(trade.keys()) if trade else [],
+            )
             return None
 
         log.info(
