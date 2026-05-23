@@ -111,7 +111,14 @@ class OANDABrokerAdapter:
 
     def get_positions(self, symbol: str) -> Position | None:
         """Return the current net position for a symbol, or None if flat."""
-        data = self._connection.get(f"/v3/accounts/{self._account_id}/positions/{symbol}")
+        from aurex_trade.adapters.oanda.connection import OANDAAPIError
+
+        try:
+            data = self._connection.get(f"/v3/accounts/{self._account_id}/positions/{symbol}")
+        except OANDAAPIError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
 
         pos = data["position"]
         long_units = float(pos["long"]["units"])
