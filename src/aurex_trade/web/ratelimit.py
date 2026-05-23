@@ -25,7 +25,7 @@ class RateLimitConfig(BaseSettings):
     storage_uri: str = "memory://"
     default: str = "60/minute"
     compute: str = "5/minute"
-    bot_control: str = "10/minute"
+    bot_control: str = "20/minute"
     read: str = "120/minute"
     auth: str = "10/minute"
     auth_logout: str = "5/minute"
