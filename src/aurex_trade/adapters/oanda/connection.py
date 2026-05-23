@@ -48,10 +48,20 @@ class OANDAConnection:
 
     def connect(self) -> None:
         """Create HTTP client and validate credentials against the OANDA API."""
+        # OANDA tokens are ASCII-only (alphanumeric + hyphens).
+        # Strip non-ASCII chars that creep in from copy-paste (e.g. Cyrillic homoglyphs).
+        token = self._config.access_token.strip()
+        token = token.encode("ascii", errors="ignore").decode("ascii")
+
+        if not token:
+            raise OANDAConnectionError(
+                "OANDA access token is empty after removing invalid characters."
+            )
+
         self._client = httpx.Client(
             base_url=self._base_url,
             headers={
-                "Authorization": f"Bearer {self._config.access_token}",
+                "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
             },
             timeout=30.0,
