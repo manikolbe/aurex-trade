@@ -48,15 +48,28 @@ class OANDAConnection:
 
     def connect(self) -> None:
         """Create HTTP client and validate credentials against the OANDA API."""
-        # OANDA tokens are ASCII-only (alphanumeric + hyphens).
+        # OANDA tokens and account IDs are ASCII-only (alphanumeric + hyphens).
         # Strip non-ASCII chars that creep in from copy-paste (e.g. Cyrillic homoglyphs).
         token = self._config.access_token.strip()
         token = token.encode("ascii", errors="ignore").decode("ascii")
+        account_id = self._config.account_id.strip()
+        account_id = account_id.encode("ascii", errors="ignore").decode("ascii")
 
         if not token:
             raise OANDAConnectionError(
                 "OANDA access token is empty after removing invalid characters."
             )
+        if not account_id:
+            raise OANDAConnectionError(
+                "OANDA account ID is empty after removing invalid characters."
+            )
+
+        # Store sanitized account_id for use by adapters
+        self._config = OANDAConfig(
+            access_token=token,
+            account_id=account_id,
+            server=self._config.server,
+        )
 
         self._client = httpx.Client(
             base_url=self._base_url,
@@ -69,7 +82,7 @@ class OANDAConnection:
 
         # Validate credentials by fetching account summary
         try:
-            self.get(f"/v3/accounts/{self._config.account_id}")
+            self.get(f"/v3/accounts/{account_id}")
         except OANDAAPIError as exc:
             self.disconnect()
             raise OANDAConnectionError(f"Failed to validate OANDA credentials: {exc}") from exc
