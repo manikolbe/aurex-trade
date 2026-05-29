@@ -115,16 +115,15 @@ class TestGridLevelRounding:
     """Test grid level calculation with various prices and spacings."""
 
     def test_price_exactly_on_grid_line(self) -> None:
-        """Price=4560, spacing=10 → levels 4540, 4550, 4570, 4580."""
+        """Price=4560, spacing=10 → levels 4540, 4550, 4570, 4580 (skip 4560)."""
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
         bars = [_bar(4560.0)]
         signals = _drain_all(strategy, bars)
 
         limit_prices = sorted({float(s.metadata["limit_price"]) for s in signals})
-        # On grid line: first_above=4560, first_below=4550 (one step down)
-        # levels_above: 4560, 4570; levels_below: 4550, 4540
-        assert 4560.0 in limit_prices or 4570.0 in limit_prices
-        assert len(limit_prices) == 4
+        # On grid line: skip current price, place 2 above + 2 below
+        assert limit_prices == [4540.0, 4550.0, 4570.0, 4580.0]
+        assert 4560.0 not in limit_prices  # Never place at current price
 
     def test_spacing_5(self) -> None:
         """Price=4563, spacing=5 → levels 4555, 4560, 4565, 4570."""

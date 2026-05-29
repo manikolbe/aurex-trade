@@ -453,8 +453,9 @@ class CibyHedgedGridStrategy:
         first_above = math.ceil(anchor / spacing) * spacing
         first_below = math.floor(anchor / spacing) * spacing
         # If anchor is exactly on a grid line, first_above == first_below
-        # In that case, go one more step below
+        # Skip the current price level — a limit order there would fill immediately
         if first_above == first_below:
+            first_above = round(first_above + spacing, 2)
             first_below = round(first_below - spacing, 2)
 
         levels_above = [round(first_above + i * spacing, 2) for i in range(self._LEVELS_AHEAD)]

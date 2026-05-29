@@ -11,7 +11,7 @@ from typing import TypedDict
 import structlog
 
 from aurex_trade.domain.enums import OrderSide, OrderType, RiskAction, SignalType
-from aurex_trade.domain.models import AccountState, Order
+from aurex_trade.domain.models import AccountState, Order, Signal
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.ports.broker import BrokerPort
@@ -392,11 +392,11 @@ class TradingEngine:
         )
 
     def _check_limit_fills(self) -> None:
-        """Detect limit orders that have been filled by comparing broker pending list.
+        """Detect limit orders that have been filled or cancelled.
 
-        When a pending order disappears from the broker's list, it has filled.
-        Report the fill to the strategy and move it to the grid_trade_map for
-        closure tracking.
+        Compares broker pending orders against local map. Missing orders are
+        verified against open trades — if a matching new trade exists, it was
+        filled. Otherwise, it was cancelled/expired and we release the level.
         """
         if not self._pending_order_map:
             return
@@ -409,46 +409,58 @@ class TradingEngine:
 
         broker_pending_ids = {o.broker_order_id for o in broker_pending}
 
-        filled: list[tuple[str, str]] = []
+        # Find orders that disappeared from broker's pending list
+        disappeared: list[tuple[str, str]] = []
         for grid_key, broker_order_id in self._pending_order_map.items():
             if broker_order_id not in broker_pending_ids:
-                filled.append((grid_key, broker_order_id))
+                disappeared.append((grid_key, broker_order_id))
 
-        for grid_key, broker_order_id in filled:
+        if not disappeared:
+            return
+
+        # Snapshot open trades to identify fills via diff against grid_trade_map
+        open_trades = self._broker.get_open_trades(self._symbol)
+        known_trade_ids = set(self._grid_trade_map.values())
+        # New trades = open trades not already tracked
+        new_trades = [t for t in open_trades if t.broker_trade_id not in known_trade_ids]
+
+        for grid_key, broker_order_id in disappeared:
             del self._pending_order_map[grid_key]
 
-            # Find the resulting open trade — look for trades opened by this order
-            # The broker_order_id for a limit order becomes a trade once filled
-            open_trades = self._broker.get_open_trades(self._symbol)
-            # OANDA: trade ID is often the same as or follows the order ID
+            # Try to match this fill with a new open trade
+            # Match by side: grid_key ends with _long or _short
+            expected_side = OrderSide.BUY if grid_key.endswith("_long") else OrderSide.SELL
             broker_trade_id = ""
             fill_price = 0.0
-            for t in open_trades:
-                if t.broker_trade_id == broker_order_id:
+
+            for i, t in enumerate(new_trades):
+                if t.side == expected_side:
                     broker_trade_id = t.broker_trade_id
                     fill_price = t.open_price
+                    new_trades.pop(i)
                     break
 
             if not broker_trade_id:
-                # Trade might have a different ID — check closed trades
-                details = self._broker.get_closed_trade_details(broker_order_id)
-                if details:
-                    fill_price = details.close_price
-                    broker_trade_id = broker_order_id
-                else:
-                    # Assume it filled with the order ID as trade ID
-                    broker_trade_id = broker_order_id
+                # No matching trade found — order was likely cancelled, not filled
+                self._log.warning(
+                    "limit_order_cancelled_or_expired",
+                    grid_level=grid_key,
+                    broker_order_id=broker_order_id,
+                )
+                # Release level back to strategy
+                on_rejected = getattr(self._strategy, "on_signal_rejected", None)
+                if on_rejected is not None:
+                    on_rejected(grid_key)
+                continue
 
-            # Map for closure detection
-            if broker_trade_id:
-                self._grid_trade_map[grid_key] = broker_trade_id
+            # Confirmed fill — map for closure detection
+            self._grid_trade_map[grid_key] = broker_trade_id
 
             # Report fill to strategy
             report_fill = getattr(self._strategy, "report_fill", None)
             if report_fill is not None:
                 report_fill(grid_key, fill_price)
 
-            # Determine side from grid_key for logging
             side_label = "BUY" if grid_key.endswith("_long") else "SELL"
 
             self._log.info(
@@ -654,7 +666,7 @@ class TradingEngine:
                 update_pnl(0.0)
 
         # Step 2: Generate signals — drain all queued signals in one cycle
-        signals: list[object] = []
+        all_signals: list[Signal] = []
         signal = self._strategy.generate(bars)
 
         # Log grid levels once after strategy initializes
@@ -672,26 +684,26 @@ class TradingEngine:
             self._log.debug("no_signal", strategy=self._strategy.name)
             return
 
-        # Collect all signals (strategy may queue multiple)
-        signals.append(signal)
-        while True:
+        # Collect all signals (strategy may queue multiple, capped for safety)
+        all_signals.append(signal)
+        max_drain = 50
+        for _ in range(max_drain):
             next_signal = self._strategy.generate(bars)
             if next_signal is None:
                 break
-            signals.append(next_signal)
+            all_signals.append(next_signal)
+        else:
+            self._log.warning("signal_drain_limit_reached", max=max_drain)
 
         # Process each signal
-        for signal in signals:  # type: ignore[assignment]
-            self._process_signal(signal, bars, latest_close)  # type: ignore[arg-type]
+        for sig in all_signals:
+            self._process_signal(sig, latest_close)
 
-    def _process_signal(self, signal: object, bars: list[object], latest_close: float) -> None:
+    def _process_signal(self, sig: Signal, latest_close: float) -> None:
         """Process a single signal: risk check → order placement.
 
         Handles both MARKET and LIMIT order types.
         """
-        from aurex_trade.domain.models import Signal as SignalType_
-
-        sig: SignalType_ = signal  # type: ignore[assignment]
 
         # Handle close-all signals (bypass risk engine — this IS risk management)
         if (
@@ -808,12 +820,8 @@ class TradingEngine:
         else:
             self._place_market_order(order, sig, latest_close)
 
-    def _place_limit_order(self, order: Order, sig: object) -> None:
+    def _place_limit_order(self, order: Order, signal: Signal) -> None:
         """Place a limit order and track it in the pending map."""
-        from aurex_trade.domain.models import Signal as SignalType_
-
-        signal: SignalType_ = sig  # type: ignore[assignment]
-
         try:
             trade = self._broker.place_order(order)
         except Exception:
@@ -853,12 +861,8 @@ class TradingEngine:
             ),
         ))
 
-    def _place_market_order(self, order: Order, sig: object, latest_close: float) -> None:
+    def _place_market_order(self, order: Order, signal: Signal, latest_close: float) -> None:
         """Place a market order (original flow)."""
-        from aurex_trade.domain.models import Signal as SignalType_
-
-        signal: SignalType_ = sig  # type: ignore[assignment]
-
         # Snapshot open trades before order to resolve new trade ID via diff
         open_before = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
 
