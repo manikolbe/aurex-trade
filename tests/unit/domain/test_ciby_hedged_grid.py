@@ -200,6 +200,49 @@ class TestSignalRejection:
         assert signal is not None
         assert signal.signal_type == SignalType.LONG
 
+    def test_second_signal_rejected_keeps_level_filled(self) -> None:
+        """When the SHORT (second signal) is rejected, the LONG was already executed.
+        Level stays filled; rejected side marked as closed."""
+        strategy = self._init_strategy(3000.0)
+        # Cross 3015 — generates LONG, queues SHORT
+        bars = _bars([3000.0, 3010.0, 3016.0])
+        long_signal = strategy.generate(bars)
+        assert long_signal is not None
+
+        # Drain the SHORT from queue (simulates engine processing it next cycle)
+        short_signal = strategy.generate(_bars([3016.0, 3016.0]))
+        assert short_signal is not None
+        assert short_signal.signal_type == SignalType.SHORT
+
+        # Now reject the SHORT (partner already executed)
+        strategy.on_signal_rejected(short_signal.metadata["grid_level"])
+
+        # Level should STILL be filled (LONG is live)
+        assert 3015.0 in strategy._filled_levels
+
+        # The rejected side ("short") should be marked as closed
+        pair_id = strategy._filled_levels[3015.0]
+        assert "short" in strategy._pair_closed_sides[pair_id]
+
+    def test_second_signal_rejected_level_releases_when_partner_closes(self) -> None:
+        """After SHORT rejected, level releases when the surviving LONG closes."""
+        strategy = self._init_strategy(3000.0)
+        bars = _bars([3000.0, 3010.0, 3016.0])
+        strategy.generate(bars)  # LONG
+        strategy.generate(_bars([3016.0, 3016.0]))  # SHORT from queue
+
+        # Reject SHORT
+        strategy.on_signal_rejected("3015.00_short")
+
+        # Level still filled
+        assert 3015.0 in strategy._filled_levels
+
+        # LONG closes via broker stop-loss
+        strategy.report_trade_closed("3015.00_long", -16.0)
+
+        # Now level should be released (both sides done)
+        assert 3015.0 not in strategy._filled_levels
+
 
 class TestSessionPnlExits:
     """Test session profit target and loss limit exits."""

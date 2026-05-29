@@ -258,26 +258,43 @@ class CibyHedgedGridStrategy:
     def on_signal_rejected(self, grid_level_key: str) -> None:
         """Called by engine when risk rejects a signal from this strategy.
 
-        If the rejected signal was one half of a pair, clear the queued partner
-        and release the filled level to avoid permanently stuck levels.
+        If the rejected signal was the FIRST of a pair (partner still queued),
+        clear the queued partner and release the filled level.
+        If it was the SECOND (partner already executed), keep the level filled
+        and mark the rejected side as closed so the level can release when the
+        surviving trade closes.
         """
         parts = grid_level_key.rsplit("_", 1)
         if len(parts) != 2:
             return
-        level_str, _side = parts
+        level_str, side = parts
         try:
             level = float(level_str)
         except ValueError:
             return
 
+        # Check if the queued partner still exists (i.e., first signal rejected)
+        old_len = len(self._signal_queue)
         self._signal_queue = deque(
             s for s in self._signal_queue
             if not s.metadata.get("grid_level", "").startswith(level_str)
         )
+        partner_was_queued = len(self._signal_queue) < old_len
 
-        if level in self._filled_levels:
+        if level not in self._filled_levels:
+            return
+
+        if partner_was_queued:
+            # First signal rejected — partner never executed. Release fully.
             pair_id = self._filled_levels.pop(level)
             self._pair_closed_sides.pop(pair_id, None)
+        else:
+            # Second signal rejected — partner already executed.
+            # Mark the rejected side as closed so level releases when partner closes.
+            pair_id = self._filled_levels[level]
+            if pair_id not in self._pair_closed_sides:
+                self._pair_closed_sides[pair_id] = set()
+            self._pair_closed_sides[pair_id].add(side)
 
     def release_level(self, grid_level: float) -> bool:
         """Compatibility with engine's existing release_level dispatch.
@@ -292,8 +309,11 @@ class CibyHedgedGridStrategy:
         if self._anchor_price is None:
             return None
 
+        # Include anchor price in display (initial pair is placed there)
+        all_levels = sorted(set(self._grid_levels) | {self._anchor_price})
+
         grid_levels: list[dict[str, object]] = []
-        for level in reversed(self._grid_levels):
+        for level in reversed(all_levels):
             if level in self._filled_levels:
                 status = "active"
                 pair_id = self._filled_levels[level]
