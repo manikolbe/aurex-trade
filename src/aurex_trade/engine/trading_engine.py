@@ -11,7 +11,14 @@ from typing import TypedDict
 import structlog
 
 from aurex_trade.domain.enums import OrderSide, OrderType, RiskAction, SignalType
-from aurex_trade.domain.models import AccountState, Order, Signal
+from aurex_trade.domain.models import (
+    AccountState,
+    OpenBrokerTrade,
+    Order,
+    Position,
+    Signal,
+    Trade,
+)
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.ports.broker import BrokerPort
@@ -391,7 +398,7 @@ class TradingEngine:
             current_price=self._last_price,
         )
 
-    def _check_limit_fills(self) -> None:
+    def _check_limit_fills(self, open_trades: list[OpenBrokerTrade]) -> None:
         """Detect limit orders that have been filled or cancelled.
 
         Compares broker pending orders against local map. Missing orders are
@@ -418,8 +425,7 @@ class TradingEngine:
         if not disappeared:
             return
 
-        # Snapshot open trades to identify fills via diff against grid_trade_map
-        open_trades = self._broker.get_open_trades(self._symbol)
+        # Use provided open trades to identify fills via diff against grid_trade_map
         known_trade_ids = set(self._grid_trade_map.values())
         # New trades = open trades not already tracked
         new_trades = [t for t in open_trades if t.broker_trade_id not in known_trade_ids]
@@ -553,12 +559,11 @@ class TradingEngine:
         if notify is not None:
             notify()
 
-    def _check_closures(self) -> None:
+    def _check_closures(self, open_trades: list[OpenBrokerTrade]) -> None:
         """Detect trades closed by the broker (TP/SL hit) and release grid levels."""
         if not self._grid_trade_map:
             return
 
-        open_trades = self._broker.get_open_trades(self._symbol)
         open_trade_ids = {t.broker_trade_id for t in open_trades}
 
         keys_to_free: list[tuple[str, str]] = []
@@ -637,11 +642,10 @@ class TradingEngine:
 
     def _run_cycle(self) -> None:
         """Execute one complete trading cycle."""
-        # Step 0a: Check for limit order fills
-        self._check_limit_fills()
-
-        # Step 0b: Check for broker-side closures (TP/SL hits)
-        self._check_closures()
+        # Step 0: Check fills and closures (share one get_open_trades call)
+        open_trades = self._broker.get_open_trades(self._symbol)
+        self._check_limit_fills(open_trades)
+        self._check_closures(open_trades)
 
         # Step 1: Fetch market data
         bars = self._market_data.get_latest_bars(self._symbol, self._bar_count)
@@ -708,11 +712,23 @@ class TradingEngine:
         else:
             self._log.warning("signal_drain_limit_reached", max=max_drain)
 
+        # Fetch position once for all signals (doesn't change during limit placement)
+        position = self._broker.get_positions(self._symbol)
+        trades_today = self._repository.get_trades_today(
+            self._symbol, user_id=self._user_id
+        )
+
         # Process each signal
         for sig in all_signals:
-            self._process_signal(sig, latest_close)
+            self._process_signal(sig, latest_close, position, trades_today)
 
-    def _process_signal(self, sig: Signal, latest_close: float) -> None:
+    def _process_signal(
+        self,
+        sig: Signal,
+        latest_close: float,
+        pos: Position | None,
+        trades_list: list[Trade],
+    ) -> None:
         """Process a single signal: risk check → order placement.
 
         Handles both MARKET and LIMIT order types.
@@ -739,10 +755,6 @@ class TradingEngine:
         )
         self._repository.save_signal(sig, user_id=self._user_id)
 
-        # Step 3: Risk evaluation — broker is source of truth for position
-        position = self._broker.get_positions(self._symbol)
-        trades_today = self._repository.get_trades_today(self._symbol, user_id=self._user_id)
-
         # Assemble account state for risk engine
         current_equity = self._broker.equity
         if current_equity > self._peak_equity:
@@ -751,17 +763,17 @@ class TradingEngine:
 
         self._log.debug(
             "risk_eval_context",
-            position_qty=position.quantity if position else 0.0,
-            position_avg_cost=position.average_cost if position else 0.0,
-            unrealized_pnl=position.unrealized_pnl if position else 0.0,
-            trades_today_count=len(trades_today),
+            position_qty=pos.quantity if pos else 0.0,
+            position_avg_cost=pos.average_cost if pos else 0.0,
+            unrealized_pnl=pos.unrealized_pnl if pos else 0.0,
+            trades_today_count=len(trades_list),
             equity=current_equity,
             peak_equity=self._peak_equity,
         )
         decision = self._risk_engine.evaluate(
             sig,
-            position,
-            trades_today,
+            pos,
+            trades_list,
             account_state=account_state,
             recent_trade_pnls=self._trade_pnls,
         )
@@ -876,9 +888,6 @@ class TradingEngine:
 
     def _place_market_order(self, order: Order, signal: Signal, latest_close: float) -> None:
         """Place a market order (original flow)."""
-        # Snapshot open trades before order to resolve new trade ID via diff
-        open_before = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
-
         try:
             trade = self._broker.place_order(order)
         except Exception:
@@ -899,13 +908,7 @@ class TradingEngine:
         slippage = trade.price - intended_price
         self._slippages.append(abs(slippage))
 
-        # Resolve broker trade ID: prefer tradeOpened from fill, fall back to diff
         broker_trade_id = trade.broker_trade_id
-        if not broker_trade_id:
-            open_after = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
-            new_ids = open_after - open_before
-            if new_ids:
-                broker_trade_id = new_ids.pop()
 
         self._log.info(
             "trade_executed",

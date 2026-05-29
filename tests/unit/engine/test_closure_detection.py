@@ -52,7 +52,7 @@ class TestCheckClosures:
         """When no trades are mapped, _check_closures does nothing."""
         engine, _broker, _ = _build_grid_engine()
         # Should not raise or call broker
-        engine._check_closures()
+        engine._check_closures([])
         assert engine._grid_trade_map == {}
 
     def test_detects_closed_trade_and_releases_level(self) -> None:
@@ -76,7 +76,7 @@ class TestCheckClosures:
             )
         )
 
-        engine._check_closures()
+        engine._check_closures(broker.get_open_trades("XAU_USD"))
 
         # Level should be released from the map
         assert 2060.0 not in engine._grid_trade_map
@@ -106,7 +106,7 @@ class TestCheckClosures:
             )
         )
 
-        engine._check_closures()
+        engine._check_closures(broker.get_open_trades("XAU_USD"))
 
         markers = engine.get_trade_markers()
         close_markers = [m for m in markers if m["side"] == "close_sl"]
@@ -134,7 +134,7 @@ class TestCheckClosures:
             ]
         )
 
-        engine._check_closures()
+        engine._check_closures(broker.get_open_trades("XAU_USD"))
 
         # Should still be in the map
         assert 2060.0 in engine._grid_trade_map
@@ -150,7 +150,7 @@ class TestCheckClosures:
         broker.get_open_trades = MagicMock(return_value=[])  # type: ignore[method-assign]
         broker.get_closed_trade_details = MagicMock(return_value=None)  # type: ignore[method-assign]
 
-        engine._check_closures()
+        engine._check_closures(broker.get_open_trades("XAU_USD"))
 
         assert 2060.0 not in engine._grid_trade_map
         assert 2060.0 not in strategy._filled_levels
