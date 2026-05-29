@@ -246,7 +246,6 @@ class TradingEngine:
 
         # Check if strategy uses fixed units (hedged grid pattern)
         grid_units = getattr(self._strategy, "_grid_units", None)
-        initial_units = getattr(self._strategy, "_initial_units", None)
         session_loss_limit = getattr(self._strategy, "_session_loss_limit", None)
         daily_loss_limit_attr = getattr(self._strategy, "_daily_loss_limit", None)
 
@@ -692,7 +691,10 @@ class TradingEngine:
             return
 
         self._session_trades += 1
-        slippage = trade.price - latest_close
+        # Slippage: compare fill price to intended entry price from signal metadata
+        intended_price_str = signal.metadata.get("entry_price")
+        intended_price = float(intended_price_str) if intended_price_str else latest_close
+        slippage = trade.price - intended_price
         self._slippages.append(abs(slippage))
 
         # Resolve broker trade ID: prefer tradeOpened from fill, fall back to diff
@@ -739,6 +741,12 @@ class TradingEngine:
         grid_level_str = signal.metadata.get("grid_level")
         if grid_level_str and broker_trade_id:
             self._grid_trade_map[grid_level_str] = broker_trade_id
+
+        # Report actual fill price to strategy (updates grid entry/SL display)
+        if grid_level_str:
+            report_fill = getattr(self._strategy, "report_fill", None)
+            if report_fill is not None:
+                report_fill(grid_level_str, trade.price)
 
         # Step 5: Update position and track P&L
         prev_position = position

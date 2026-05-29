@@ -228,6 +228,24 @@ class CibyHedgedGridStrategy:
 
         return None
 
+    def report_fill(self, grid_level_key: str, fill_price: float) -> None:
+        """Called by engine when a trade is filled at the broker.
+
+        Updates the stored entry price for the grid level to the actual fill,
+        so SL display reflects reality rather than the signal-generation price.
+        """
+        parts = grid_level_key.rsplit("_", 1)
+        if len(parts) != 2:
+            return
+        level_str = parts[0]
+        try:
+            level = float(level_str)
+        except ValueError:
+            return
+
+        if level in self._filled_entry_prices:
+            self._filled_entry_prices[level] = fill_price
+
     def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None:
         """Called by engine when a broker-side closure is detected.
 
