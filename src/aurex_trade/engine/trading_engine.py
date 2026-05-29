@@ -228,25 +228,72 @@ class TradingEngine:
         return None
 
     def get_risk_summary(self) -> dict[str, float]:
-        """Return risk summary calculations for UI display."""
+        """Return risk summary calculations for UI display.
+
+        Adapts to strategy type:
+        - Hedged grid: uses fixed units, session loss limit as effective cap
+        - Other strategies: uses dynamic position sizing from risk engine
+        """
         equity = self._broker.equity
-        stop_distance = 30.0  # Default; could be extracted from strategy
+        stop_distance = 30.0
 
         # Extract stop_distance from strategy if available
         strategy_stop = getattr(self._strategy, "_stop_distance", None)
         if strategy_stop is not None:
             stop_distance = float(strategy_stop)
 
-        risk_per_trade = self._risk_engine._risk_per_trade
         max_position_size = float(self._risk_engine._max_position_size)
+
+        # Check if strategy uses fixed units (hedged grid pattern)
+        grid_units = getattr(self._strategy, "_grid_units", None)
+        initial_units = getattr(self._strategy, "_initial_units", None)
+        session_loss_limit = getattr(self._strategy, "_session_loss_limit", None)
+        daily_loss_limit_attr = getattr(self._strategy, "_daily_loss_limit", None)
+
+        if grid_units is not None:
+            # Hedged grid: fixed units, paired trades
+            units_per_trade = float(grid_units)
+
+            # Worst case per pair: both sides stop out (whipsaw)
+            # = 2 * units * stop_distance
+            # Max concurrent pairs before session limit triggers close-all
+            loss_per_pair_worst = 2.0 * units_per_trade * stop_distance
+            if loss_per_pair_worst > 0 and session_loss_limit is not None:
+                max_pairs = max(1, int(float(session_loss_limit) / loss_per_pair_worst) + 1)
+            else:
+                max_pairs = 5
+
+            worst_case_loss = max_pairs * loss_per_pair_worst
+
+            # Effective loss cap is the tighter of session and daily limits
+            if daily_loss_limit_attr is not None:
+                effective_limit = float(daily_loss_limit_attr)
+            elif session_loss_limit is not None:
+                effective_limit = float(session_loss_limit)
+            else:
+                effective_limit = equity * self._risk_engine._max_drawdown_pct
+
+            headroom = effective_limit - abs(
+                getattr(self._strategy, "_daily_realized_pnl", 0.0)
+            )
+
+            return {
+                "units_per_trade": round(units_per_trade, 1),
+                "max_position_size": max_position_size,
+                "worst_case_loss": round(worst_case_loss, 2),
+                "drawdown_limit": round(effective_limit, 2),
+                "headroom": round(headroom, 2),
+                "stop_distance": stop_distance,
+            }
+
+        # Default: dynamic position sizing
+        risk_per_trade = self._risk_engine._risk_per_trade
         max_drawdown_pct = self._risk_engine._max_drawdown_pct
 
-        # Dynamic position size calculation
         raw_units = (equity * risk_per_trade) / stop_distance if stop_distance > 0 else 0
         units_per_trade = min(raw_units, max_position_size)
 
-        # Worst case: all available levels triggered, all hit stop
-        max_trades = 10  # Default
+        max_trades = 10
         strategy_max_levels = getattr(self._strategy, "_max_levels", None)
         if strategy_max_levels is not None:
             max_trades = int(strategy_max_levels)
