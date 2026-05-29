@@ -508,18 +508,35 @@
     html += renderPnlGauge('Session P&L', state.session_pnl, state.session_loss_limit, state.session_profit_target);
     html += renderPnlGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit, state.daily_loss_limit);
 
-    // Grid levels table with paired columns
-    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Entry</th><th>Buy (SL)</th><th>Sell (SL)</th></tr></thead><tbody>';
+    // Grid levels table — show active levels + 3 empty on each side
+    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
 
     var levels = state.grid_levels;
-    var foundAnchor = false;
+    // Find indices of active/non-waiting levels
+    var firstActive = -1, lastActive = -1;
     for (var i = 0; i < levels.length; i++) {
+      if (levels[i].status !== 'waiting') {
+        if (firstActive === -1) firstActive = i;
+        lastActive = i;
+      }
+    }
+    // If nothing active, show around the anchor
+    if (firstActive === -1) {
+      for (var i = 0; i < levels.length; i++) {
+        if (levels[i].price <= state.anchor_price) { firstActive = i; lastActive = i; break; }
+      }
+    }
+    var startIdx = Math.max(0, firstActive - 3);
+    var endIdx = Math.min(levels.length - 1, lastActive + 3);
+
+    var foundAnchor = false;
+    for (var i = startIdx; i <= endIdx; i++) {
       var lv = levels[i];
 
       // Insert anchor separator
       if (!foundAnchor && lv.price < state.anchor_price) {
         foundAnchor = true;
-        html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="4">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
+        html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="3">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
       }
 
       var buyCell = statusIcon(lv.buy.status, 'success');
@@ -531,11 +548,9 @@
         sellCell += '<span class="text-xs text-base-content/50 ml-1">SL ' + lv.sell.sl.toFixed(2) + '</span>';
       }
 
-      var entryCell = lv.status !== 'waiting' ? '<span class="font-mono">' + lv.entry_price.toFixed(2) + '</span>' : '';
       var rowClass = lv.status === 'active' ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');
       html += '<tr class="' + rowClass + '">';
       html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
-      html += '<td class="text-xs">' + entryCell + '</td>';
       html += '<td class="text-sm">' + buyCell + '</td>';
       html += '<td class="text-sm">' + sellCell + '</td>';
       html += '</tr>';
