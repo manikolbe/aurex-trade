@@ -312,14 +312,14 @@ class CibyHedgedGridStrategy:
                 elif "long" in fills:
                     buy_status = "active"
                 else:
-                    buy_status = "pending"
+                    buy_status = "placed"
 
                 if "short" in closed_sides:
                     sell_status = "closed"
                 elif "short" in fills:
                     sell_status = "active"
                 else:
-                    sell_status = "pending"
+                    sell_status = "placed"
 
                 if "long" in closed_sides and "short" in closed_sides:
                     status = "closed"

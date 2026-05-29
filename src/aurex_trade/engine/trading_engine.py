@@ -499,6 +499,19 @@ class TradingEngine:
                 ),
             ))
 
+            # Record marker for chart overlay
+            self._trade_markers.append(
+                TradeMarker(
+                    timestamp=datetime.now(UTC).isoformat(),
+                    price=fill_price,
+                    side=side_label.lower(),
+                    quantity=0.0,
+                    stop_loss=None,
+                    take_profit=None,
+                    broker_trade_id=broker_trade_id,
+                )
+            )
+
             self._session_trades += 1
 
     def _close_all_trades(self, reason: str) -> None:
