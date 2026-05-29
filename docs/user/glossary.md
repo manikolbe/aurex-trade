@@ -100,7 +100,7 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 **Grid Spacing**
 :   The fixed distance (in price points) between adjacent grid levels. For gold
-    trading, 10 points is a common spacing.
+    trading, 15 points is typical for the Ciby Hedged Grid strategy.
 
 **Grid Trading**
 :   A strategy that places orders at regular price intervals (a "grid") above and
@@ -111,6 +111,12 @@ Quick definitions of terms you'll encounter in AurexTrade.
 :   The time period each price bar represents. M1 = 1 minute, M5 = 5 minutes,
     H1 = 1 hour, D = 1 day. Smaller granularity means more data points and more
     detailed testing.
+
+**Hedged Pair**
+:   Two simultaneous trades in opposite directions (one buy and one sell) placed
+    at the same price. Used by the Ciby Hedged Grid strategy. One side profits
+    while the other gets stopped out — the net result depends on how far price
+    moves in one direction.
 
 ## I
 
@@ -204,6 +210,20 @@ Quick definitions of terms you'll encounter in AurexTrade.
     down recently. Used to identify overbought and oversold conditions.
 
 ## S
+
+**Session (Trading Session)**
+:   In the Ciby Hedged Grid strategy, a session is one cycle of grid trading
+    from start to close-all. A session ends when the profit target or loss limit
+    is hit, then a new session starts fresh at the current price. Multiple
+    sessions can occur in a single trading day.
+
+**Session Profit Target**
+:   The dollar amount of realized profit that triggers the bot to close all
+    positions and restart fresh. Locks in gains before a reversal can erode them.
+
+**Session Loss Limit**
+:   The dollar amount of realized loss that triggers the bot to close all
+    positions and restart fresh. Caps damage from whipsaw markets.
 
 **Sharpe Ratio**
 :   A measure of risk-adjusted return. Higher is better. Tells you how much return

@@ -30,9 +30,9 @@ rules every time — no emotions, no second-guessing.
 Think of it like a recipe: given specific ingredients (market data), follow these
 steps, and you get a specific output (a buy or sell decision).
 
-## The Three Strategies
+## The Four Strategies
 
-AurexTrade currently offers three strategies. They work in different ways, which means
+AurexTrade currently offers four strategies. They work in different ways, which means
 they perform best in different market conditions.
 
 ### SMA Crossover (Trend-Following)
@@ -79,11 +79,54 @@ on a scale of 0 to 100:
 **Analogy:** It's like a rubber band. The further you stretch it from the middle,
 the harder it snaps back.
 
-### Ciby Grid Hedging (Direction-Neutral)
+### Ciby Hedged Grid (Direction-Neutral, Paired)
 
-**The idea:** Don't predict direction at all. Instead, place a grid of price
-levels above and below the current price, and let the market reveal which way
-it wants to go. Losing positions get stopped out; winning positions accumulate.
+**The idea:** A grid trading strategy developed by legendary gold trader Ciby.
+Don't predict direction — instead, open a **hedged pair** (one buy AND one sell)
+at each grid level. One side profits while the other gets stopped out. In a
+sustained trend, the winning sides accumulate while losers are capped. In a
+sideways market within one grid band, no stops are hit — zero cost optionality.
+
+**How it works:**
+
+When the bot starts a session, it takes the current price as the **anchor** and
+places a hedged pair (buy + sell) immediately. Then it draws grid levels at
+regular intervals above and below the anchor.
+
+- When price crosses **any grid level** — place a new hedged pair (buy + sell) at
+  that level
+- Each position gets a stop-loss just past the adjacent grid level
+
+The key insight: in a trending market, the winning sides of your pairs stay open
+and accumulate profit, while the losing sides get stopped out for a small,
+predictable loss. The net result is profit proportional to the trend's strength.
+
+**Session management:**
+
+- **Session profit target:** When total realized P&L hits the target, close
+  everything and restart fresh at the new price
+- **Session loss limit:** When losses exceed the limit, close everything and
+  restart fresh (prevents whipsaw damage)
+- **Daily loss limit:** When cumulative daily losses exceed this threshold, stop
+  trading entirely until the next day
+
+**When it works best:** Volatile instruments that trend (gold/XAU_USD is ideal).
+Any sustained directional move generates profit.
+
+**When it struggles:** Extreme whipsaw markets where price repeatedly reverses
+exactly at stop-loss distance, hitting stops on both sides of pairs.
+
+**Analogy:** It's like betting on both red and black at roulette — except in
+markets, one side can run far further than the other. You always lose one bet,
+but the winning bet can pay multiples of the losing one.
+
+---
+
+### Simple Grid (Direction-Neutral)
+
+**The idea:** Place a grid of price levels above and below the current price,
+and let the market reveal which way it wants to go. Losing positions get stopped
+out; winning positions accumulate.
 
 **How it works:**
 
@@ -121,8 +164,9 @@ does the work.
 |-----------------|---------------|
 | Clear trends (up or down for weeks) | SMA Crossover |
 | Choppy, sideways, range-bound | RSI Mean-Reversion |
-| Uncertain direction, want to capture either way | Ciby Grid Hedging |
-| Not sure | Test all three with a backtest and compare results |
+| Volatile with sustained moves (gold) | Ciby Hedged Grid |
+| Uncertain direction, want to capture either way | Simple Grid |
+| Not sure | Test with a backtest and compare results |
 
 In practice, no one knows in advance what the market will do. That's why testing
 matters — you can see which strategy worked better on recent data.
