@@ -219,10 +219,6 @@ class CibyHedgedGridStrategy:
         # Replenish: place the next level beyond this one
         self._replenish_level(level, side)
 
-    def report_limit_fill_both(self, level: float) -> None:
-        """Called when both sides of a level have filled (convenience)."""
-        # Already handled per-side in report_fill
-
     def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None:
         """Called by engine when a broker-side closure is detected.
 
@@ -484,6 +480,16 @@ class CibyHedgedGridStrategy:
             self._queue_limit_pair_deferred(next_level)
 
     def _queue_limit_pair(self, bar: BarData, level: float) -> None:
+        """Queue buy + sell limit order signals for a grid level (initial placement)."""
+        self._queue_limit_pair_for_symbol(bar.symbol, level)
+
+    def _queue_limit_pair_deferred(self, level: float) -> None:
+        """Queue limit pair for replenishment (uses stored symbol)."""
+        if not self._symbol:
+            return
+        self._queue_limit_pair_for_symbol(self._symbol, level)
+
+    def _queue_limit_pair_for_symbol(self, symbol: str, level: float) -> None:
         """Queue buy + sell limit order signals for a grid level."""
         if level in self._placed_levels or level in self._filled_levels:
             return
@@ -498,7 +504,7 @@ class CibyHedgedGridStrategy:
         units = self._grid_units
 
         long_signal = Signal(
-            symbol=bar.symbol,
+            symbol=symbol,
             signal_type=SignalType.LONG,
             strategy_name=self.name,
             strength=1.0,
@@ -516,60 +522,7 @@ class CibyHedgedGridStrategy:
         )
 
         short_signal = Signal(
-            symbol=bar.symbol,
-            signal_type=SignalType.SHORT,
-            strategy_name=self.name,
-            strength=1.0,
-            metadata={
-                "grid_level": short_key,
-                "pair_id": pair_id,
-                "pair_side": "short",
-                "fixed_units": f"{units:.1f}",
-                "order_type": "LIMIT",
-                "limit_price": f"{level:.5f}",
-                "entry_price": f"{level:.5f}",
-            },
-            stop_loss=level + self._stop_distance,
-            take_profit=None,
-        )
-
-        self._signal_queue.append(long_signal)
-        self._signal_queue.append(short_signal)
-
-    def _queue_limit_pair_deferred(self, level: float) -> None:
-        """Queue limit pair for replenishment (uses stored symbol)."""
-        if not self._symbol:
-            return
-
-        self._placed_levels.add(level)
-        self._filled_entry_prices[level] = {}
-
-        level_str = f"{level:.2f}"
-        long_key = f"{level_str}_long"
-        short_key = f"{level_str}_short"
-        pair_id = str(uuid4())
-        units = self._grid_units
-
-        long_signal = Signal(
-            symbol=self._symbol,
-            signal_type=SignalType.LONG,
-            strategy_name=self.name,
-            strength=1.0,
-            metadata={
-                "grid_level": long_key,
-                "pair_id": pair_id,
-                "pair_side": "long",
-                "fixed_units": f"{units:.1f}",
-                "order_type": "LIMIT",
-                "limit_price": f"{level:.5f}",
-                "entry_price": f"{level:.5f}",
-            },
-            stop_loss=level - self._stop_distance,
-            take_profit=None,
-        )
-
-        short_signal = Signal(
-            symbol=self._symbol,
+            symbol=symbol,
             signal_type=SignalType.SHORT,
             strategy_name=self.name,
             strength=1.0,

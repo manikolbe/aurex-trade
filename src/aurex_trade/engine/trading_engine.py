@@ -427,18 +427,31 @@ class TradingEngine:
         for grid_key, broker_order_id in disappeared:
             del self._pending_order_map[grid_key]
 
-            # Try to match this fill with a new open trade
-            # Match by side: grid_key ends with _long or _short
+            # Match by side + price proximity (handles multiple same-side fills)
             expected_side = OrderSide.BUY if grid_key.endswith("_long") else OrderSide.SELL
+            # Extract expected price from grid_key (e.g. "4570.00_long" → 4570.0)
+            level_str = grid_key.rsplit("_", 1)[0]
+            try:
+                expected_price = float(level_str)
+            except ValueError:
+                expected_price = 0.0
+
             broker_trade_id = ""
             fill_price = 0.0
+            best_idx = -1
+            best_distance = float("inf")
 
             for i, t in enumerate(new_trades):
                 if t.side == expected_side:
-                    broker_trade_id = t.broker_trade_id
-                    fill_price = t.open_price
-                    new_trades.pop(i)
-                    break
+                    distance = abs(t.open_price - expected_price)
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_idx = i
+
+            if best_idx >= 0:
+                matched = new_trades.pop(best_idx)
+                broker_trade_id = matched.broker_trade_id
+                fill_price = matched.open_price
 
             if not broker_trade_id:
                 # No matching trade found — order was likely cancelled, not filled
