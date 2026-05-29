@@ -541,11 +541,11 @@
 
       var buyCell = statusIcon(lv.buy.status, 'success');
       var sellCell = statusIcon(lv.sell.status, 'error');
-      if (lv.status === 'active' && lv.buy.sl) {
-        buyCell += '<span class="text-xs text-base-content/50 ml-1">SL ' + lv.buy.sl.toFixed(2) + '</span>';
+      if (lv.status === 'active' && lv.buy.fill) {
+        buyCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.buy.fill.toFixed(2) + ' SL ' + lv.buy.sl.toFixed(2) + '</span>';
       }
-      if (lv.status === 'active' && lv.sell.sl) {
-        sellCell += '<span class="text-xs text-base-content/50 ml-1">SL ' + lv.sell.sl.toFixed(2) + '</span>';
+      if (lv.status === 'active' && lv.sell.fill) {
+        sellCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
       }
 
       var rowClass = lv.status === 'active' ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');

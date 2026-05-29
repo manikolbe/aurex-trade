@@ -44,7 +44,7 @@ class CibyHedgedGridStrategy:
         self._grid_levels: list[float] = []
         self._signal_queue: deque[Signal] = deque()
         self._filled_levels: dict[float, str] = {}
-        self._filled_entry_prices: dict[float, float] = {}
+        self._filled_entry_prices: dict[float, dict[str, float]] = {}
         self._pair_closed_sides: dict[str, set[str]] = {}
         self._session_realized_pnl: float = 0.0
         self._session_unrealized_pnl: float = 0.0
@@ -231,20 +231,20 @@ class CibyHedgedGridStrategy:
     def report_fill(self, grid_level_key: str, fill_price: float) -> None:
         """Called by engine when a trade is filled at the broker.
 
-        Updates the stored entry price for the grid level to the actual fill,
-        so SL display reflects reality rather than the signal-generation price.
+        Stores the actual fill price per side (long/short) so SL display
+        and calculations use real broker prices, not signal-generation estimates.
         """
         parts = grid_level_key.rsplit("_", 1)
         if len(parts) != 2:
             return
-        level_str = parts[0]
+        level_str, side = parts
         try:
             level = float(level_str)
         except ValueError:
             return
 
         if level in self._filled_entry_prices:
-            self._filled_entry_prices[level] = fill_price
+            self._filled_entry_prices[level][side] = fill_price
 
     def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None:
         """Called by engine when a broker-side closure is detected.
@@ -347,23 +347,25 @@ class CibyHedgedGridStrategy:
                 sell_status = "stopped" if "short" in closed_sides else "active"
                 if "long" in closed_sides and "short" in closed_sides:
                     status = "closed"
-                entry = self._filled_entry_prices.get(level, level)
-                buy_sl = entry - self._stop_distance
-                sell_sl = entry + self._stop_distance
+                fills = self._filled_entry_prices.get(level, {})
+                buy_fill = fills.get("long", level)
+                sell_fill = fills.get("short", level)
+                buy_sl = buy_fill - self._stop_distance
+                sell_sl = sell_fill + self._stop_distance
             else:
                 status = "waiting"
                 buy_status = "none"
                 sell_status = "none"
-                entry = 0.0
+                buy_fill = 0.0
+                sell_fill = 0.0
                 buy_sl = 0.0
                 sell_sl = 0.0
 
             grid_levels.append({
                 "price": level,
                 "status": status,
-                "entry_price": entry,
-                "buy": {"status": buy_status, "sl": buy_sl},
-                "sell": {"status": sell_status, "sl": sell_sl},
+                "buy": {"status": buy_status, "fill": buy_fill, "sl": buy_sl},
+                "sell": {"status": sell_status, "fill": sell_fill, "sl": sell_sl},
             })
 
         return {
@@ -445,7 +447,7 @@ class CibyHedgedGridStrategy:
         entry_price = bar.close
 
         self._filled_levels[level] = pair_id
-        self._filled_entry_prices[level] = entry_price
+        self._filled_entry_prices[level] = {"long": entry_price, "short": entry_price}
 
         level_str = f"{level:.2f}"
         long_key = f"{level_str}_long"
