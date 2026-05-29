@@ -541,10 +541,10 @@
 
       var buyCell = statusIcon(lv.buy.status, 'success');
       var sellCell = statusIcon(lv.sell.status, 'error');
-      if (lv.status === 'active' && lv.buy.fill) {
+      if (lv.buy.status === 'active' && lv.buy.fill) {
         buyCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.buy.fill.toFixed(2) + ' SL ' + lv.buy.sl.toFixed(2) + '</span>';
       }
-      if (lv.status === 'active' && lv.sell.fill) {
+      if (lv.sell.status === 'active' && lv.sell.fill) {
         sellCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
       }
 
@@ -578,6 +578,7 @@
 
   function statusIcon(status, colorType) {
     if (status === 'active') return '<span class="text-' + colorType + '">● Active</span>';
+    if (status === 'pending') return '<span class="text-base-content/50">◌ Pending</span>';
     if (status === 'stopped') return '<span class="text-base-content/40">✕ Stopped</span>';
     if (status === 'closed') return '<span class="text-base-content/40">✓ Closed</span>';
     return '<span class="text-base-content/30">—</span>';

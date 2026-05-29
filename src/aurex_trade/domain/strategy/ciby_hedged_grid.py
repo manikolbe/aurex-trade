@@ -343,15 +343,30 @@ class CibyHedgedGridStrategy:
                 status = "active"
                 pair_id = self._filled_levels[level]
                 closed_sides = self._pair_closed_sides.get(pair_id, set())
-                buy_status = "stopped" if "long" in closed_sides else "active"
-                sell_status = "stopped" if "short" in closed_sides else "active"
+                fills = self._filled_entry_prices.get(level, {})
+
+                # Determine per-side status: pending (queued) → active (filled) → stopped (closed)
+                if "long" in closed_sides:
+                    buy_status = "stopped"
+                elif "long" in fills:
+                    buy_status = "active"
+                else:
+                    buy_status = "pending"
+
+                if "short" in closed_sides:
+                    sell_status = "stopped"
+                elif "short" in fills:
+                    sell_status = "active"
+                else:
+                    sell_status = "pending"
+
                 if "long" in closed_sides and "short" in closed_sides:
                     status = "closed"
-                fills = self._filled_entry_prices.get(level, {})
-                buy_fill = fills.get("long", level)
-                sell_fill = fills.get("short", level)
-                buy_sl = buy_fill - self._stop_distance
-                sell_sl = sell_fill + self._stop_distance
+
+                buy_fill = fills.get("long", 0.0)
+                sell_fill = fills.get("short", 0.0)
+                buy_sl = (buy_fill - self._stop_distance) if buy_fill else 0.0
+                sell_sl = (sell_fill + self._stop_distance) if sell_fill else 0.0
             else:
                 status = "waiting"
                 buy_status = "none"
@@ -447,7 +462,7 @@ class CibyHedgedGridStrategy:
         entry_price = bar.close
 
         self._filled_levels[level] = pair_id
-        self._filled_entry_prices[level] = {"long": entry_price, "short": entry_price}
+        self._filled_entry_prices[level] = {}
 
         level_str = f"{level:.2f}"
         long_key = f"{level_str}_long"
