@@ -1,10 +1,10 @@
-"""Tests for the Ciby Grid Hedging strategy."""
+"""Tests for the Simple Grid strategy."""
 
 from datetime import UTC, datetime, timedelta
 
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData
-from aurex_trade.domain.strategy.ciby_grid_hedging import CibyGridHedgingStrategy
+from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
 
 
 def _make_bars(closes: list[float], symbol: str = "XAU_USD") -> list[BarData]:
@@ -23,11 +23,11 @@ def _make_bars(closes: list[float], symbol: str = "XAU_USD") -> list[BarData]:
     ]
 
 
-class TestCibyGridHedgingBasics:
+class TestSimpleGridBasics:
     """Basic property and initialization tests."""
 
     def setup_method(self) -> None:
-        self.strategy = CibyGridHedgingStrategy(
+        self.strategy = SimpleGridStrategy(
             grid_spacing=10.0,
             max_levels=6,
             stop_distance=30.0,
@@ -36,7 +36,7 @@ class TestCibyGridHedgingBasics:
         )
 
     def test_name(self) -> None:
-        assert self.strategy.name == "ciby_grid_hedging"
+        assert self.strategy.name == "simple_grid"
 
     def test_min_bars(self) -> None:
         assert self.strategy.min_bars == 2
@@ -56,8 +56,8 @@ class TestCibyGridHedgingBasics:
 
     def test_metadata_classmethod(self) -> None:
         """metadata() returns valid StrategyMetadata with all params."""
-        meta = CibyGridHedgingStrategy.metadata()
-        assert meta.display_name == "Ciby Grid Hedging"
+        meta = SimpleGridStrategy.metadata()
+        assert meta.display_name == "Simple Grid"
         assert len(meta.params) == 6
         param_keys = [p.key for p in meta.params]
         assert "grid_spacing" in param_keys
@@ -67,11 +67,11 @@ class TestCibyGridHedgingBasics:
         assert "num_levels_below" in param_keys
 
 
-class TestCibyGridHedgingSignals:
+class TestSimpleGridSignals:
     """Signal generation tests."""
 
     def setup_method(self) -> None:
-        self.strategy = CibyGridHedgingStrategy(
+        self.strategy = SimpleGridStrategy(
             grid_spacing=10.0,
             max_levels=6,
             stop_distance=30.0,
@@ -96,7 +96,7 @@ class TestCibyGridHedgingSignals:
         assert signal is not None
         assert signal.signal_type == SignalType.LONG
         assert signal.symbol == "XAU_USD"
-        assert signal.strategy_name == "ciby_grid_hedging"
+        assert signal.strategy_name == "simple_grid"
 
     def test_downward_crossing_generates_short(self) -> None:
         """Price crossing downward through a grid level → SHORT signal."""
@@ -121,7 +121,7 @@ class TestCibyGridHedgingSignals:
 
     def test_max_levels_caps_signals(self) -> None:
         """Once max_levels are filled, no more signals are generated."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0,
             max_levels=2,
             stop_distance=30.0,
@@ -180,11 +180,11 @@ class TestCibyGridHedgingSignals:
         assert signal.metadata["grid_level"] == "4610.00"
 
 
-class TestCibyGridHedgingStopLoss:
+class TestSimpleGridStopLoss:
     """Stop-loss calculation tests."""
 
     def setup_method(self) -> None:
-        self.strategy = CibyGridHedgingStrategy(
+        self.strategy = SimpleGridStrategy(
             grid_spacing=10.0,
             max_levels=6,
             stop_distance=25.0,
@@ -221,11 +221,11 @@ class TestCibyGridHedgingStopLoss:
         assert signal.stop_loss == 4579.0 + 25.0
 
 
-class TestCibyGridHedgingMetadata:
+class TestSimpleGridMetadata:
     """Signal metadata content tests."""
 
     def setup_method(self) -> None:
-        self.strategy = CibyGridHedgingStrategy(
+        self.strategy = SimpleGridStrategy(
             grid_spacing=10.0,
             max_levels=6,
             stop_distance=30.0,
@@ -262,12 +262,12 @@ class TestCibyGridHedgingMetadata:
         assert signal.strength == 1.0
 
 
-class TestCibyGridHedgingParameterVariations:
+class TestSimpleGridParameterVariations:
     """Tests with different parameter configurations."""
 
     def test_custom_grid_spacing(self) -> None:
         """Grid levels respect custom spacing."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=5.0,
             max_levels=4,
             stop_distance=15.0,
@@ -288,7 +288,7 @@ class TestCibyGridHedgingParameterVariations:
 
     def test_asymmetric_levels(self) -> None:
         """Can have different number of levels above vs below."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0,
             max_levels=6,
             stop_distance=30.0,
@@ -310,12 +310,12 @@ class TestCibyGridHedgingParameterVariations:
         assert signal is None
 
 
-class TestCibyGridHedgingTakeProfit:
+class TestSimpleGridTakeProfit:
     """Tests for take-profit calculation on grid signals."""
 
     def test_long_signal_take_profit_above_entry(self) -> None:
         """LONG signal TP should be above entry by reward_ratio * stop_distance."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
             num_levels_above=3, num_levels_below=3,
         )
@@ -333,7 +333,7 @@ class TestCibyGridHedgingTakeProfit:
 
     def test_short_signal_take_profit_below_entry(self) -> None:
         """SHORT signal TP should be below entry by reward_ratio * stop_distance."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
             num_levels_above=3, num_levels_below=3,
         )
@@ -351,7 +351,7 @@ class TestCibyGridHedgingTakeProfit:
 
     def test_reward_ratio_zero_disables_take_profit(self) -> None:
         """reward_ratio=0 means no take-profit."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0, stop_distance=30.0, reward_ratio=0.0,
             num_levels_above=3, num_levels_below=3,
         )
@@ -365,12 +365,12 @@ class TestCibyGridHedgingTakeProfit:
         assert signal.take_profit is None
 
 
-class TestCibyGridHedgingReleaseLevel:
+class TestSimpleGridReleaseLevel:
     """Tests for releasing triggered grid levels back to waiting."""
 
     def test_release_triggered_level_returns_true(self) -> None:
         """Releasing a triggered level should return True and free it."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
             num_levels_above=3, num_levels_below=3,
         )
@@ -403,7 +403,7 @@ class TestCibyGridHedgingReleaseLevel:
 
     def test_release_non_triggered_level_returns_false(self) -> None:
         """Releasing a level that isn't triggered should return False."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
             num_levels_above=3, num_levels_below=3,
         )
@@ -414,7 +414,7 @@ class TestCibyGridHedgingReleaseLevel:
 
     def test_released_level_can_be_retriggered(self) -> None:
         """After release, a level should be available for re-entry."""
-        strategy = CibyGridHedgingStrategy(
+        strategy = SimpleGridStrategy(
             grid_spacing=10.0, stop_distance=30.0, reward_ratio=1.0,
             num_levels_above=3, num_levels_below=3,
         )

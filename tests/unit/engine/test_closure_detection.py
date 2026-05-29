@@ -7,7 +7,7 @@ from aurex_trade.adapters.paper.broker import PaperBrokerAdapter
 from aurex_trade.domain.enums import OrderSide
 from aurex_trade.domain.models import ClosedTradeInfo, OpenBrokerTrade
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.ciby_grid_hedging import CibyGridHedgingStrategy
+from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
 from aurex_trade.engine.trading_engine import TradingEngine
 
 _TEST_USER_ID = "test-user"
@@ -15,11 +15,11 @@ _TEST_USER_ID = "test-user"
 
 def _build_grid_engine(
     seed: int = 42,
-) -> tuple[TradingEngine, PaperBrokerAdapter, CibyGridHedgingStrategy]:
+) -> tuple[TradingEngine, PaperBrokerAdapter, SimpleGridStrategy]:
     """Build a TradingEngine with grid strategy for closure detection tests."""
     broker = PaperBrokerAdapter(base_price=2050.0, seed=seed)
     repository = InMemoryRepository()
-    strategy = CibyGridHedgingStrategy(
+    strategy = SimpleGridStrategy(
         grid_spacing=10.0,
         stop_distance=30.0,
         reward_ratio=2.0,

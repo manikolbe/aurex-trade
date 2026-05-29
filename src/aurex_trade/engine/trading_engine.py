@@ -3,6 +3,7 @@
 Depends ONLY on port interfaces and domain types. Never imports adapters.
 """
 
+import contextlib
 import time
 from datetime import UTC, datetime
 from typing import TypedDict
@@ -125,8 +126,8 @@ class TradingEngine:
         self._equity_history: list[EquitySnapshot] = []
         # Trade markers for chart overlay
         self._trade_markers: list[TradeMarker] = []
-        # Grid level → broker trade ID mapping for closure detection
-        self._grid_trade_map: dict[float, str] = {}
+        # Grid level key → broker trade ID mapping for closure detection
+        self._grid_trade_map: dict[str, str] = {}
         self._grid_logged: bool = False
         # Event log for UI
         self._event_log: list[EventLogEntry] = []
@@ -330,6 +331,55 @@ class TradingEngine:
             avg_slippage=avg_slippage,
         )
 
+    def _close_all_trades(self, reason: str) -> None:
+        """Close all open trades for the symbol and clear grid state.
+
+        Used by strategies with session P&L exits (e.g., paired grid) to
+        liquidate all positions when a profit target or loss limit is hit.
+        """
+        open_trades = self._broker.get_open_trades(self._symbol)
+        if not open_trades:
+            self._log.info("close_all_no_trades", reason=reason)
+        else:
+            for trade in open_trades:
+                # Place counter-order to close each trade
+                close_side = (
+                    OrderSide.SELL if trade.side == OrderSide.BUY else OrderSide.BUY
+                )
+                close_order = Order(
+                    symbol=self._symbol,
+                    side=close_side,
+                    quantity=trade.quantity,
+                )
+                try:
+                    self._broker.place_order(close_order)
+                except Exception:
+                    self._log.exception(
+                        "close_all_order_failed",
+                        broker_trade_id=trade.broker_trade_id,
+                    )
+
+            self._log.info(
+                "close_all_executed",
+                reason=reason,
+                trades_closed=len(open_trades),
+            )
+
+        # Clear grid trade map
+        self._grid_trade_map.clear()
+
+        # Add event log entry
+        self._event_log.append(EventLogEntry(
+            timestamp=datetime.now(UTC).isoformat(),
+            event="close_all",
+            details=f"All positions closed: {reason}",
+        ))
+
+        # Notify strategy that close-all is complete (for session restart)
+        notify = getattr(self._strategy, "notify_close_all_complete", None)
+        if notify is not None:
+            notify()
+
     def _check_closures(self) -> None:
         """Detect trades closed by the broker (TP/SL hit) and release grid levels."""
         if not self._grid_trade_map:
@@ -338,12 +388,12 @@ class TradingEngine:
         open_trades = self._broker.get_open_trades(self._symbol)
         open_trade_ids = {t.broker_trade_id for t in open_trades}
 
-        levels_to_free: list[tuple[float, str]] = []
-        for grid_level, broker_id in self._grid_trade_map.items():
+        keys_to_free: list[tuple[str, str]] = []
+        for grid_key, broker_id in self._grid_trade_map.items():
             if broker_id not in open_trade_ids:
-                levels_to_free.append((grid_level, broker_id))
+                keys_to_free.append((grid_key, broker_id))
 
-        for grid_level, broker_id in levels_to_free:
+        for grid_key, broker_id in keys_to_free:
             # Query close details from broker (best-effort — don't block release)
             side = "close_sl"
             close_price = 0.0
@@ -361,17 +411,23 @@ class TradingEngine:
                     broker_trade_id=broker_id,
                 )
 
-            # Remove from map and release level (always runs)
-            del self._grid_trade_map[grid_level]
+            # Remove from map (always runs)
+            del self._grid_trade_map[grid_key]
 
             # Track P&L for consecutive loss detection in risk engine
             if realized_pnl != 0.0:
                 self._trade_pnls.append(realized_pnl)
 
-            # Release the grid level back to 'waiting'
+            # Report trade closure to strategy (for P&L tracking)
+            report_closed = getattr(self._strategy, "report_trade_closed", None)
+            if report_closed is not None:
+                report_closed(grid_key, realized_pnl)
+
+            # Release the grid level back to 'waiting' (legacy float-key strategies)
             release = getattr(self._strategy, "release_level", None)
             if release is not None:
-                release(grid_level)
+                with contextlib.suppress(ValueError):
+                    release(float(grid_key))
 
             # Record close marker for chart
             self._trade_markers.append(
@@ -399,7 +455,7 @@ class TradingEngine:
 
             self._log.info(
                 "trade_closed_by_broker",
-                grid_level=grid_level,
+                grid_level=grid_key,
                 broker_trade_id=broker_id,
                 close_reason=side,
                 close_price=close_price,
@@ -446,12 +502,21 @@ class TradingEngine:
                 self._log.info(
                     "grid_initialized",
                     anchor_price=state["anchor_price"],
-                    levels=state.get("levels"),
+                    levels=state.get("levels") or state.get("grid_levels"),
                 )
                 self._grid_logged = True
 
         if signal is None:
             self._log.debug("no_signal", strategy=self._strategy.name)
+            return
+
+        # Handle close-all signals (bypass risk engine — this IS risk management)
+        if (
+            signal.signal_type == SignalType.FLAT
+            and signal.metadata.get("action") == "close_all"
+        ):
+            reason = signal.metadata.get("reason", "unknown")
+            self._close_all_trades(reason)
             return
 
         self._session_signals += 1
@@ -511,20 +576,36 @@ class TradingEngine:
             # but if risk rejects the trade, no position exists to close later.
             grid_level_str = signal.metadata.get("grid_level")
             if grid_level_str:
+                # Notify strategy of rejection (clears queued pair partner + releases level)
+                on_rejected = getattr(self._strategy, "on_signal_rejected", None)
+                if on_rejected is not None:
+                    on_rejected(grid_level_str)
+                # Legacy float-key release for simple grid strategy
                 release = getattr(self._strategy, "release_level", None)
                 if release is not None:
-                    release(float(grid_level_str))
+                    with contextlib.suppress(ValueError):
+                        release(float(grid_level_str))
             return
 
         # Step 4: Calculate position size and create order
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
 
-        quantity = self._risk_engine.calculate_position_size(signal, account_state, latest_close)
-        if quantity <= 0.0:
+        # Prefer strategy-specified fixed units (e.g., paired grid initial vs grid units)
+        fixed_units_str = signal.metadata.get("fixed_units")
+        if fixed_units_str:
             quantity = min(
-                self._fallback_position_size,
+                float(fixed_units_str),
                 float(self._risk_engine._max_position_size),
             )
+        else:
+            quantity = self._risk_engine.calculate_position_size(
+                signal, account_state, latest_close
+            )
+            if quantity <= 0.0:
+                quantity = min(
+                    self._fallback_position_size,
+                    float(self._risk_engine._max_position_size),
+                )
 
         order = Order(
             signal_id=signal.id,
@@ -594,10 +675,10 @@ class TradingEngine:
             )
         )
 
-        # Track grid level → broker trade ID for closure detection
+        # Track grid level key → broker trade ID for closure detection
         grid_level_str = signal.metadata.get("grid_level")
         if grid_level_str and broker_trade_id:
-            self._grid_trade_map[float(grid_level_str)] = broker_trade_id
+            self._grid_trade_map[grid_level_str] = broker_trade_id
 
         # Step 5: Update position and track P&L
         prev_position = position

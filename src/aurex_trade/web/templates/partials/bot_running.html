@@ -411,7 +411,17 @@
   var riskContent = document.getElementById('bot-risk-content');
 
   function renderGridLevels(state) {
-    if (!state || state.type !== 'grid') {
+    if (!state) {
+      gridContent.innerHTML = '<p class="text-sm text-base-content/60">Waiting for grid initialization...</p>';
+      return;
+    }
+
+    if (state.type === 'paired_grid') {
+      renderPairedGrid(state);
+      return;
+    }
+
+    if (state.type !== 'grid') {
       gridContent.innerHTML = '<p class="text-sm text-base-content/60">Waiting for grid initialization...</p>';
       return;
     }
@@ -451,6 +461,104 @@
 
     html += '</tbody></table>';
     gridContent.innerHTML = html;
+  }
+
+  function renderPnlGauge(label, current, lossLimit, profitTarget) {
+    // Normalize position on a -1 to +1 scale
+    var total = lossLimit + profitTarget;
+    var pct = ((current + lossLimit) / total) * 100;
+    pct = Math.max(0, Math.min(100, pct));
+    var pnlClass = current >= 0 ? 'text-success' : 'text-error';
+    var barColor = current >= 0 ? 'bg-success' : 'bg-error';
+
+    var html = '<div class="mb-3">';
+    html += '<div class="flex justify-between text-xs text-base-content/60 mb-1">';
+    html += '<span>' + label + '</span>';
+    html += '<span class="font-mono ' + pnlClass + '">' + (current >= 0 ? '+' : '') + '$' + current.toFixed(2) + '</span>';
+    html += '</div>';
+    html += '<div class="w-full h-3 bg-base-300 rounded-full relative overflow-hidden">';
+    html += '<div class="absolute inset-0 flex">';
+    html += '<div class="bg-error/20 h-full" style="width:' + ((lossLimit / total) * 100).toFixed(1) + '%"></div>';
+    html += '<div class="bg-success/20 h-full" style="width:' + ((profitTarget / total) * 100).toFixed(1) + '%"></div>';
+    html += '</div>';
+    html += '<div class="absolute top-0 h-full w-1 ' + barColor + ' rounded" style="left:' + pct.toFixed(1) + '%"></div>';
+    html += '</div>';
+    html += '<div class="flex justify-between text-xs text-base-content/40 mt-0.5">';
+    html += '<span>-$' + lossLimit.toFixed(0) + '</span>';
+    html += '<span>+$' + profitTarget.toFixed(0) + '</span>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderPairedGrid(state) {
+    var html = '';
+
+    // Session status
+    if (!state.session_active) {
+      html += '<div class="alert alert-error py-2 px-3 mb-3"><span class="text-sm">Daily loss limit reached — trading paused until tomorrow</span></div>';
+    }
+
+    // Session info
+    html += '<div class="text-sm text-base-content/60 mb-2">Anchor: <span class="font-mono font-semibold text-base-content">' + state.anchor_price.toFixed(2) + '</span>';
+    html += ' &middot; Session #' + state.session_count;
+    html += ' &middot; Pairs: <span class="font-mono">' + state.filled_count + '</span></div>';
+
+    // P&L Gauges
+    html += renderPnlGauge('Session P&L', state.session_pnl, state.session_loss_limit, state.session_profit_target);
+    html += renderPnlGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit, state.daily_loss_limit);
+
+    // Grid levels table with paired columns
+    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th><th>Status</th></tr></thead><tbody>';
+
+    var levels = state.grid_levels;
+    var foundAnchor = false;
+    for (var i = 0; i < levels.length; i++) {
+      var lv = levels[i];
+
+      // Insert anchor separator
+      if (!foundAnchor && lv.price < state.anchor_price) {
+        foundAnchor = true;
+        html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="4">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
+      }
+
+      var buyIcon = statusIcon(lv.buy.status, 'success');
+      var sellIcon = statusIcon(lv.sell.status, 'error');
+
+      var rowClass = lv.status === 'active' ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');
+      html += '<tr class="' + rowClass + '">';
+      html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
+      html += '<td class="text-sm">' + buyIcon + '</td>';
+      html += '<td class="text-sm">' + sellIcon + '</td>';
+      html += '<td class="text-xs text-base-content/60">' + lv.status + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    // Session history
+    if (state.session_history && state.session_history.length > 0) {
+      html += '<div class="mt-4"><h3 class="text-xs font-semibold text-base-content/70 mb-2">Session History</h3>';
+      html += '<table class="table table-xs w-full"><thead><tr><th>#</th><th>Reason</th><th>P&L</th></tr></thead><tbody>';
+      for (var j = 0; j < state.session_history.length; j++) {
+        var sess = state.session_history[j];
+        var pnlClass = sess.pnl >= 0 ? 'text-success' : 'text-error';
+        html += '<tr>';
+        html += '<td>' + sess.session + '</td>';
+        html += '<td class="text-xs">' + sess.reason.replace(/_/g, ' ') + '</td>';
+        html += '<td class="font-mono ' + pnlClass + '">' + (sess.pnl >= 0 ? '+' : '') + '$' + sess.pnl.toFixed(2) + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+
+    gridContent.innerHTML = html;
+  }
+
+  function statusIcon(status, colorType) {
+    if (status === 'active') return '<span class="text-' + colorType + '">● Active</span>';
+    if (status === 'stopped') return '<span class="text-base-content/40">✕ Stopped</span>';
+    if (status === 'closed') return '<span class="text-base-content/40">✓ Closed</span>';
+    return '<span class="text-base-content/30">—</span>';
   }
 
   function renderRiskSummary(risk) {

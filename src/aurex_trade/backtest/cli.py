@@ -17,8 +17,9 @@ from aurex_trade.config import OANDAConfig
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
-from aurex_trade.domain.strategy.ciby_grid_hedging import CibyGridHedgingStrategy
+from aurex_trade.domain.strategy.ciby_hedged_grid import CibyHedgedGridStrategy
 from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
+from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 from aurex_trade.metrics import RANKABLE_METRICS
 
@@ -39,13 +40,22 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         atr_period=int(p.get("atr_period", 14)),
         reward_ratio=float(p.get("reward_ratio", 1.5)),
     ),
-    "ciby_grid_hedging": lambda p: CibyGridHedgingStrategy(
+    "simple_grid": lambda p: SimpleGridStrategy(
         grid_spacing=float(p.get("grid_spacing", 10.0)),
         max_levels=int(p.get("max_levels", 6)),
         stop_distance=float(p.get("stop_distance", 30.0)),
         num_levels_above=int(p.get("num_levels_above", 3)),
         num_levels_below=int(p.get("num_levels_below", 3)),
         reward_ratio=float(p.get("reward_ratio", 1.0)),
+    ),
+    "ciby_hedged_grid": lambda p: CibyHedgedGridStrategy(
+        grid_spacing=float(p.get("grid_spacing", 15.0)),
+        initial_units=float(p.get("initial_units", 10.0)),
+        grid_units=float(p.get("grid_units", 20.0)),
+        stop_distance=float(p.get("stop_distance", 16.0)),
+        session_profit_target=float(p.get("session_profit_target", 100.0)),
+        session_loss_limit=float(p.get("session_loss_limit", 50.0)),
+        daily_loss_limit=float(p.get("daily_loss_limit", 200.0)),
     ),
 }
 
@@ -55,12 +65,21 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
     "rsi_mean_reversion": lambda p: (
         p.get("period", 14) > 0 and 0 < p.get("oversold", 30) < p.get("overbought", 70) < 100
     ),
-    "ciby_grid_hedging": lambda p: (
+    "simple_grid": lambda p: (
         p.get("grid_spacing", 10.0) > 0
         and p.get("max_levels", 6) >= 2
         and p.get("stop_distance", 30.0) > 0
         and p.get("num_levels_above", 3) >= 1
         and p.get("num_levels_below", 3) >= 1
+    ),
+    "ciby_hedged_grid": lambda p: (
+        p.get("grid_spacing", 15.0) > 0
+        and p.get("initial_units", 10.0) > 0
+        and p.get("grid_units", 20.0) > 0
+        and p.get("stop_distance", 16.0) > 0
+        and p.get("session_profit_target", 100.0) > 0
+        and p.get("session_loss_limit", 50.0) > 0
+        and p.get("daily_loss_limit", 200.0) > 0
     ),
 }
 
@@ -68,7 +87,8 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
 STRATEGY_METADATA: dict[str, Callable[[], StrategyMetadata]] = {
     "sma_crossover": SMACrossover.metadata,
     "rsi_mean_reversion": RSIMeanReversion.metadata,
-    "ciby_grid_hedging": CibyGridHedgingStrategy.metadata,
+    "simple_grid": SimpleGridStrategy.metadata,
+    "ciby_hedged_grid": CibyHedgedGridStrategy.metadata,
 }
 
 

@@ -178,19 +178,22 @@ Configuration is per-user (stored in SQLite via user preferences).
 
 | Setting | Description | Test Value | Notes |
 |---------|-------------|------------|-------|
-| **Strategy** | Trading strategy to use | `ciby_grid_hedging` | Selected from dropdown |
+| **Strategy** | Trading strategy to use | `ciby_hedged_grid` | Selected from dropdown |
 | **Symbol** | Instrument to trade | `XAU_USD` | Gold vs USD |
 | **Interval** | Seconds between cycles | `60` | 1 min for testing, 300+ for production |
 | **Granularity** | OANDA candle granularity | `M1` | Must align with interval |
 
-### CIBY Grid Hedging Strategy Parameters
+### Ciby Hedged Grid Strategy Parameters
 
 | Parameter | Description | Test Value | Production Value |
 |-----------|-------------|------------|-----------------|
-| `grid_spacing` | Distance between grid levels ($) | `2` | `5–10` |
-| `num_levels` | Grid levels above/below anchor | `3` | `3–5` |
-| `stop_distance` | ATR-based stop-loss distance ($) | `5` | `10–15` |
-| `reward_ratio` | TP distance as multiple of stop | `0.5` | `1.0–2.0` |
+| `grid_spacing` | Distance between grid levels ($) | `15` | `15` |
+| `initial_units` | Units for first pair | `10` | `10` |
+| `grid_units` | Units for subsequent pairs | `20` | `20` |
+| `stop_distance` | Stop-loss distance ($) | `16` | `16` |
+| `session_profit_target` | Close all & restart when hit ($) | `100` | TBD |
+| `session_loss_limit` | Close all & restart when hit ($) | `50` | TBD |
+| `daily_loss_limit` | Stop trading for the day ($) | `200` | TBD |
 
 ### Risk Engine Settings (environment variables)
 
@@ -204,8 +207,8 @@ Configuration is per-user (stored in SQLite via user preferences).
 ### Starting the Bot for Testing
 
 1. Navigate to web UI → Bot page
-2. Select strategy: `ciby_grid_hedging`
-3. Set params: `grid_spacing=2`, `num_levels=3`, `stop_distance=5`, `reward_ratio=0.5`
+2. Select strategy: `ciby_hedged_grid`
+3. Set params: `grid_spacing=15`, `initial_units=10`, `grid_units=20`, `stop_distance=16`
 4. Set interval: `60` (1 minute cycles for fast feedback)
 5. Click Start → bot begins trading on connected OANDA account
 6. Monitor via logs: `ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs -f --tail=10 app'`

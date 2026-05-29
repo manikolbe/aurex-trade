@@ -1,4 +1,4 @@
-"""Ciby Grid Hedging strategy — generates signals when price crosses grid levels."""
+"""Simple Grid strategy — generates signals when price crosses grid levels."""
 
 from aurex_trade.domain.enums import SignalType
 from aurex_trade.domain.models import BarData, Signal
@@ -6,7 +6,7 @@ from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
 from aurex_trade.domain.strategy.indicators import calculate_take_profit
 
 
-class CibyGridHedgingStrategy:
+class SimpleGridStrategy:
     """Constrained grid hedging strategy for gold trading.
 
     Places a grid of price levels above and below an anchor price. When price
@@ -45,7 +45,7 @@ class CibyGridHedgingStrategy:
 
     @property
     def name(self) -> str:
-        return "ciby_grid_hedging"
+        return "simple_grid"
 
     @property
     def min_bars(self) -> int:
@@ -54,13 +54,12 @@ class CibyGridHedgingStrategy:
     @classmethod
     def metadata(cls) -> StrategyMetadata:
         return StrategyMetadata(
-            display_name="Ciby Grid Hedging",
+            display_name="Simple Grid",
             description=(
-                "A grid trading strategy developed by legendary gold trader Ciby. "
-                "Places orders at fixed price intervals around an anchor price, "
-                "capturing movement in either direction without predicting which way "
-                "the market will go. When price crosses a grid level upward, it "
-                "generates a buy signal; when it crosses downward, a sell signal. "
+                "A simple directional grid strategy. Places orders at fixed price "
+                "intervals around an anchor price, assigning direction based on "
+                "position relative to anchor. When price crosses a grid level upward, "
+                "it generates a buy signal; when it crosses downward, a sell signal. "
                 "Losing positions are stopped out while winning positions accumulate, "
                 "gradually building exposure in the trending direction. Works best in "
                 "ranging or slowly trending markets on instruments like gold (XAU/USD). "
