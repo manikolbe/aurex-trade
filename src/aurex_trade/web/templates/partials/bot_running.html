@@ -593,7 +593,7 @@
     var headroomClass = risk.headroom >= 0 ? 'text-success' : 'text-error';
     var html = '<div class="grid grid-cols-1 gap-3">';
     html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Units per trade</span><span class="font-mono">' + risk.units_per_trade + ' <span class="text-base-content/40">(max ' + risk.max_position_size + ')</span></span></div>';
-    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Stop distance</span><span class="font-mono">' + risk.stop_distance + ' pts</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Stop distance</span><span class="font-mono">$' + risk.stop_distance + '</span></div>';
     html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Worst case loss</span><span class="font-mono text-error">$' + risk.worst_case_loss.toLocaleString() + '</span></div>';
     html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Drawdown limit</span><span class="font-mono">$' + risk.drawdown_limit.toLocaleString() + '</span></div>';
     html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Headroom</span><span class="font-mono ' + headroomClass + '">$' + risk.headroom.toLocaleString() + '</span></div>';

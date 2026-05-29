@@ -390,7 +390,7 @@ class CibyHedgedGridStrategy:
             "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
             "session_profit_target": self._session_profit_target,
             "session_loss_limit": self._session_loss_limit,
-            "daily_pnl": self._daily_realized_pnl,
+            "daily_pnl": self._daily_realized_pnl + self._session_unrealized_pnl,
             "daily_loss_limit": self._daily_loss_limit,
             "session_count": self._session_count,
             "session_active": self._session_active,
