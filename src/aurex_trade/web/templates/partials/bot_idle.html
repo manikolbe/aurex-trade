@@ -186,15 +186,16 @@ function updateRiskPreview() {
   }
 
   var gridUnits = getParam('grid_units', 0);
-  var initialUnits = getParam('initial_units', 0);
-  var stopDistance = getParam('stop_distance', 0);
+  var gridSpacing = getParam('grid_spacing', 0);
   var sessionLossLimit = getParam('session_loss_limit', 0);
   var sessionProfitTarget = getParam('session_profit_target', 0);
   var dailyLossLimit = getParam('daily_loss_limit', 0);
-  var gridSpacing = getParam('grid_spacing', 0);
+
+  // Stop distance = grid_spacing for this strategy
+  var stopDistance = gridSpacing;
 
   // If this isn't a grid strategy with these params, show generic message
-  if (!gridUnits || !stopDistance) {
+  if (!gridUnits || !gridSpacing) {
     preview.innerHTML = '<p class="text-sm text-base-content/60">Risk preview not available for this strategy.</p>';
     return;
   }
