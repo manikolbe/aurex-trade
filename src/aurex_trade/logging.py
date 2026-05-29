@@ -6,6 +6,7 @@ After setup, get loggers via structlog.get_logger() anywhere in the codebase.
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import structlog
@@ -46,8 +47,10 @@ def setup_logging(log_level: str = "INFO", log_dir: Path = Path("logs")) -> None
     )
     console_handler.setFormatter(console_formatter)
 
-    # File handler — JSON
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    # File handler — JSON with rotation (10MB per file, keep 5 backups = 50MB max)
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
     file_handler.setLevel(level)
     file_formatter = structlog.stdlib.ProcessorFormatter(
         processors=[

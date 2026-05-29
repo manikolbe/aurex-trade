@@ -122,6 +122,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
+
     app = FastAPI(
         title="AurexTrade",
         version="0.1.0",
