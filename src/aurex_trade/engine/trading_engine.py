@@ -86,8 +86,10 @@ class TradingEngine:
     every order placement. Errors skip the current cycle — never crash.
     """
 
-    # Log a session summary every this many cycles
+    # Log a session summary every this many strategy cycles
     _SUMMARY_INTERVAL: int = 60
+    # Fast poll interval (seconds) for fill/closure detection
+    _FILL_POLL_INTERVAL: int = 5
 
     def __init__(
         self,
@@ -140,14 +142,20 @@ class TradingEngine:
         self._grid_logged: bool = False
         # Pending limit orders: grid_level_key → broker_order_id
         self._pending_order_map: dict[str, str] = {}
+        # Metadata for pending orders (for placing opposite side on fill)
+        self._pending_order_meta: dict[str, dict[str, str]] = {}
         # Event log for UI
         self._event_log: list[EventLogEntry] = []
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
 
+        Uses two intervals:
+        - Fast poll (5s): fill detection + closure detection
+        - Strategy cycle (interval_seconds): candles, signal generation, order placement
+
         Args:
-            max_cycles: If set, stop after this many cycles (for testing).
+            max_cycles: If set, stop after this many strategy cycles (for testing).
                         None means run indefinitely.
         """
         self._running = True
@@ -162,41 +170,59 @@ class TradingEngine:
             symbol=self._symbol,
             strategy=self._strategy.name,
             interval=self._interval_seconds,
+            fill_poll_interval=self._FILL_POLL_INTERVAL,
             initial_equity=self._peak_equity,
             strategy_params=self._strategy_params,
             risk_params=self._risk_params,
         )
+
+        last_strategy_time = 0.0
 
         while self._running:
             if max_cycles is not None and self._cycle_count >= max_cycles:
                 self._log.info("max_cycles_reached", cycles=self._cycle_count)
                 break
 
+            now = time.monotonic()
+
+            # Fast poll: fill detection + closure detection every cycle
             try:
-                self._run_cycle()
+                self._run_fast_poll()
             except Exception:
-                self._log.exception("cycle_error", cycle=self._cycle_count)
+                self._log.exception("fast_poll_error")
 
-            self._cycle_count += 1
+            # Strategy cycle: run at configured interval
+            elapsed = now - last_strategy_time
+            if elapsed >= self._interval_seconds or last_strategy_time == 0.0:
+                last_strategy_time = now
+                try:
+                    self._run_strategy_cycle()
+                except Exception:
+                    self._log.exception("cycle_error", cycle=self._cycle_count)
 
-            # Periodic session summary
-            if self._cycle_count > 0 and self._cycle_count % self._SUMMARY_INTERVAL == 0:
-                position = self._broker.get_positions(self._symbol)
-                self._log.info(
-                    "session_summary",
-                    cycles=self._cycle_count,
-                    signals=self._session_signals,
-                    trades=self._session_trades,
-                    rejections=self._session_rejections,
-                    equity=self._broker.equity,
-                    peak_equity=self._peak_equity,
-                    position_qty=position.quantity if position else 0.0,
-                    unrealized_pnl=position.unrealized_pnl if position else 0.0,
-                    realized_pnl=position.realized_pnl if position else 0.0,
-                )
+                self._cycle_count += 1
+
+                # Periodic session summary
+                if (
+                    self._cycle_count > 0
+                    and self._cycle_count % self._SUMMARY_INTERVAL == 0
+                ):
+                    position = self._broker.get_positions(self._symbol)
+                    self._log.info(
+                        "session_summary",
+                        cycles=self._cycle_count,
+                        signals=self._session_signals,
+                        trades=self._session_trades,
+                        rejections=self._session_rejections,
+                        equity=self._broker.equity,
+                        peak_equity=self._peak_equity,
+                        position_qty=position.quantity if position else 0.0,
+                        unrealized_pnl=position.unrealized_pnl if position else 0.0,
+                        realized_pnl=position.realized_pnl if position else 0.0,
+                    )
 
             if self._running and (max_cycles is None or self._cycle_count < max_cycles):
-                time.sleep(self._interval_seconds)
+                time.sleep(self._FILL_POLL_INTERVAL)
 
         self._running = False
         self._started_at = None
@@ -214,6 +240,7 @@ class TradingEngine:
             except Exception:
                 self._log.exception("cancel_pending_on_stop_failed")
             self._pending_order_map.clear()
+            self._pending_order_meta.clear()
         self._log.info("stop_requested")
 
     @property
@@ -514,6 +541,110 @@ class TradingEngine:
 
             self._session_trades += 1
 
+            # Place opposite-side market order immediately
+            self._place_opposite_market_order(grid_key, fill_price)
+
+    def _place_opposite_market_order(
+        self, grid_key: str, limit_fill_price: float
+    ) -> None:
+        """Place the opposite-side market order after a limit fill.
+
+        Reads metadata stored when the limit was placed to determine the
+        opposite side, grid key, units, and stop loss.
+        """
+        meta = self._pending_order_meta.pop(grid_key, None)
+        if not meta:
+            self._log.warning(
+                "no_metadata_for_opposite_order",
+                grid_key=grid_key,
+            )
+            return
+
+        opposite_side_str = meta.get("opposite_side", "")
+        opposite_grid_key = meta.get("opposite_grid_level", "")
+        opposite_stop_str = meta.get("opposite_stop_loss", "")
+        fixed_units_str = meta.get("fixed_units", "1.0")
+
+        if not opposite_side_str or not opposite_grid_key:
+            return
+
+        side = OrderSide.BUY if opposite_side_str == "BUY" else OrderSide.SELL
+        quantity = min(
+            float(fixed_units_str),
+            float(self._risk_engine._max_position_size),
+        )
+        stop_loss = float(opposite_stop_str) if opposite_stop_str else None
+
+        order = Order(
+            symbol=self._symbol,
+            side=side,
+            quantity=quantity,
+            order_type=OrderType.MARKET,
+            stop_loss=stop_loss,
+        )
+
+        try:
+            trade = self._broker.place_order(order)
+        except Exception:
+            self._log.exception(
+                "opposite_market_order_failed",
+                grid_key=opposite_grid_key,
+                side=opposite_side_str,
+            )
+            return
+
+        broker_trade_id = trade.broker_trade_id
+
+        # Track for closure detection
+        if broker_trade_id:
+            self._grid_trade_map[opposite_grid_key] = broker_trade_id
+
+        # Report fill to strategy
+        report_fill = getattr(self._strategy, "report_fill", None)
+        if report_fill is not None:
+            report_fill(opposite_grid_key, trade.price)
+
+        # Calculate slippage vs the grid level price
+        level_str = opposite_grid_key.rsplit("_", 1)[0]
+        try:
+            level_price = float(level_str)
+        except ValueError:
+            level_price = limit_fill_price
+        slippage = abs(trade.price - level_price)
+        self._slippages.append(slippage)
+
+        self._log.info(
+            "opposite_market_filled",
+            grid_level=opposite_grid_key,
+            side=opposite_side_str,
+            fill_price=trade.price,
+            slippage=round(slippage, 4),
+            broker_trade_id=broker_trade_id,
+        )
+        self._event_log.append(EventLogEntry(
+            timestamp=datetime.now(UTC).isoformat(),
+            event="market_fill",
+            details=(
+                f"{opposite_side_str} market @ {trade.price:.2f}"
+                f" (#{broker_trade_id}, slippage ${slippage:.2f})"
+            ),
+        ))
+
+        # Record marker for chart overlay
+        self._trade_markers.append(
+            TradeMarker(
+                timestamp=datetime.now(UTC).isoformat(),
+                price=trade.price,
+                side=opposite_side_str.lower(),
+                quantity=quantity,
+                stop_loss=stop_loss,
+                take_profit=None,
+                broker_trade_id=broker_trade_id,
+            )
+        )
+
+        self._session_trades += 1
+
     def _close_all_trades(self, reason: str) -> None:
         """Close all open trades for the symbol and clear grid state.
 
@@ -528,6 +659,7 @@ class TradingEngine:
         except Exception:
             self._log.exception("cancel_pending_orders_failed")
         self._pending_order_map.clear()
+        self._pending_order_meta.clear()
 
         open_trades = self._broker.get_open_trades(self._symbol)
         if not open_trades:
@@ -653,13 +785,14 @@ class TradingEngine:
                 realized_pnl=realized_pnl,
             )
 
-    def _run_cycle(self) -> None:
-        """Execute one complete trading cycle."""
-        # Step 0: Check fills and closures (share one get_open_trades call)
+    def _run_fast_poll(self) -> None:
+        """Fast poll: detect fills and closures (runs every 5s)."""
         open_trades = self._broker.get_open_trades(self._symbol)
         self._check_limit_fills(open_trades)
         self._check_closures(open_trades)
 
+    def _run_strategy_cycle(self) -> None:
+        """Strategy cycle: fetch data, generate signals, place orders."""
         # Step 1: Fetch market data
         bars = self._market_data.get_latest_bars(self._symbol, self._bar_count)
 
@@ -881,6 +1014,8 @@ class TradingEngine:
         broker_order_id = trade.broker_trade_id
         if grid_level_str and broker_order_id:
             self._pending_order_map[grid_level_str] = broker_order_id
+            # Store metadata for placing opposite side on fill
+            self._pending_order_meta[grid_level_str] = dict(signal.metadata)
 
         self._log.info(
             "limit_order_placed",

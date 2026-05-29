@@ -1,4 +1,4 @@
-"""Ciby Hedged Grid strategy — pre-placed limit orders at rounded grid levels."""
+"""Ciby Hedged Grid strategy — hybrid limit + market orders at grid levels."""
 
 import math
 from collections import deque
@@ -10,11 +10,12 @@ from aurex_trade.domain.strategy.base import ParamMeta, StrategyMetadata
 
 
 class CibyHedgedGridStrategy:
-    """Directional-agnostic grid strategy using pre-placed limit orders.
+    """Directional-agnostic grid strategy using hybrid limit + market orders.
 
-    Places buy + sell limit orders at grid levels (rounded to nearest multiple
-    of grid_spacing) ahead of current price. When a level fills, the next level
-    in that direction is placed. Stop distance equals grid_spacing.
+    Places ONE limit order per grid level (the side that will wait for price).
+    When the limit fills, the engine places the opposite side as a market order.
+    This gives exact fill price on the limit side and minimal slippage on the
+    market side (~$0.10-0.50 with 5s polling). Stop distance equals grid_spacing.
 
     Risk is managed via:
     - Session profit target: cancel pending + close all & restart fresh
@@ -42,9 +43,11 @@ class CibyHedgedGridStrategy:
         # Mutable session state
         self._symbol: str = ""
         self._anchor_price: float | None = None
+        self._current_price: float = 0.0  # Updated each generate() call
         self._grid_levels: list[float] = []
         self._signal_queue: deque[Signal] = deque()
         self._placed_levels: set[float] = set()  # Levels with pending orders at broker
+        self._placed_limit_side: dict[float, str] = {}  # level → "long"|"short"
         self._filled_levels: dict[float, str] = {}  # level → pair_id (active trades)
         self._filled_entry_prices: dict[float, dict[str, float]] = {}
         self._pair_closed_sides: dict[str, set[str]] = {}
@@ -150,6 +153,7 @@ class CibyHedgedGridStrategy:
             return None
 
         current_bar = bars[-1]
+        self._current_price = current_bar.close
         current_date = current_bar.timestamp.strftime("%Y-%m-%d")
 
         # Day boundary reset
@@ -193,9 +197,10 @@ class CibyHedgedGridStrategy:
         return None
 
     def report_fill(self, grid_level_key: str, fill_price: float) -> None:
-        """Called by engine when a limit order fills at the broker.
+        """Called by engine when a trade fills (limit or market) at the broker.
 
-        Marks the side as active and triggers replenishment of the next level.
+        First fill at a level transitions it from placed → active and triggers
+        replenishment. Second fill (opposite side market) just records the price.
         """
         parts = grid_level_key.rsplit("_", 1)
         if len(parts) != 2:
@@ -209,15 +214,17 @@ class CibyHedgedGridStrategy:
         # Record fill price for display
         if level in self._filled_entry_prices:
             self._filled_entry_prices[level][side] = fill_price
+        else:
+            self._filled_entry_prices[level] = {side: fill_price}
 
-        # If this is the first fill at this level, mark it as active
+        # If this is the first fill at this level, mark it as active + replenish
         if level in self._placed_levels and level not in self._filled_levels:
             pair_id = str(uuid4())
             self._filled_levels[level] = pair_id
             self._placed_levels.discard(level)
-
-        # Replenish: place the next level beyond this one
-        self._replenish_level(level, side)
+            self._placed_limit_side.pop(level, None)
+            # Replenish: place the next level beyond this one
+            self._replenish_level(level, side)
 
     def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None:
         """Called by engine when a broker-side closure is detected.
@@ -265,12 +272,13 @@ class CibyHedgedGridStrategy:
         except ValueError:
             return
 
-        # Remove queued partner signals for this level
+        # Remove queued signals for this level
         self._signal_queue = deque(
             s for s in self._signal_queue
             if not s.metadata.get("grid_level", "").startswith(level_str)
         )
         self._placed_levels.discard(level)
+        self._placed_limit_side.pop(level, None)
         self._filled_levels.pop(level, None)
         self._filled_entry_prices.pop(level, None)
 
@@ -333,8 +341,9 @@ class CibyHedgedGridStrategy:
                 sell_sl = (sell_fill + sd) if sell_fill else level + sd
             elif level in self._placed_levels:
                 status = "placed"
-                buy_status = "placed"
-                sell_status = "placed"
+                limit_side = self._placed_limit_side.get(level, "long")
+                buy_status = "placed" if limit_side == "long" else "waiting"
+                sell_status = "placed" if limit_side == "short" else "waiting"
                 buy_fill = 0.0
                 sell_fill = 0.0
                 buy_sl = level - self._stop_distance
@@ -404,6 +413,7 @@ class CibyHedgedGridStrategy:
         self._grid_levels = []
         self._signal_queue = deque()
         self._placed_levels = set()
+        self._placed_limit_side = {}
         self._filled_levels = {}
         self._filled_entry_prices = {}
         self._pair_closed_sides = {}
@@ -480,17 +490,24 @@ class CibyHedgedGridStrategy:
             self._queue_limit_pair_deferred(next_level)
 
     def _queue_limit_pair(self, bar: BarData, level: float) -> None:
-        """Queue buy + sell limit order signals for a grid level (initial placement)."""
-        self._queue_limit_pair_for_symbol(bar.symbol, level)
+        """Queue a single-side limit order for a grid level (initial placement)."""
+        self._queue_limit_for_level(bar.symbol, level, bar.close)
 
     def _queue_limit_pair_deferred(self, level: float) -> None:
-        """Queue limit pair for replenishment (uses stored symbol)."""
+        """Queue limit for replenishment (uses stored symbol + current price)."""
         if not self._symbol:
             return
-        self._queue_limit_pair_for_symbol(self._symbol, level)
+        self._queue_limit_for_level(self._symbol, level, self._current_price)
 
-    def _queue_limit_pair_for_symbol(self, symbol: str, level: float) -> None:
-        """Queue buy + sell limit order signals for a grid level."""
+    def _queue_limit_for_level(
+        self, symbol: str, level: float, current_price: float
+    ) -> None:
+        """Queue ONE limit order for a grid level (the side that will wait).
+
+        If current price is below the level → place SELL LIMIT (waits for rise).
+        If current price is above the level → place BUY LIMIT (waits for drop).
+        On fill, the engine places the opposite side as a market order.
+        """
         if level in self._placed_levels or level in self._filled_levels:
             return
 
@@ -498,46 +515,48 @@ class CibyHedgedGridStrategy:
         self._filled_entry_prices[level] = {}
 
         level_str = f"{level:.2f}"
-        long_key = f"{level_str}_long"
-        short_key = f"{level_str}_short"
         pair_id = str(uuid4())
         units = self._grid_units
 
-        long_signal = Signal(
+        if current_price < level:
+            # Price below level → sell limit waits for price to rise
+            limit_side = "short"
+            opposite_side = "long"
+            signal_type = SignalType.SHORT
+            stop_loss = level + self._stop_distance
+            opposite_stop_loss = level - self._stop_distance
+        else:
+            # Price above level → buy limit waits for price to drop
+            limit_side = "long"
+            opposite_side = "short"
+            signal_type = SignalType.LONG
+            stop_loss = level - self._stop_distance
+            opposite_stop_loss = level + self._stop_distance
+
+        grid_key = f"{level_str}_{limit_side}"
+        opposite_grid_key = f"{level_str}_{opposite_side}"
+
+        self._placed_limit_side[level] = limit_side
+
+        signal = Signal(
             symbol=symbol,
-            signal_type=SignalType.LONG,
+            signal_type=signal_type,
             strategy_name=self.name,
             strength=1.0,
             metadata={
-                "grid_level": long_key,
+                "grid_level": grid_key,
                 "pair_id": pair_id,
-                "pair_side": "long",
+                "pair_side": limit_side,
                 "fixed_units": f"{units:.1f}",
                 "order_type": "LIMIT",
                 "limit_price": f"{level:.5f}",
                 "entry_price": f"{level:.5f}",
+                "opposite_side": "BUY" if opposite_side == "long" else "SELL",
+                "opposite_grid_level": opposite_grid_key,
+                "opposite_stop_loss": f"{opposite_stop_loss:.5f}",
             },
-            stop_loss=level - self._stop_distance,
+            stop_loss=stop_loss,
             take_profit=None,
         )
 
-        short_signal = Signal(
-            symbol=symbol,
-            signal_type=SignalType.SHORT,
-            strategy_name=self.name,
-            strength=1.0,
-            metadata={
-                "grid_level": short_key,
-                "pair_id": pair_id,
-                "pair_side": "short",
-                "fixed_units": f"{units:.1f}",
-                "order_type": "LIMIT",
-                "limit_price": f"{level:.5f}",
-                "entry_price": f"{level:.5f}",
-            },
-            stop_loss=level + self._stop_distance,
-            take_profit=None,
-        )
-
-        self._signal_queue.append(long_signal)
-        self._signal_queue.append(short_signal)
+        self._signal_queue.append(signal)

@@ -56,8 +56,8 @@ class TestInitialization:
         signals = _drain_all(strategy, bars)
 
         # Should have 2 levels above (4570, 4580) + 2 below (4560, 4550) = 4 levels
-        # Each level gets buy + sell = 8 signals total
-        assert len(signals) == 8
+        # One signal per level (single-side limit)
+        assert len(signals) == 4
 
         # Extract limit prices from signals
         limit_prices = sorted({float(s.metadata["limit_price"]) for s in signals})
@@ -72,21 +72,24 @@ class TestInitialization:
             assert sig.metadata["order_type"] == "LIMIT"
             assert "limit_price" in sig.metadata
 
-    def test_each_level_has_long_and_short(self) -> None:
+    def test_correct_side_per_level(self) -> None:
+        """Above price → sell limit, below price → buy limit."""
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
-        bars = [_bar(4563.0)]
+        bars = [_bar(4563.0)]  # price = 4563
         signals = _drain_all(strategy, bars)
 
-        # Group by level
-        levels: dict[str, list[str]] = {}
         for sig in signals:
-            price = sig.metadata["limit_price"]
-            side = sig.metadata["pair_side"]
-            levels.setdefault(price, []).append(side)
-
-        for price, sides in levels.items():
-            assert "long" in sides, f"Level {price} missing long"
-            assert "short" in sides, f"Level {price} missing short"
+            level = float(sig.metadata["limit_price"])
+            if level > 4563.0:
+                # Above price → sell limit (waits for rise)
+                assert sig.signal_type == SignalType.SHORT
+                assert sig.metadata["pair_side"] == "short"
+                assert sig.metadata["opposite_side"] == "BUY"
+            else:
+                # Below price → buy limit (waits for drop)
+                assert sig.signal_type == SignalType.LONG
+                assert sig.metadata["pair_side"] == "long"
+                assert sig.metadata["opposite_side"] == "SELL"
 
     def test_units_match_grid_units(self) -> None:
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0, grid_units=15.0)
@@ -173,18 +176,18 @@ class TestReplenishment:
     """Test that filling a level triggers next level placement."""
 
     def test_fill_above_anchor_places_next_above(self) -> None:
-        """Filling level 4570 (above anchor=4563) → place 4580."""
+        """Filling level 4580 (above anchor=4563) → place 4590."""
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
         bars = [_bar(4563.0)]
         _drain_all(strategy, bars)
 
         # 4580 should already be placed (2 levels above)
         # Simulate fill at 4580 — should place 4590
-        strategy.report_fill("4580.00_long", 4580.0)
+        strategy.report_fill("4580.00_short", 4580.0)
 
         # Drain new signals
         signals = _drain_all(strategy, bars)
-        assert len(signals) == 2  # long + short for 4590
+        assert len(signals) == 1  # single-side for 4590
 
         limit_prices = {float(s.metadata["limit_price"]) for s in signals}
         assert 4590.0 in limit_prices
@@ -200,7 +203,7 @@ class TestReplenishment:
         strategy.report_fill("4550.00_long", 4550.0)
 
         signals = _drain_all(strategy, bars)
-        assert len(signals) == 2
+        assert len(signals) == 1
 
         limit_prices = {float(s.metadata["limit_price"]) for s in signals}
         assert 4540.0 in limit_prices
@@ -212,7 +215,7 @@ class TestReplenishment:
         _drain_all(strategy, bars)
 
         # Fill 4570 — next would be 4580 but it's already placed
-        strategy.report_fill("4570.00_long", 4570.0)
+        strategy.report_fill("4570.00_short", 4570.0)
 
         signals = _drain_all(strategy, bars)
         # 4580 already placed, so no new signals
@@ -222,28 +225,22 @@ class TestReplenishment:
 class TestSignalRejection:
     """Test on_signal_rejected clears queue and releases level."""
 
-    def test_rejection_clears_queued_partner(self) -> None:
+    def test_rejection_removes_level_from_queue(self) -> None:
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
         bars = [_bar(4563.0)]
 
-        # Get first signal (long for first level)
-        long_signal = strategy.generate(bars)
-        assert long_signal is not None
+        # Get first signal
+        first_signal = strategy.generate(bars)
+        assert first_signal is not None
 
         # Reject it
-        strategy.on_signal_rejected(long_signal.metadata["grid_level"])
+        strategy.on_signal_rejected(first_signal.metadata["grid_level"])
 
-        # The queued short for same level should be removed
         # Remaining signals should not include that level
         remaining = _drain_all(strategy, bars)
-        rejected_level = long_signal.metadata["limit_price"]
+        rejected_level = first_signal.metadata["limit_price"]
         for sig in remaining:
-            # Signals for other levels are fine
-            if sig.metadata["limit_price"] == rejected_level:
-                # But grid_level should not start with the rejected level prefix
-                assert not sig.metadata["grid_level"].startswith(
-                    long_signal.metadata["grid_level"].rsplit("_", 1)[0]
-                )
+            assert sig.metadata["limit_price"] != rejected_level
 
     def test_rejection_releases_placed_level(self) -> None:
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
