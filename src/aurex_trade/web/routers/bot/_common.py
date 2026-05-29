@@ -109,6 +109,7 @@ def start_bot_session(
                 "max_drawdown_pct": float(body.risk_params.get("max_drawdown_pct", 0.20)),
                 "max_consecutive_losses": int(body.risk_params.get("max_consecutive_losses", 5)),
                 "require_stop_loss": bool(body.risk_params.get("require_stop_loss", True)),
+                "enabled": bool(body.risk_params.get("enabled", True)),
             }
             user_defaults_store.save_risk_defaults(user_id, risk_settings)
         except Exception:

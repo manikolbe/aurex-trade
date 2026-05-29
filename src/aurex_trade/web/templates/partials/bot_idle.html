@@ -39,6 +39,14 @@
             <input type="checkbox">
             <div class="collapse-title text-sm font-medium py-2 min-h-0">Risk Settings</div>
             <div class="collapse-content">
+              <div class="form-control mb-3">
+                <label class="label cursor-pointer justify-start gap-2 tooltip tooltip-top" data-tip="Disable all risk checks. Only use on practice accounts for testing new strategies.">
+                  <span class="label-text font-semibold text-warning">Disable Risk Engine</span>
+                  <input type="checkbox" id="bot-risk-disabled-cb" class="toggle toggle-sm toggle-warning">
+                </label>
+                <input type="hidden" name="risk_enabled" id="bot-risk-enabled-val" value="true">
+              </div>
+              <div id="bot-risk-fields">
               <div class="grid grid-cols-2 gap-2">
                 <div class="form-control">
                   <label class="label label-text tooltip tooltip-top" data-tip="Largest trade size allowed (units)">Max Position</label>
@@ -77,6 +85,7 @@
                 <input type="hidden" name="risk_require_stop_loss" id="bot-require-stop-loss-val" value="true">
               </div>
               <button type="button" class="btn btn-outline btn-xs mt-2" onclick="resetBotRiskDefaults()">Reset to defaults</button>
+              </div>
             </div>
           </div>
 
@@ -218,12 +227,26 @@ function loadBotUserDefaults() {
           document.getElementById('bot-require-stop-loss-cb').checked = checked;
           document.getElementById('bot-require-stop-loss-val').value = checked ? 'true' : 'false';
         }
+        if (data.risk_settings.enabled !== undefined) {
+          var riskEnabled = !!data.risk_settings.enabled;
+          document.getElementById('bot-risk-disabled-cb').checked = !riskEnabled;
+          document.getElementById('bot-risk-enabled-val').value = riskEnabled ? 'true' : 'false';
+          document.getElementById('bot-risk-fields').style.opacity = riskEnabled ? '1' : '0.4';
+          document.getElementById('bot-risk-fields').style.pointerEvents = riskEnabled ? '' : 'none';
+        }
       }
     })
     .catch(function() { /* silently ignore — defaults remain */ });
 }
 
 // Toggle event listeners
+document.getElementById('bot-risk-disabled-cb').addEventListener('change', function() {
+  var disabled = this.checked;
+  document.getElementById('bot-risk-enabled-val').value = disabled ? 'false' : 'true';
+  document.getElementById('bot-risk-fields').style.opacity = disabled ? '0.4' : '1';
+  document.getElementById('bot-risk-fields').style.pointerEvents = disabled ? 'none' : '';
+});
+
 document.getElementById('bot-require-stop-loss-cb').addEventListener('change', function() {
   document.getElementById('bot-require-stop-loss-val').value = this.checked ? 'true' : 'false';
 });

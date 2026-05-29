@@ -35,7 +35,9 @@ class RiskEngine:
         risk_per_trade: float = 0.02,
         max_drawdown_pct: float = 0.20,
         max_consecutive_losses: int = 5,
+        enabled: bool = True,
     ) -> None:
+        self._enabled = enabled
         self._max_position_size = max_position_size
         self._max_daily_loss = max_daily_loss
         self._max_trades_per_day = max_trades_per_day
@@ -76,6 +78,14 @@ class RiskEngine:
         Returns:
             RiskDecision with APPROVED, REJECTED, or KILL_SWITCH action.
         """
+        # Bypass: risk engine disabled (demo/testing mode)
+        if not self._enabled:
+            return RiskDecision(
+                signal_id=signal.id,
+                action=RiskAction.APPROVED,
+                reason="Risk engine disabled — all checks bypassed",
+            )
+
         # Rule 1: Kill switch
         if self._kill_switch:
             return RiskDecision(
