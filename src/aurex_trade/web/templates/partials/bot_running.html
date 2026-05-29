@@ -491,6 +491,29 @@
     return html;
   }
 
+  function renderDailyLossGauge(label, current, lossLimit) {
+    // One-sided gauge: $0 on right, -lossLimit on left
+    var pct = ((lossLimit + current) / lossLimit) * 100;
+    pct = Math.max(0, Math.min(100, pct));
+    var pnlClass = current >= 0 ? 'text-success' : 'text-error';
+    var barColor = current >= 0 ? 'bg-success' : 'bg-error';
+
+    var html = '<div class="mb-3">';
+    html += '<div class="flex justify-between text-xs text-base-content/60 mb-1">';
+    html += '<span>' + label + '</span>';
+    html += '<span class="font-mono ' + pnlClass + '">' + (current >= 0 ? '+' : '') + '$' + current.toFixed(2) + '</span>';
+    html += '</div>';
+    html += '<div class="w-full h-3 bg-error/20 rounded-full relative overflow-hidden">';
+    html += '<div class="absolute top-0 h-full w-1 ' + barColor + ' rounded" style="left:' + pct.toFixed(1) + '%"></div>';
+    html += '</div>';
+    html += '<div class="flex justify-between text-xs text-base-content/40 mt-0.5">';
+    html += '<span>-$' + lossLimit.toFixed(0) + ' (stop)</span>';
+    html += '<span>$0</span>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
   function renderPairedGrid(state) {
     var html = '';
 
@@ -506,7 +529,7 @@
 
     // P&L Gauges
     html += renderPnlGauge('Session P&L', state.session_pnl, state.session_loss_limit, state.session_profit_target);
-    html += renderPnlGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit, state.daily_loss_limit);
+    html += renderDailyLossGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit);
 
     // Grid levels table — show active levels + 3 empty on each side
     html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
