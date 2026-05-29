@@ -222,7 +222,7 @@ function updateBotDescription() {
 
 function resetBotStrategyParams() {
   var select = document.getElementById('bot-strategy-select');
-  if (select.value) updateBotParams();
+  if (select.value) { updateBotParams(); updateRiskPreview(); }
 }
 
 var RISK_FIELD_MAP = {
@@ -258,6 +258,7 @@ function loadBotUserDefaults() {
           var input = document.querySelector('[name="param_' + entry[0] + '"]');
           if (input) input.value = entry[1];
         });
+        updateRiskPreview();
       }
       if (data.risk_settings) {
         // API uses "max_position"; bot factory uses "max_position_size"
