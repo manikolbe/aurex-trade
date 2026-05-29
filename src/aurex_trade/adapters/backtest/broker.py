@@ -15,6 +15,7 @@ from aurex_trade.domain.models import (
     ClosedTradeInfo,
     OpenBrokerTrade,
     Order,
+    PendingOrder,
     Position,
     Trade,
 )
@@ -134,6 +135,14 @@ class SimulatedBrokerAdapter:
     def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None:
         """Backtest broker does not track closed trade details."""
         return None
+
+    def get_pending_orders(self, symbol: str) -> list[PendingOrder]:
+        """Backtest broker has no pending orders."""
+        return []
+
+    def cancel_all_orders(self, symbol: str) -> int:
+        """Backtest broker has no pending orders to cancel."""
+        return 0
 
     def _update_position(
         self, symbol: str, side: OrderSide, quantity: float, price: float

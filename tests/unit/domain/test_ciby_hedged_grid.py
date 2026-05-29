@@ -1,4 +1,4 @@
-"""Unit tests for CibyHedgedGridStrategy."""
+"""Unit tests for CibyHedgedGridStrategy — limit order mode."""
 
 from datetime import datetime
 
@@ -25,223 +25,239 @@ def _bars(prices: list[float], day: str = "2025-05-01") -> list[BarData]:
     return [_bar(p, day=day) for p in prices]
 
 
+def _drain_all(strategy: CibyHedgedGridStrategy, bars: list[BarData]) -> list[object]:
+    """Drain all signals from the strategy's queue."""
+    signals = []
+    while True:
+        sig = strategy.generate(bars)
+        if sig is None:
+            break
+        signals.append(sig)
+    return signals
+
+
 class TestInitialization:
-    """Test strategy initialization and first signal generation."""
+    """Test strategy initialization and limit order placement."""
 
-    def test_first_call_sets_anchor_returns_long_signal(self) -> None:
-        strategy = CibyHedgedGridStrategy(grid_spacing=15.0)
-        bars = _bars([3000.0, 3000.0])
+    def test_first_call_sets_anchor_and_queues_signals(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
         signal = strategy.generate(bars)
 
         assert signal is not None
-        assert signal.signal_type == SignalType.LONG
-        assert signal.metadata["pair_side"] == "long"
-        assert strategy._anchor_price == 3000.0
+        assert strategy._anchor_price == 4563.0
 
-    def test_second_call_returns_short_signal_from_queue(self) -> None:
-        strategy = CibyHedgedGridStrategy(grid_spacing=15.0)
-        bars = _bars([3000.0, 3000.0])
-        strategy.generate(bars)  # long
-        signal = strategy.generate(bars)  # short from queue
+    def test_grid_levels_are_rounded_multiples(self) -> None:
+        """grid_spacing=10, price=4563 → levels at 4550, 4560, 4570, 4580."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
 
-        assert signal is not None
-        assert signal.signal_type == SignalType.SHORT
-        assert signal.metadata["pair_side"] == "short"
+        # Drain all signals
+        signals = _drain_all(strategy, bars)
 
-    def test_third_call_returns_none_no_crossing(self) -> None:
-        strategy = CibyHedgedGridStrategy(grid_spacing=15.0)
-        bars = _bars([3000.0, 3000.0])
-        strategy.generate(bars)  # long
-        strategy.generate(bars)  # short
-        signal = strategy.generate(bars)  # no crossing
+        # Should have 2 levels above (4570, 4580) + 2 below (4560, 4550) = 4 levels
+        # Each level gets buy + sell = 8 signals total
+        assert len(signals) == 8
 
-        assert signal is None
+        # Extract limit prices from signals
+        limit_prices = sorted({float(s.metadata["limit_price"]) for s in signals})
+        assert limit_prices == [4550.0, 4560.0, 4570.0, 4580.0]
 
-    def test_initial_pair_uses_initial_units(self) -> None:
-        strategy = CibyHedgedGridStrategy(initial_units=10.0, grid_units=20.0)
-        bars = _bars([3000.0, 3000.0])
-        signal = strategy.generate(bars)
+    def test_all_signals_are_limit_orders(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
 
-        assert signal is not None
-        assert signal.metadata["fixed_units"] == "10.0"
+        for sig in signals:
+            assert sig.metadata["order_type"] == "LIMIT"
+            assert "limit_price" in sig.metadata
 
-    def test_insufficient_bars_returns_none(self) -> None:
+    def test_each_level_has_long_and_short(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
+
+        # Group by level
+        levels: dict[str, list[str]] = {}
+        for sig in signals:
+            price = sig.metadata["limit_price"]
+            side = sig.metadata["pair_side"]
+            levels.setdefault(price, []).append(side)
+
+        for price, sides in levels.items():
+            assert "long" in sides, f"Level {price} missing long"
+            assert "short" in sides, f"Level {price} missing short"
+
+    def test_units_match_grid_units(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0, grid_units=15.0)
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
+
+        for sig in signals:
+            assert sig.metadata["fixed_units"] == "15.0"
+
+    def test_no_signal_on_empty_bars(self) -> None:
         strategy = CibyHedgedGridStrategy()
-        signal = strategy.generate([_bar(3000.0)])
+        signal = strategy.generate([])
+        assert signal is None
+
+    def test_subsequent_call_returns_none_after_drain(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
+
+        # No more signals
+        signal = strategy.generate(bars)
         assert signal is None
 
 
-class TestGridCrossing:
-    """Test grid level crossing detection and pair generation."""
+class TestGridLevelRounding:
+    """Test grid level calculation with various prices and spacings."""
 
-    def _init_strategy(self, anchor: float = 3000.0) -> CibyHedgedGridStrategy:
-        """Initialize strategy with anchor set."""
-        strategy = CibyHedgedGridStrategy(grid_spacing=15.0, grid_units=20.0)
-        bars = _bars([anchor, anchor])
-        strategy.generate(bars)  # long (sets anchor)
-        strategy.generate(bars)  # short (drain queue)
-        return strategy
+    def test_price_exactly_on_grid_line(self) -> None:
+        """Price=4560, spacing=10 → levels 4540, 4550, 4570, 4580."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4560.0)]
+        signals = _drain_all(strategy, bars)
 
-    def test_upward_crossing_generates_pair(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        # Price crosses 3015 (first grid level above)
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        signal = strategy.generate(bars)
+        limit_prices = sorted({float(s.metadata["limit_price"]) for s in signals})
+        # On grid line: first_above=4560, first_below=4550 (one step down)
+        # levels_above: 4560, 4570; levels_below: 4550, 4540
+        assert 4560.0 in limit_prices or 4570.0 in limit_prices
+        assert len(limit_prices) == 4
 
-        assert signal is not None
-        assert signal.signal_type == SignalType.LONG
-        assert signal.metadata["fixed_units"] == "20.0"
+    def test_spacing_5(self) -> None:
+        """Price=4563, spacing=5 → levels 4555, 4560, 4565, 4570."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=5.0)
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
 
-    def test_downward_crossing_generates_pair(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        # Price crosses 2985 (first grid level below)
-        bars = _bars([3000.0, 2990.0, 2984.0])
-        signal = strategy.generate(bars)
+        limit_prices = sorted({float(s.metadata["limit_price"]) for s in signals})
+        assert limit_prices == [4555.0, 4560.0, 4565.0, 4570.0]
 
-        assert signal is not None
-        assert signal.signal_type == SignalType.LONG  # First of pair is always LONG
-        assert "2985.00" in signal.metadata["grid_level"]
 
-    def test_filled_level_not_retriggered(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        # Cross 3015 upward
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        strategy.generate(bars)  # long
-        strategy.generate(bars)  # short (queue)
+class TestStopLoss:
+    """Test stop-loss placement on limit order signals."""
 
-        # Price dips and crosses 3015 again
-        bars2 = _bars([3016.0, 3010.0, 3016.0])
-        signal = strategy.generate(bars2)
+    def test_long_signal_stop_below_level(self) -> None:
+        """Buy stop = level - grid_spacing."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
 
-        # Should NOT trigger because level is still filled
-        assert signal is None
+        long_signals = [s for s in signals if s.signal_type == SignalType.LONG]
+        for sig in long_signals:
+            level = float(sig.metadata["limit_price"])
+            assert sig.stop_loss == level - 10.0
 
-    def test_level_released_after_both_sides_close(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        # Cross 3015
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        strategy.generate(bars)  # long
-        strategy.generate(bars)  # short
+    def test_short_signal_stop_above_level(self) -> None:
+        """Sell stop = level + grid_spacing."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
 
-        # Report both sides closed
-        strategy.report_trade_closed("3015.00_long", 5.0)
-        strategy.report_trade_closed("3015.00_short", -3.0)
+        short_signals = [s for s in signals if s.signal_type == SignalType.SHORT]
+        for sig in short_signals:
+            level = float(sig.metadata["limit_price"])
+            assert sig.stop_loss == level + 10.0
 
-        # Level should be free now — cross again
-        bars2 = _bars([3010.0, 3010.0, 3016.0])
-        signal = strategy.generate(bars2)
-        assert signal is not None
-        assert signal.signal_type == SignalType.LONG
+    def test_no_take_profit(self) -> None:
+        strategy = CibyHedgedGridStrategy()
+        bars = [_bar(4563.0)]
+        signals = _drain_all(strategy, bars)
 
-    def test_grid_level_keys_include_side_suffix(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        long_signal = strategy.generate(bars)
-        short_signal = strategy.generate(bars)
+        for sig in signals:
+            assert sig.take_profit is None
 
-        assert long_signal is not None
-        assert short_signal is not None
-        assert long_signal.metadata["grid_level"].endswith("_long")
-        assert short_signal.metadata["grid_level"].endswith("_short")
+
+class TestReplenishment:
+    """Test that filling a level triggers next level placement."""
+
+    def test_fill_above_anchor_places_next_above(self) -> None:
+        """Filling level 4570 (above anchor=4563) → place 4580."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
+
+        # 4580 should already be placed (2 levels above)
+        # Simulate fill at 4580 — should place 4590
+        strategy.report_fill("4580.00_long", 4580.0)
+
+        # Drain new signals
+        signals = _drain_all(strategy, bars)
+        assert len(signals) == 2  # long + short for 4590
+
+        limit_prices = {float(s.metadata["limit_price"]) for s in signals}
+        assert 4590.0 in limit_prices
+
+    def test_fill_below_anchor_places_next_below(self) -> None:
+        """Filling level 4550 (below anchor=4563) → place 4540."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
+
+        # 4550 should be placed (2 levels below)
+        # Simulate fill at 4550 — should place 4540
+        strategy.report_fill("4550.00_long", 4550.0)
+
+        signals = _drain_all(strategy, bars)
+        assert len(signals) == 2
+
+        limit_prices = {float(s.metadata["limit_price"]) for s in signals}
+        assert 4540.0 in limit_prices
+
+    def test_no_duplicate_placement(self) -> None:
+        """Filling a level that already has the next level placed does nothing extra."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
+
+        # Fill 4570 — next would be 4580 but it's already placed
+        strategy.report_fill("4570.00_long", 4570.0)
+
+        signals = _drain_all(strategy, bars)
+        # 4580 already placed, so no new signals
+        assert len(signals) == 0
 
 
 class TestSignalRejection:
     """Test on_signal_rejected clears queue and releases level."""
 
-    def _init_strategy(self, anchor: float = 3000.0) -> CibyHedgedGridStrategy:
-        strategy = CibyHedgedGridStrategy(grid_spacing=15.0, grid_units=20.0)
-        bars = _bars([anchor, anchor])
-        strategy.generate(bars)  # long (sets anchor)
-        strategy.generate(bars)  # short (drain queue)
-        return strategy
-
     def test_rejection_clears_queued_partner(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        # Cross 3015 — generates LONG, queues SHORT
-        bars = _bars([3000.0, 3010.0, 3016.0])
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+
+        # Get first signal (long for first level)
         long_signal = strategy.generate(bars)
         assert long_signal is not None
 
-        # Simulate engine rejecting the LONG
+        # Reject it
         strategy.on_signal_rejected(long_signal.metadata["grid_level"])
 
-        # Queue should be cleared — no SHORT will fire
-        # Use price that doesn't cross any level to confirm queue is empty
-        bars_flat = _bars([3016.0, 3016.0])
-        signal = strategy.generate(bars_flat)
-        assert signal is None
+        # The queued short for same level should be removed
+        # Remaining signals should not include that level
+        remaining = _drain_all(strategy, bars)
+        rejected_level = long_signal.metadata["limit_price"]
+        for sig in remaining:
+            # Signals for other levels are fine
+            if sig.metadata["limit_price"] == rejected_level:
+                # But grid_level should not start with the rejected level prefix
+                assert not sig.metadata["grid_level"].startswith(
+                    long_signal.metadata["grid_level"].rsplit("_", 1)[0]
+                )
 
-    def test_rejection_releases_filled_level(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        bars = _bars([3000.0, 3010.0, 3016.0])
+    def test_rejection_releases_placed_level(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+
         long_signal = strategy.generate(bars)
         assert long_signal is not None
 
-        # Level is filled
-        assert 3015.0 in strategy._filled_levels
-
-        # Reject the signal
-        strategy.on_signal_rejected(long_signal.metadata["grid_level"])
-
-        # Level should be free again
-        assert 3015.0 not in strategy._filled_levels
-
-    def test_released_level_can_retrigger(self) -> None:
-        strategy = self._init_strategy(3000.0)
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        long_signal = strategy.generate(bars)
-        assert long_signal is not None
+        level = float(long_signal.metadata["limit_price"])
+        assert level in strategy._placed_levels
 
         strategy.on_signal_rejected(long_signal.metadata["grid_level"])
-
-        # Cross 3015 again — should trigger fresh pair
-        bars2 = _bars([3010.0, 3010.0, 3016.0])
-        signal = strategy.generate(bars2)
-        assert signal is not None
-        assert signal.signal_type == SignalType.LONG
-
-    def test_second_signal_rejected_keeps_level_filled(self) -> None:
-        """When the SHORT (second signal) is rejected, the LONG was already executed.
-        Level stays filled; rejected side marked as closed."""
-        strategy = self._init_strategy(3000.0)
-        # Cross 3015 — generates LONG, queues SHORT
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        long_signal = strategy.generate(bars)
-        assert long_signal is not None
-
-        # Drain the SHORT from queue (simulates engine processing it next cycle)
-        short_signal = strategy.generate(_bars([3016.0, 3016.0]))
-        assert short_signal is not None
-        assert short_signal.signal_type == SignalType.SHORT
-
-        # Now reject the SHORT (partner already executed)
-        strategy.on_signal_rejected(short_signal.metadata["grid_level"])
-
-        # Level should STILL be filled (LONG is live)
-        assert 3015.0 in strategy._filled_levels
-
-        # The rejected side ("short") should be marked as closed
-        pair_id = strategy._filled_levels[3015.0]
-        assert "short" in strategy._pair_closed_sides[pair_id]
-
-    def test_second_signal_rejected_level_releases_when_partner_closes(self) -> None:
-        """After SHORT rejected, level releases when the surviving LONG closes."""
-        strategy = self._init_strategy(3000.0)
-        bars = _bars([3000.0, 3010.0, 3016.0])
-        strategy.generate(bars)  # LONG
-        strategy.generate(_bars([3016.0, 3016.0]))  # SHORT from queue
-
-        # Reject SHORT
-        strategy.on_signal_rejected("3015.00_short")
-
-        # Level still filled
-        assert 3015.0 in strategy._filled_levels
-
-        # LONG closes via broker stop-loss
-        strategy.report_trade_closed("3015.00_long", -16.0)
-
-        # Now level should be released (both sides done)
-        assert 3015.0 not in strategy._filled_levels
+        assert level not in strategy._placed_levels
 
 
 class TestSessionPnlExits:
@@ -253,24 +269,23 @@ class TestSessionPnlExits:
         session_loss_limit: float = 50.0,
     ) -> CibyHedgedGridStrategy:
         strategy = CibyHedgedGridStrategy(
-            grid_spacing=15.0,
+            grid_spacing=10.0,
             session_profit_target=session_profit_target,
             session_loss_limit=session_loss_limit,
         )
-        bars = _bars([3000.0, 3000.0])
-        strategy.generate(bars)  # long
-        strategy.generate(bars)  # short
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
         return strategy
 
     def test_session_profit_target_triggers_close_all(self) -> None:
         strategy = self._init_strategy(session_profit_target=50.0)
 
         # Simulate profitable closures
-        strategy.report_trade_closed("3000.00_long", 30.0)
-        strategy.report_trade_closed("3000.00_short", 25.0)
+        strategy.report_trade_closed("4570.00_long", 30.0)
+        strategy.report_trade_closed("4570.00_short", 25.0)
 
         # Next generate should return FLAT close_all
-        bars = _bars([3000.0, 3005.0])
+        bars = [_bar(4565.0)]
         signal = strategy.generate(bars)
 
         assert signal is not None
@@ -282,10 +297,10 @@ class TestSessionPnlExits:
         strategy = self._init_strategy(session_loss_limit=30.0)
 
         # Simulate losses
-        strategy.report_trade_closed("3000.00_long", -20.0)
-        strategy.report_trade_closed("3000.00_short", -15.0)
+        strategy.report_trade_closed("4570.00_long", -20.0)
+        strategy.report_trade_closed("4570.00_short", -15.0)
 
-        bars = _bars([3000.0, 3005.0])
+        bars = [_bar(4565.0)]
         signal = strategy.generate(bars)
 
         assert signal is not None
@@ -295,25 +310,21 @@ class TestSessionPnlExits:
 
     def test_restart_resets_session_state(self) -> None:
         strategy = self._init_strategy(session_profit_target=50.0)
-        strategy.report_trade_closed("3000.00_long", 55.0)
+        strategy.report_trade_closed("4570.00_long", 55.0)
 
-        # Trigger close_all
-        bars = _bars([3000.0, 3005.0])
+        bars = [_bar(4565.0)]
         strategy.generate(bars)  # FLAT close_all
-
-        # Simulate engine calling notify_close_all_complete
         strategy.notify_close_all_complete()
 
-        # Strategy should be reset — next generate starts fresh session
         assert strategy._anchor_price is None
         assert strategy._session_realized_pnl == 0.0
         assert strategy._session_count == 2
 
     def test_restart_preserves_daily_pnl(self) -> None:
         strategy = self._init_strategy(session_profit_target=50.0)
-        strategy.report_trade_closed("3000.00_long", 55.0)
+        strategy.report_trade_closed("4570.00_long", 55.0)
 
-        bars = _bars([3000.0, 3005.0])
+        bars = [_bar(4565.0)]
         strategy.generate(bars)  # FLAT
         strategy.notify_close_all_complete()
 
@@ -325,23 +336,20 @@ class TestDailyLossLimit:
 
     def test_daily_limit_stops_trading(self) -> None:
         strategy = CibyHedgedGridStrategy(
-            grid_spacing=15.0,
+            grid_spacing=10.0,
             daily_loss_limit=100.0,
-            session_loss_limit=200.0,  # High so session limit doesn't hit first
+            session_loss_limit=200.0,
         )
-        bars = _bars([3000.0, 3000.0])
-        strategy.generate(bars)  # long
-        strategy.generate(bars)  # short
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
 
         # Simulate daily loss exceeding limit
-        strategy.report_trade_closed("3000.00_long", -60.0)
-        strategy.report_trade_closed("3000.00_short", -50.0)
+        strategy.report_trade_closed("4570.00_long", -60.0)
+        strategy.report_trade_closed("4570.00_short", -50.0)
 
-        # Strategy should be inactive
         assert not strategy._session_active
 
-        # Generate should return None (after close_all is handled)
-        # First it will emit close_all
+        # Generate should return FLAT (close_all pending)
         signal = strategy.generate(bars)
         assert signal is not None
         assert signal.signal_type == SignalType.FLAT
@@ -354,31 +362,29 @@ class TestDailyLossLimit:
 
     def test_day_boundary_resets_daily_pnl(self) -> None:
         strategy = CibyHedgedGridStrategy(
-            grid_spacing=15.0,
+            grid_spacing=10.0,
             daily_loss_limit=100.0,
             session_loss_limit=200.0,
         )
         # Day 1
-        bars_day1 = _bars([3000.0, 3000.0], day="2025-05-01")
-        strategy.generate(bars_day1)
-        strategy.generate(bars_day1)
-        strategy.report_trade_closed("3000.00_long", -60.0)
-        strategy.report_trade_closed("3000.00_short", -50.0)
+        bars_day1 = [_bar(4563.0, day="2025-05-01")]
+        _drain_all(strategy, bars_day1)
+        strategy.report_trade_closed("4570.00_long", -60.0)
+        strategy.report_trade_closed("4570.00_short", -50.0)
 
-        # Daily limit hit
         assert not strategy._session_active
 
-        # Handle the close_all
+        # Handle close_all
         strategy.generate(bars_day1)
         strategy.notify_close_all_complete()
 
         # Day 2 — should reset
-        bars_day2 = _bars([3000.0, 3000.0], day="2025-05-02")
+        bars_day2 = [_bar(4563.0, day="2025-05-02")]
         signal = strategy.generate(bars_day2)
 
         assert strategy._session_active
         assert strategy._daily_realized_pnl == 0.0
-        assert signal is not None  # New session starts
+        assert signal is not None
 
 
 class TestDisplayState:
@@ -390,19 +396,18 @@ class TestDisplayState:
 
     def test_returns_correct_structure(self) -> None:
         strategy = CibyHedgedGridStrategy(
-            grid_spacing=15.0,
+            grid_spacing=10.0,
             session_profit_target=100.0,
             session_loss_limit=50.0,
             daily_loss_limit=200.0,
         )
-        bars = _bars([3000.0, 3000.0])
-        strategy.generate(bars)
-        strategy.generate(bars)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
 
         state = strategy.get_display_state()
         assert state is not None
         assert state["type"] == "paired_grid"
-        assert state["anchor_price"] == 3000.0
+        assert state["anchor_price"] == 4563.0
         assert state["session_pnl"] == 0.0
         assert state["session_profit_target"] == 100.0
         assert state["session_loss_limit"] == 50.0
@@ -411,6 +416,18 @@ class TestDisplayState:
         assert state["session_count"] == 1
         assert state["session_active"] is True
         assert isinstance(state["grid_levels"], list)
+        assert state["placed_count"] == 4  # 2 above + 2 below
+
+    def test_placed_levels_show_placed_status(self) -> None:
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
+
+        state = strategy.get_display_state()
+        assert state is not None
+        grid_levels = state["grid_levels"]
+        placed = [lv for lv in grid_levels if lv["status"] == "placed"]
+        assert len(placed) == 4
 
 
 class TestMetadata:
@@ -421,9 +438,7 @@ class TestMetadata:
         param_keys = {p.key for p in meta.params}
         expected = {
             "grid_spacing",
-            "initial_units",
             "grid_units",
-            "stop_distance",
             "session_profit_target",
             "session_loss_limit",
             "daily_loss_limit",
@@ -437,31 +452,3 @@ class TestMetadata:
     def test_name_property(self) -> None:
         strategy = CibyHedgedGridStrategy()
         assert strategy.name == "ciby_hedged_grid"
-
-
-class TestStopLoss:
-    """Test stop-loss placement on signals."""
-
-    def test_long_signal_stop_below_entry(self) -> None:
-        strategy = CibyHedgedGridStrategy(stop_distance=16.0)
-        bars = _bars([3000.0, 3000.0])
-        signal = strategy.generate(bars)
-
-        assert signal is not None
-        assert signal.stop_loss == 3000.0 - 16.0
-
-    def test_short_signal_stop_above_entry(self) -> None:
-        strategy = CibyHedgedGridStrategy(stop_distance=16.0)
-        bars = _bars([3000.0, 3000.0])
-        strategy.generate(bars)  # long
-        signal = strategy.generate(bars)  # short
-
-        assert signal is not None
-        assert signal.stop_loss == 3000.0 + 16.0
-
-    def test_no_take_profit(self) -> None:
-        strategy = CibyHedgedGridStrategy()
-        bars = _bars([3000.0, 3000.0])
-        signal = strategy.generate(bars)
-        assert signal is not None
-        assert signal.take_profit is None

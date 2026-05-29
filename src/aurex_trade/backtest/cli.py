@@ -49,10 +49,8 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         reward_ratio=float(p.get("reward_ratio", 1.0)),
     ),
     "ciby_hedged_grid": lambda p: CibyHedgedGridStrategy(
-        grid_spacing=float(p.get("grid_spacing", 15.0)),
-        initial_units=float(p.get("initial_units", 10.0)),
-        grid_units=float(p.get("grid_units", 20.0)),
-        stop_distance=float(p.get("stop_distance", 16.0)),
+        grid_spacing=float(p.get("grid_spacing", 10.0)),
+        grid_units=float(p.get("grid_units", 10.0)),
         session_profit_target=float(p.get("session_profit_target", 100.0)),
         session_loss_limit=float(p.get("session_loss_limit", 50.0)),
         daily_loss_limit=float(p.get("daily_loss_limit", 200.0)),
@@ -73,10 +71,8 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
         and p.get("num_levels_below", 3) >= 1
     ),
     "ciby_hedged_grid": lambda p: (
-        p.get("grid_spacing", 15.0) > 0
-        and p.get("initial_units", 10.0) > 0
-        and p.get("grid_units", 20.0) > 0
-        and p.get("stop_distance", 16.0) > 0
+        p.get("grid_spacing", 10.0) > 0
+        and p.get("grid_units", 10.0) > 0
         and p.get("session_profit_target", 100.0) > 0
         and p.get("session_loss_limit", 50.0) > 0
         and p.get("daily_loss_limit", 200.0) > 0

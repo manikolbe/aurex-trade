@@ -5,8 +5,15 @@ from uuid import UUID
 import structlog
 
 from aurex_trade.adapters.oanda.connection import OANDAConnection
-from aurex_trade.domain.enums import OrderSide
-from aurex_trade.domain.models import ClosedTradeInfo, OpenBrokerTrade, Order, Position, Trade
+from aurex_trade.domain.enums import OrderSide, OrderType
+from aurex_trade.domain.models import (
+    ClosedTradeInfo,
+    OpenBrokerTrade,
+    Order,
+    PendingOrder,
+    Position,
+    Trade,
+)
 
 log = structlog.get_logger()
 
@@ -40,14 +47,25 @@ class OANDABrokerAdapter:
         }
 
     def place_order(self, order: Order) -> Trade:
-        """Place a market order and return the resulting Trade."""
+        """Place an order (MARKET or LIMIT) and return the resulting Trade.
+
+        For MARKET orders: fills immediately, returns Trade with fill price.
+        For LIMIT orders: placed as GTC pending order, returns Trade with
+        broker_trade_id set to the pending order ID and price=limit_price.
+        """
         raw_units = order.quantity if order.side == OrderSide.BUY else -order.quantity
-        # OANDA requires integer units for most instruments (including XAU_USD)
         units = int(raw_units)
         if units == 0:
             msg = f"Order quantity too small to trade: {order.quantity}"
             raise ValueError(msg)
 
+        if order.order_type == OrderType.LIMIT:
+            return self._place_limit_order(order, units)
+
+        return self._place_market_order(order, units)
+
+    def _place_market_order(self, order: Order, units: int) -> Trade:
+        """Place a FOK market order — fills immediately or raises."""
         order_body: dict[str, str | dict[str, str]] = {
             "type": "MARKET",
             "instrument": order.symbol,
@@ -67,7 +85,6 @@ class OANDABrokerAdapter:
 
         fill = data.get("orderFillTransaction")
         if fill is None:
-            # Order was not filled — OANDA rejected or cancelled it (e.g., FOK timeout)
             cancel = data.get("orderCancelTransaction", {})
             reason = cancel.get("reason", "UNKNOWN")
             msg = f"OANDA order not filled: {reason}"
@@ -80,8 +97,6 @@ class OANDABrokerAdapter:
             )
             raise RuntimeError(msg)
 
-        # OANDA returns tradeOpened only when a new trade is created.
-        # Position-reducing fills (closing/flipping) don't open a new trade.
         trade_opened = fill.get("tradeOpened")
         broker_trade_id = trade_opened["tradeID"] if trade_opened else ""
 
@@ -103,6 +118,62 @@ class OANDABrokerAdapter:
             price=trade.price,
         )
         return trade
+
+    def _place_limit_order(self, order: Order, units: int) -> Trade:
+        """Place a GTC limit order — returns immediately with pending order ID."""
+        if order.limit_price is None:
+            msg = "Limit order requires a limit_price"
+            raise ValueError(msg)
+
+        order_body: dict[str, str | dict[str, str]] = {
+            "type": "LIMIT",
+            "instrument": order.symbol,
+            "units": str(units),
+            "price": f"{order.limit_price:.5f}",
+            "timeInForce": "GTC",
+            "positionFill": "DEFAULT",
+            "triggerCondition": "DEFAULT",
+        }
+
+        if order.stop_loss is not None:
+            order_body["stopLossOnFill"] = {"price": f"{order.stop_loss:.5f}"}
+        if order.take_profit is not None:
+            order_body["takeProfitOnFill"] = {"price": f"{order.take_profit:.5f}"}
+
+        body = {"order": order_body}
+
+        data = self._connection.post(f"/v3/accounts/{self._account_id}/orders", json=body)
+
+        # OANDA returns orderCreateTransaction for pending orders
+        create_txn = data.get("orderCreateTransaction")
+        if create_txn is None:
+            cancel = data.get("orderCancelTransaction", {})
+            reason = cancel.get("reason", "UNKNOWN")
+            msg = f"OANDA limit order rejected: {reason}"
+            log.warning("oanda_limit_order_rejected", reason=reason)
+            raise RuntimeError(msg)
+
+        broker_order_id = create_txn["id"]
+
+        log.info(
+            "oanda_limit_order_placed",
+            symbol=order.symbol,
+            side=order.side.value,
+            quantity=order.quantity,
+            limit_price=order.limit_price,
+            broker_order_id=broker_order_id,
+        )
+
+        # Return Trade with order ID as broker_trade_id (pending, not yet filled)
+        return Trade(
+            order_id=order.id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            price=order.limit_price,
+            commission=0.0,
+            broker_trade_id=broker_order_id,
+        )
 
     def cancel_order(self, order_id: UUID) -> bool:
         """Cancel an order. Market FOK orders fill immediately — always returns False."""
@@ -224,3 +295,44 @@ class OANDABrokerAdapter:
             realized_pnl=float(trade.get("realizedPL", 0.0)),
             close_reason=reason,
         )
+
+    def get_pending_orders(self, symbol: str) -> list[PendingOrder]:
+        """Return all pending (unfilled) limit orders for a symbol."""
+        data = self._connection.get(f"/v3/accounts/{self._account_id}/pendingOrders")
+        orders: list[PendingOrder] = []
+        for o in data.get("orders", []):
+            if o.get("instrument") != symbol:
+                continue
+            if o.get("type") != "LIMIT":
+                continue
+            units = float(o["units"])
+            side = OrderSide.BUY if units > 0 else OrderSide.SELL
+            orders.append(
+                PendingOrder(
+                    broker_order_id=o["id"],
+                    symbol=symbol,
+                    side=side,
+                    quantity=abs(units),
+                    limit_price=float(o["price"]),
+                )
+            )
+        return orders
+
+    def cancel_all_orders(self, symbol: str) -> int:
+        """Cancel all pending orders for a symbol. Returns count cancelled."""
+        pending = self.get_pending_orders(symbol)
+        count = 0
+        for order in pending:
+            try:
+                self._connection.put(
+                    f"/v3/accounts/{self._account_id}/orders/{order.broker_order_id}/cancel"
+                )
+                count += 1
+            except Exception:
+                log.warning(
+                    "oanda_cancel_order_failed",
+                    broker_order_id=order.broker_order_id,
+                )
+        if count:
+            log.info("oanda_orders_cancelled", symbol=symbol, count=count)
+        return count

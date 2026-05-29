@@ -140,6 +140,18 @@ class ClosedTradeInfo:
 
 
 @dataclass(frozen=True)
+class PendingOrder:
+    """A limit order placed at the broker that has not yet filled."""
+
+    broker_order_id: str
+    symbol: str
+    side: OrderSide
+    quantity: float
+    limit_price: float
+    grid_level_key: str = ""
+
+
+@dataclass(frozen=True)
 class AccountState:
     """Snapshot of account state for risk evaluation.
 

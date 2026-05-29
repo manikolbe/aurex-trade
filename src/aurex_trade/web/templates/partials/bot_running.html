@@ -571,7 +571,7 @@
         sellCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
       }
 
-      var rowClass = lv.status === 'active' ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');
+      var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');
       html += '<tr class="' + rowClass + '">';
       html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
       html += '<td class="text-sm">' + buyCell + '</td>';
@@ -601,6 +601,7 @@
 
   function statusIcon(status, colorType) {
     if (status === 'active') return '<span class="text-' + colorType + '">● Active</span>';
+    if (status === 'placed') return '<span class="text-info">◎ Placed</span>';
     if (status === 'pending') return '<span class="text-base-content/50">◌ Pending</span>';
     if (status === 'stopped') return '<span class="text-base-content/40">✕ Stopped</span>';
     if (status === 'closed') return '<span class="text-base-content/40">✓ Closed</span>';

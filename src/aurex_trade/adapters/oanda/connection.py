@@ -120,6 +120,12 @@ class OANDAConnection:
         response = client.post(path, json=json)
         return self._handle_response(response)
 
+    def put(self, path: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Send a PUT request to the OANDA API."""
+        client = self._require_client()
+        response = client.put(path, json=json or {})
+        return self._handle_response(response)
+
     def _require_client(self) -> httpx.Client:
         """Return the active client or raise if not connected."""
         if self._client is None:

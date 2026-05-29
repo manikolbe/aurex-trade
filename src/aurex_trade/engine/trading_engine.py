@@ -10,7 +10,7 @@ from typing import TypedDict
 
 import structlog
 
-from aurex_trade.domain.enums import OrderSide, RiskAction, SignalType
+from aurex_trade.domain.enums import OrderSide, OrderType, RiskAction, SignalType
 from aurex_trade.domain.models import AccountState, Order
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
@@ -131,6 +131,8 @@ class TradingEngine:
         # Grid level key → broker trade ID mapping for closure detection
         self._grid_trade_map: dict[str, str] = {}
         self._grid_logged: bool = False
+        # Pending limit orders: grid_level_key → broker_order_id
+        self._pending_order_map: dict[str, str] = {}
         # Event log for UI
         self._event_log: list[EventLogEntry] = []
 
@@ -196,6 +198,15 @@ class TradingEngine:
     def stop(self) -> None:
         """Signal the engine to stop after the current cycle."""
         self._running = False
+        # Cancel any pending limit orders at the broker
+        if self._pending_order_map:
+            try:
+                cancelled = self._broker.cancel_all_orders(self._symbol)
+                if cancelled:
+                    self._log.info("pending_orders_cancelled_on_stop", count=cancelled)
+            except Exception:
+                self._log.exception("cancel_pending_on_stop_failed")
+            self._pending_order_map.clear()
         self._log.info("stop_requested")
 
     @property
@@ -380,12 +391,100 @@ class TradingEngine:
             current_price=self._last_price,
         )
 
+    def _check_limit_fills(self) -> None:
+        """Detect limit orders that have been filled by comparing broker pending list.
+
+        When a pending order disappears from the broker's list, it has filled.
+        Report the fill to the strategy and move it to the grid_trade_map for
+        closure tracking.
+        """
+        if not self._pending_order_map:
+            return
+
+        try:
+            broker_pending = self._broker.get_pending_orders(self._symbol)
+        except Exception:
+            self._log.exception("check_limit_fills_error")
+            return
+
+        broker_pending_ids = {o.broker_order_id for o in broker_pending}
+
+        filled: list[tuple[str, str]] = []
+        for grid_key, broker_order_id in self._pending_order_map.items():
+            if broker_order_id not in broker_pending_ids:
+                filled.append((grid_key, broker_order_id))
+
+        for grid_key, broker_order_id in filled:
+            del self._pending_order_map[grid_key]
+
+            # Find the resulting open trade — look for trades opened by this order
+            # The broker_order_id for a limit order becomes a trade once filled
+            open_trades = self._broker.get_open_trades(self._symbol)
+            # OANDA: trade ID is often the same as or follows the order ID
+            broker_trade_id = ""
+            fill_price = 0.0
+            for t in open_trades:
+                if t.broker_trade_id == broker_order_id:
+                    broker_trade_id = t.broker_trade_id
+                    fill_price = t.open_price
+                    break
+
+            if not broker_trade_id:
+                # Trade might have a different ID — check closed trades
+                details = self._broker.get_closed_trade_details(broker_order_id)
+                if details:
+                    fill_price = details.close_price
+                    broker_trade_id = broker_order_id
+                else:
+                    # Assume it filled with the order ID as trade ID
+                    broker_trade_id = broker_order_id
+
+            # Map for closure detection
+            if broker_trade_id:
+                self._grid_trade_map[grid_key] = broker_trade_id
+
+            # Report fill to strategy
+            report_fill = getattr(self._strategy, "report_fill", None)
+            if report_fill is not None:
+                report_fill(grid_key, fill_price)
+
+            # Determine side from grid_key for logging
+            side_label = "BUY" if grid_key.endswith("_long") else "SELL"
+
+            self._log.info(
+                "limit_order_filled",
+                grid_level=grid_key,
+                broker_order_id=broker_order_id,
+                broker_trade_id=broker_trade_id,
+                fill_price=fill_price,
+                side=side_label,
+            )
+            self._event_log.append(EventLogEntry(
+                timestamp=datetime.now(UTC).isoformat(),
+                event="limit_fill",
+                details=(
+                    f"{side_label} limit filled @ {fill_price:.2f}"
+                    f" (#{broker_trade_id})"
+                ),
+            ))
+
+            self._session_trades += 1
+
     def _close_all_trades(self, reason: str) -> None:
         """Close all open trades for the symbol and clear grid state.
 
         Used by strategies with session P&L exits (e.g., paired grid) to
         liquidate all positions when a profit target or loss limit is hit.
         """
+        # Cancel all pending limit orders first
+        try:
+            cancelled = self._broker.cancel_all_orders(self._symbol)
+            if cancelled:
+                self._log.info("pending_orders_cancelled", count=cancelled, reason=reason)
+        except Exception:
+            self._log.exception("cancel_pending_orders_failed")
+        self._pending_order_map.clear()
+
         open_trades = self._broker.get_open_trades(self._symbol)
         if not open_trades:
             self._log.info("close_all_no_trades", reason=reason)
@@ -513,7 +612,10 @@ class TradingEngine:
 
     def _run_cycle(self) -> None:
         """Execute one complete trading cycle."""
-        # Step 0: Check for broker-side closures (TP/SL hits)
+        # Step 0a: Check for limit order fills
+        self._check_limit_fills()
+
+        # Step 0b: Check for broker-side closures (TP/SL hits)
         self._check_closures()
 
         # Step 1: Fetch market data
@@ -551,7 +653,8 @@ class TradingEngine:
             else:
                 update_pnl(0.0)
 
-        # Step 2: Generate signal
+        # Step 2: Generate signals — drain all queued signals in one cycle
+        signals: list[object] = []
         signal = self._strategy.generate(bars)
 
         # Log grid levels once after strategy initializes
@@ -569,25 +672,47 @@ class TradingEngine:
             self._log.debug("no_signal", strategy=self._strategy.name)
             return
 
+        # Collect all signals (strategy may queue multiple)
+        signals.append(signal)
+        while True:
+            next_signal = self._strategy.generate(bars)
+            if next_signal is None:
+                break
+            signals.append(next_signal)
+
+        # Process each signal
+        for signal in signals:  # type: ignore[assignment]
+            self._process_signal(signal, bars, latest_close)  # type: ignore[arg-type]
+
+    def _process_signal(self, signal: object, bars: list[object], latest_close: float) -> None:
+        """Process a single signal: risk check → order placement.
+
+        Handles both MARKET and LIMIT order types.
+        """
+        from aurex_trade.domain.models import Signal as SignalType_
+
+        sig: SignalType_ = signal  # type: ignore[assignment]
+
         # Handle close-all signals (bypass risk engine — this IS risk management)
         if (
-            signal.signal_type == SignalType.FLAT
-            and signal.metadata.get("action") == "close_all"
+            sig.signal_type == SignalType.FLAT
+            and sig.metadata.get("action") == "close_all"
         ):
-            reason = signal.metadata.get("reason", "unknown")
+            reason = sig.metadata.get("reason", "unknown")
             self._close_all_trades(reason)
             return
 
         self._session_signals += 1
         self._log.info(
             "signal_generated",
-            signal_type=signal.signal_type.value,
-            strength=signal.strength,
-            strategy=signal.strategy_name,
+            signal_type=sig.signal_type.value,
+            strength=sig.strength,
+            strategy=sig.strategy_name,
             trigger_price=latest_close,
-            stop_loss=signal.stop_loss,
+            stop_loss=sig.stop_loss,
+            order_type=sig.metadata.get("order_type", "MARKET"),
         )
-        self._repository.save_signal(signal, user_id=self._user_id)
+        self._repository.save_signal(sig, user_id=self._user_id)
 
         # Step 3: Risk evaluation — broker is source of truth for position
         position = self._broker.get_positions(self._symbol)
@@ -609,7 +734,7 @@ class TradingEngine:
             peak_equity=self._peak_equity,
         )
         decision = self._risk_engine.evaluate(
-            signal,
+            sig,
             position,
             trades_today,
             account_state=account_state,
@@ -628,18 +753,14 @@ class TradingEngine:
             self._event_log.append(EventLogEntry(
                 timestamp=datetime.now(UTC).isoformat(),
                 event="rejected",
-                details=f"{signal.signal_type.value.upper()} rejected: {decision.reason}",
+                details=f"{sig.signal_type.value.upper()} rejected: {decision.reason}",
             ))
             # Release grid level so it can re-trigger once conditions improve.
-            # The strategy marks levels as "filled" at signal generation time,
-            # but if risk rejects the trade, no position exists to close later.
-            grid_level_str = signal.metadata.get("grid_level")
+            grid_level_str = sig.metadata.get("grid_level")
             if grid_level_str:
-                # Notify strategy of rejection (clears queued pair partner + releases level)
                 on_rejected = getattr(self._strategy, "on_signal_rejected", None)
                 if on_rejected is not None:
                     on_rejected(grid_level_str)
-                # Legacy float-key release for simple grid strategy
                 release = getattr(self._strategy, "release_level", None)
                 if release is not None:
                     with contextlib.suppress(ValueError):
@@ -647,10 +768,10 @@ class TradingEngine:
             return
 
         # Step 4: Calculate position size and create order
-        side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
+        side = OrderSide.BUY if sig.signal_type == SignalType.LONG else OrderSide.SELL
 
-        # Prefer strategy-specified fixed units (e.g., paired grid initial vs grid units)
-        fixed_units_str = signal.metadata.get("fixed_units")
+        # Prefer strategy-specified fixed units
+        fixed_units_str = sig.metadata.get("fixed_units")
         if fixed_units_str:
             quantity = min(
                 float(fixed_units_str),
@@ -658,7 +779,7 @@ class TradingEngine:
             )
         else:
             quantity = self._risk_engine.calculate_position_size(
-                signal, account_state, latest_close
+                sig, account_state, latest_close
             )
             if quantity <= 0.0:
                 quantity = min(
@@ -666,14 +787,77 @@ class TradingEngine:
                     float(self._risk_engine._max_position_size),
                 )
 
+        # Determine order type from signal metadata
+        is_limit = sig.metadata.get("order_type") == "LIMIT"
+        limit_price_str = sig.metadata.get("limit_price")
+        limit_price = float(limit_price_str) if limit_price_str else None
+
         order = Order(
-            signal_id=signal.id,
+            signal_id=sig.id,
             symbol=self._symbol,
             side=side,
             quantity=quantity,
-            stop_loss=signal.stop_loss,
-            take_profit=signal.take_profit,
+            order_type=OrderType.LIMIT if is_limit else OrderType.MARKET,
+            limit_price=limit_price,
+            stop_loss=sig.stop_loss,
+            take_profit=sig.take_profit,
         )
+
+        if is_limit:
+            self._place_limit_order(order, sig)
+        else:
+            self._place_market_order(order, sig, latest_close)
+
+    def _place_limit_order(self, order: Order, sig: object) -> None:
+        """Place a limit order and track it in the pending map."""
+        from aurex_trade.domain.models import Signal as SignalType_
+
+        signal: SignalType_ = sig  # type: ignore[assignment]
+
+        try:
+            trade = self._broker.place_order(order)
+        except Exception:
+            self._log.exception(
+                "limit_order_placement_failed",
+                symbol=self._symbol,
+                side=order.side.value,
+                limit_price=order.limit_price,
+            )
+            grid_level_str = signal.metadata.get("grid_level")
+            if grid_level_str:
+                on_rejected = getattr(self._strategy, "on_signal_rejected", None)
+                if on_rejected is not None:
+                    on_rejected(grid_level_str)
+            return
+
+        # Track pending order for fill detection
+        grid_level_str = signal.metadata.get("grid_level")
+        broker_order_id = trade.broker_trade_id
+        if grid_level_str and broker_order_id:
+            self._pending_order_map[grid_level_str] = broker_order_id
+
+        self._log.info(
+            "limit_order_placed",
+            side=order.side.value,
+            quantity=order.quantity,
+            limit_price=order.limit_price,
+            broker_order_id=broker_order_id,
+            grid_level=grid_level_str,
+        )
+        self._event_log.append(EventLogEntry(
+            timestamp=datetime.now(UTC).isoformat(),
+            event="limit_placed",
+            details=(
+                f"{order.side.value.upper()} {order.quantity}"
+                f" limit @ {order.limit_price:.2f} (#{broker_order_id})"
+            ),
+        ))
+
+    def _place_market_order(self, order: Order, sig: object, latest_close: float) -> None:
+        """Place a market order (original flow)."""
+        from aurex_trade.domain.models import Signal as SignalType_
+
+        signal: SignalType_ = sig  # type: ignore[assignment]
 
         # Snapshot open trades before order to resolve new trade ID via diff
         open_before = {t.broker_trade_id for t in self._broker.get_open_trades(self._symbol)}
@@ -681,8 +865,9 @@ class TradingEngine:
         try:
             trade = self._broker.place_order(order)
         except Exception:
-            self._log.exception("order_execution_failed", symbol=self._symbol, side=side.value)
-            # Release grid level — no trade was placed
+            self._log.exception(
+                "order_execution_failed", symbol=self._symbol, side=order.side.value
+            )
             grid_level_str = signal.metadata.get("grid_level")
             if grid_level_str:
                 release = getattr(self._strategy, "release_level", None)
@@ -748,16 +933,8 @@ class TradingEngine:
             if report_fill is not None:
                 report_fill(grid_level_str, trade.price)
 
-        # Step 5: Update position and track P&L
-        prev_position = position
+        # Step 5: Update position tracking
         updated_position = self._broker.get_positions(self._symbol)
-
-        # Track trade P&L for consecutive loss detection
-        prev_realized = prev_position.realized_pnl if prev_position else 0.0
-        new_realized = updated_position.realized_pnl if updated_position else 0.0
-        trade_pnl = new_realized - prev_realized
-        if trade_pnl != 0.0:
-            self._trade_pnls.append(trade_pnl)
 
         # Update peak equity
         current_equity = self._broker.equity
@@ -772,14 +949,4 @@ class TradingEngine:
                 avg_cost=updated_position.average_cost,
                 unrealized_pnl=updated_position.unrealized_pnl,
                 realized_pnl=updated_position.realized_pnl,
-            )
-        elif prev_position and prev_position.quantity != 0.0:
-            # Position was closed — log round-trip result
-            self._log.info(
-                "position_closed",
-                symbol=self._symbol,
-                realized_pnl=prev_position.realized_pnl,
-                entry_price=prev_position.average_cost,
-                exit_price=trade.price,
-                quantity=prev_position.quantity,
             )

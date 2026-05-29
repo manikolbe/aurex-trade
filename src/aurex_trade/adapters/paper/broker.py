@@ -14,6 +14,7 @@ from aurex_trade.domain.models import (
     ClosedTradeInfo,
     OpenBrokerTrade,
     Order,
+    PendingOrder,
     Position,
     Trade,
 )
@@ -103,6 +104,14 @@ class PaperBrokerAdapter:
     def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None:
         """Paper broker does not track closed trade details."""
         return None
+
+    def get_pending_orders(self, symbol: str) -> list[PendingOrder]:
+        """Paper broker has no pending orders."""
+        return []
+
+    def cancel_all_orders(self, symbol: str) -> int:
+        """Paper broker has no pending orders to cancel."""
+        return 0
 
     # -- Internal --
 
