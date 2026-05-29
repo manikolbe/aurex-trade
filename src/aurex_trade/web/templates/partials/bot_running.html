@@ -509,7 +509,7 @@
     html += renderPnlGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit, state.daily_loss_limit);
 
     // Grid levels table with paired columns
-    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th><th>Status</th></tr></thead><tbody>';
+    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Entry</th><th>Buy (SL)</th><th>Sell (SL)</th></tr></thead><tbody>';
 
     var levels = state.grid_levels;
     var foundAnchor = false;
@@ -522,15 +522,22 @@
         html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="4">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
       }
 
-      var buyIcon = statusIcon(lv.buy.status, 'success');
-      var sellIcon = statusIcon(lv.sell.status, 'error');
+      var buyCell = statusIcon(lv.buy.status, 'success');
+      var sellCell = statusIcon(lv.sell.status, 'error');
+      if (lv.status === 'active' && lv.buy.sl) {
+        buyCell += '<span class="text-xs text-base-content/50 ml-1">SL ' + lv.buy.sl.toFixed(2) + '</span>';
+      }
+      if (lv.status === 'active' && lv.sell.sl) {
+        sellCell += '<span class="text-xs text-base-content/50 ml-1">SL ' + lv.sell.sl.toFixed(2) + '</span>';
+      }
 
+      var entryCell = lv.status !== 'waiting' ? '<span class="font-mono">' + lv.entry_price.toFixed(2) + '</span>' : '';
       var rowClass = lv.status === 'active' ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');
       html += '<tr class="' + rowClass + '">';
       html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
-      html += '<td class="text-sm">' + buyIcon + '</td>';
-      html += '<td class="text-sm">' + sellIcon + '</td>';
-      html += '<td class="text-xs text-base-content/60">' + lv.status + '</td>';
+      html += '<td class="text-xs">' + entryCell + '</td>';
+      html += '<td class="text-sm">' + buyCell + '</td>';
+      html += '<td class="text-sm">' + sellCell + '</td>';
       html += '</tr>';
     }
     html += '</tbody></table>';

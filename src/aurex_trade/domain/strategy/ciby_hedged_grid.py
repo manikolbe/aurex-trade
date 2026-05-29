@@ -44,6 +44,7 @@ class CibyHedgedGridStrategy:
         self._grid_levels: list[float] = []
         self._signal_queue: deque[Signal] = deque()
         self._filled_levels: dict[float, str] = {}
+        self._filled_entry_prices: dict[float, float] = {}
         self._pair_closed_sides: dict[str, set[str]] = {}
         self._session_realized_pnl: float = 0.0
         self._daily_realized_pnl: float = 0.0
@@ -322,16 +323,23 @@ class CibyHedgedGridStrategy:
                 sell_status = "stopped" if "short" in closed_sides else "active"
                 if "long" in closed_sides and "short" in closed_sides:
                     status = "closed"
+                entry = self._filled_entry_prices.get(level, level)
+                buy_sl = entry - self._stop_distance
+                sell_sl = entry + self._stop_distance
             else:
                 status = "waiting"
                 buy_status = "none"
                 sell_status = "none"
+                entry = 0.0
+                buy_sl = 0.0
+                sell_sl = 0.0
 
             grid_levels.append({
                 "price": level,
                 "status": status,
-                "buy": {"status": buy_status, "pnl": 0.0},
-                "sell": {"status": sell_status, "pnl": 0.0},
+                "entry_price": entry,
+                "buy": {"status": buy_status, "sl": buy_sl},
+                "sell": {"status": sell_status, "sl": sell_sl},
             })
 
         return {
@@ -379,6 +387,7 @@ class CibyHedgedGridStrategy:
         self._grid_levels = []
         self._signal_queue = deque()
         self._filled_levels = {}
+        self._filled_entry_prices = {}
         self._pair_closed_sides = {}
         self._session_realized_pnl = 0.0
         self._close_all_pending = False
@@ -411,6 +420,7 @@ class CibyHedgedGridStrategy:
         entry_price = bar.close
 
         self._filled_levels[level] = pair_id
+        self._filled_entry_prices[level] = entry_price
 
         level_str = f"{level:.2f}"
         long_key = f"{level_str}_long"
