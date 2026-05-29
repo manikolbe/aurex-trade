@@ -47,6 +47,7 @@ class CibyHedgedGridStrategy:
         self._filled_entry_prices: dict[float, float] = {}
         self._pair_closed_sides: dict[str, set[str]] = {}
         self._session_realized_pnl: float = 0.0
+        self._session_unrealized_pnl: float = 0.0
         self._daily_realized_pnl: float = 0.0
         self._session_active: bool = True
         self._current_date: str = ""
@@ -165,6 +166,10 @@ class CibyHedgedGridStrategy:
             ),
         )
 
+    def update_unrealized_pnl(self, unrealized_pnl: float) -> None:
+        """Called by engine each cycle with current unrealized P&L from broker."""
+        self._session_unrealized_pnl = unrealized_pnl
+
     def generate(self, bars: list[BarData]) -> Signal | None:
         """Generate a signal: drain queue, check P&L exits, or detect grid crossings."""
         if len(bars) < self.min_bars:
@@ -192,12 +197,13 @@ class CibyHedgedGridStrategy:
         if not self._session_active:
             return None
 
-        # Check session P&L limits
+        # Check session P&L limits (realized + unrealized)
         if self._anchor_price is not None:
-            if self._session_realized_pnl >= self._session_profit_target:
+            total_session_pnl = self._session_realized_pnl + self._session_unrealized_pnl
+            if total_session_pnl >= self._session_profit_target:
                 self._trigger_close_all("session_profit_target")
                 return self._flat_close_all(current_bar, "session_profit_target")
-            if self._session_realized_pnl <= -self._session_loss_limit:
+            if total_session_pnl <= -self._session_loss_limit:
                 self._trigger_close_all("session_loss_limit")
                 return self._flat_close_all(current_bar, "session_loss_limit")
 
@@ -346,7 +352,7 @@ class CibyHedgedGridStrategy:
             "type": "paired_grid",
             "anchor_price": self._anchor_price,
             "grid_levels": grid_levels,
-            "session_pnl": self._session_realized_pnl,
+            "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
             "session_profit_target": self._session_profit_target,
             "session_loss_limit": self._session_loss_limit,
             "daily_pnl": self._daily_realized_pnl,
@@ -390,6 +396,7 @@ class CibyHedgedGridStrategy:
         self._filled_entry_prices = {}
         self._pair_closed_sides = {}
         self._session_realized_pnl = 0.0
+        self._session_unrealized_pnl = 0.0
         self._close_all_pending = False
         self._session_count += 1
 

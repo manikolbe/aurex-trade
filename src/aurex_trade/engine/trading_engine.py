@@ -69,6 +69,7 @@ class EngineMetrics(TypedDict):
     realized_pnl: float
     win_rate: float | None
     avg_slippage: float | None
+    current_price: float | None
 
 
 class TradingEngine:
@@ -122,6 +123,7 @@ class TradingEngine:
         # Observability (read by web layer via get_metrics())
         self._cycle_count: int = 0
         self._started_at: datetime | None = None
+        self._last_price: float | None = None
         # Equity history for live chart
         self._equity_history: list[EquitySnapshot] = []
         # Trade markers for chart overlay
@@ -329,6 +331,7 @@ class TradingEngine:
             realized_pnl=realized_pnl,
             win_rate=win_rate,
             avg_slippage=avg_slippage,
+            current_price=self._last_price,
         )
 
     def _close_all_trades(self, reason: str) -> None:
@@ -475,6 +478,7 @@ class TradingEngine:
             return
 
         latest_close = bars[-1].close
+        self._last_price = latest_close
 
         # Record equity + price snapshot for live charts
         self._equity_history.append(
@@ -491,6 +495,15 @@ class TradingEngine:
             latest_close=latest_close,
             latest_time=bars[-1].timestamp.isoformat(),
         )
+
+        # Feed unrealized P&L to strategy (for session P&L tracking)
+        update_pnl = getattr(self._strategy, "update_unrealized_pnl", None)
+        if update_pnl is not None:
+            if hasattr(self._broker, "get_account_summary"):
+                summary = self._broker.get_account_summary()
+                update_pnl(summary["unrealized_pnl"])
+            else:
+                update_pnl(0.0)
 
         # Step 2: Generate signal
         signal = self._strategy.generate(bars)

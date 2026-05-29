@@ -1,6 +1,16 @@
 {% if metrics %}
 <div class="grid grid-cols-2 gap-x-6 gap-y-3">
   <div>
+    <div class="text-xs text-base-content/60">Current Price</div>
+    <div class="text-lg font-semibold font-mono">
+      {% if metrics['current_price'] is not none %}
+        {{ "%.2f" | format(metrics['current_price']) }}
+      {% else %}
+        —
+      {% endif %}
+    </div>
+  </div>
+  <div>
     <div class="text-xs text-base-content/60">Cash Balance</div>
     <div class="text-lg font-semibold">${{ "%.2f" | format(metrics['balance']) }}</div>
   </div>
@@ -44,7 +54,7 @@
     <div class="text-xs text-base-content/60">Avg Slippage</div>
     <div class="text-lg font-semibold">
       {% if metrics['avg_slippage'] is not none %}
-        {{ "%.2f" | format(metrics['avg_slippage']) }} pts
+        ${{ "%.2f" | format(metrics['avg_slippage']) }}
       {% else %}
         —
       {% endif %}

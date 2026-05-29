@@ -380,6 +380,7 @@ class BotMetricsResponse(BaseModel):
     realized_pnl: float = 0.0
     win_rate: float | None = None
     avg_slippage: float | None = None
+    current_price: float | None = None
 
 
 class BotStatusResponse(BaseModel):
