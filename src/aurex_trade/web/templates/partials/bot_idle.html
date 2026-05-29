@@ -90,9 +90,21 @@
           </div>
 
           <div class="form-control mt-4">
-            <button type="submit" class="btn btn-success btn-sm w-full">Start Paper Trading</button>
+            <button type="button" class="btn btn-success btn-sm w-full" onclick="showRiskConfirmModal()">Start Paper Trading</button>
           </div>
         </form>
+
+        <dialog id="bot-risk-confirm-modal" class="modal">
+          <div class="modal-box">
+            <h3 class="text-lg font-bold mb-3">Confirm Risk Parameters</h3>
+            <div id="bot-risk-confirm-content"></div>
+            <div class="modal-action">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bot-risk-confirm-modal').close()">Cancel</button>
+              <button class="btn btn-success btn-sm" onclick="document.getElementById('bot-risk-confirm-modal').close(); document.querySelector('#bot-content form').requestSubmit();">Start Bot</button>
+            </div>
+          </div>
+          <form method="dialog" class="modal-backdrop"><button>close</button></form>
+        </dialog>
       </div>
     </div>
 
@@ -206,6 +218,33 @@ function updateRiskPreview() {
   html += '</div>';
 
   preview.innerHTML = html;
+}
+
+function showRiskConfirmModal() {
+  var content = document.getElementById('bot-risk-confirm-content');
+  var preview = document.getElementById('bot-risk-preview');
+
+  // Gather key config info
+  var strategy = document.getElementById('bot-strategy-select');
+  var strategyName = strategy.options[strategy.selectedIndex] ? strategy.options[strategy.selectedIndex].textContent : '';
+  var symbol = document.querySelector('[name="symbol"]').value;
+  var granularity = document.getElementById('bot-granularity-select').value;
+  var riskDisabled = document.getElementById('bot-risk-disabled-cb').checked;
+
+  var html = '<div class="grid grid-cols-1 gap-2 text-sm mb-4">';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Strategy</span><span class="font-semibold">' + strategyName + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Symbol</span><span class="font-mono">' + symbol + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Granularity</span><span class="font-mono">' + granularity + '</span></div>';
+  if (riskDisabled) {
+    html += '<div class="alert alert-warning py-2 px-3 mt-2"><span class="text-sm font-semibold">Risk engine is DISABLED</span></div>';
+  }
+  html += '</div>';
+
+  html += '<div class="divider my-2 text-xs">Risk Summary</div>';
+  html += preview.innerHTML;
+
+  content.innerHTML = html;
+  document.getElementById('bot-risk-confirm-modal').showModal();
 }
 
 function updateBotDescription() {
