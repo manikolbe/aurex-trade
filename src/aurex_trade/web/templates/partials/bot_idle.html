@@ -98,9 +98,10 @@
 
     <div class="card bg-base-100 shadow-md">
       <div class="card-body">
-        <h2 class="card-title text-lg">Status</h2>
-        <div class="badge badge-ghost">Idle</div>
-        <p class="text-sm text-base-content/60 mt-2">Bot is not running. Configure and start to begin paper trading.</p>
+        <h2 class="card-title text-lg">Risk Preview</h2>
+        <div id="bot-risk-preview">
+          <p class="text-sm text-base-content/60">Select a strategy to see risk calculations.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -140,7 +141,7 @@ function updateBotParams() {
   var container = document.getElementById('bot-strategy-params');
   var name = select.value;
   var meta = botStrategies[name];
-  if (!meta) { container.innerHTML = ''; return; }
+  if (!meta) { container.innerHTML = ''; updateRiskPreview(); return; }
   container.innerHTML = meta.params.map(function(p) {
     var step = Number.isInteger(p.default) ? '1' : '0.1';
     return '<div class="form-control">' +
@@ -148,10 +149,63 @@ function updateBotParams() {
       '<div class="tooltip tooltip-top w-full" data-tip="' + p.tooltip.replace(/"/g, '&quot;') + '">' +
       '<input type="number" name="param_' + p.key + '" value="' + p.default +
       '" step="' + step + '" min="' + p.min_value + '" max="' + p.max_value +
-      '" class="input input-bordered input-sm w-full">' +
+      '" class="input input-bordered input-sm w-full" oninput="updateRiskPreview()">' +
       '</div>' +
       '</div>';
   }).join('');
+  updateRiskPreview();
+}
+
+function updateRiskPreview() {
+  var preview = document.getElementById('bot-risk-preview');
+  var select = document.getElementById('bot-strategy-select');
+  var name = select.value;
+  var meta = botStrategies[name];
+
+  if (!meta) {
+    preview.innerHTML = '<p class="text-sm text-base-content/60">Select a strategy to see risk calculations.</p>';
+    return;
+  }
+
+  // Read current param values from form
+  function getParam(key, fallback) {
+    var input = document.querySelector('[name="param_' + key + '"]');
+    return input ? parseFloat(input.value) || fallback : fallback;
+  }
+
+  var gridUnits = getParam('grid_units', 0);
+  var initialUnits = getParam('initial_units', 0);
+  var stopDistance = getParam('stop_distance', 0);
+  var sessionLossLimit = getParam('session_loss_limit', 0);
+  var sessionProfitTarget = getParam('session_profit_target', 0);
+  var dailyLossLimit = getParam('daily_loss_limit', 0);
+  var gridSpacing = getParam('grid_spacing', 0);
+
+  // If this isn't a grid strategy with these params, show generic message
+  if (!gridUnits || !stopDistance) {
+    preview.innerHTML = '<p class="text-sm text-base-content/60">Risk preview not available for this strategy.</p>';
+    return;
+  }
+
+  var unitsPerTrade = gridUnits;
+  var lossPerPairWorst = 2 * unitsPerTrade * stopDistance;
+  var maxPairs = lossPerPairWorst > 0 ? Math.floor(sessionLossLimit / lossPerPairWorst) + 1 : 1;
+  var worstCaseLoss = maxPairs * lossPerPairWorst;
+  var effectiveLimit = dailyLossLimit;
+
+  var html = '<div class="grid grid-cols-1 gap-2 text-sm">';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Units per trade</span><span class="font-mono">' + unitsPerTrade + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Stop distance</span><span class="font-mono">$' + stopDistance + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Loss per pair (worst)</span><span class="font-mono text-error">$' + lossPerPairWorst.toFixed(2) + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Max concurrent pairs</span><span class="font-mono">' + maxPairs + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Worst case loss</span><span class="font-mono text-error">$' + worstCaseLoss.toFixed(2) + '</span></div>';
+  html += '<div class="divider my-1"></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Session loss limit</span><span class="font-mono">$' + sessionLossLimit.toFixed(2) + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Session profit target</span><span class="font-mono text-success">$' + sessionProfitTarget.toFixed(2) + '</span></div>';
+  html += '<div class="flex justify-between"><span class="text-base-content/60">Daily loss limit</span><span class="font-mono">$' + effectiveLimit.toFixed(2) + '</span></div>';
+  html += '</div>';
+
+  preview.innerHTML = html;
 }
 
 function updateBotDescription() {
