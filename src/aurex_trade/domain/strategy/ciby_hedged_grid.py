@@ -194,6 +194,13 @@ class CibyHedgedGridStrategy:
             if self._signal_queue:
                 return self._signal_queue.popleft()
 
+        # Maintenance: re-place levels that were cancelled/rejected
+        # Ensure 2 levels above and 2 below current price are always placed or filled
+        if self._anchor_price is not None:
+            self._maintain_grid(current_bar)
+            if self._signal_queue:
+                return self._signal_queue.popleft()
+
         return None
 
     def report_fill(self, grid_level_key: str, fill_price: float) -> None:
@@ -445,6 +452,30 @@ class CibyHedgedGridStrategy:
                 levels.append(below)
 
         return sorted(levels)
+
+    def _maintain_grid(self, bar: BarData) -> None:
+        """Ensure N levels above and below current price are placed or filled.
+
+        Re-places levels that were cancelled/expired by the broker or rejected
+        by the risk engine. This keeps the grid populated as price moves.
+        """
+        price = bar.close
+        spacing = self._grid_spacing
+
+        # Find the nearest levels above and below current price
+        first_above = math.ceil(price / spacing) * spacing
+        first_below = math.floor(price / spacing) * spacing
+        if first_above == price:
+            first_above = round(first_above + spacing, 2)
+        if first_below == price:
+            first_below = round(first_below - spacing, 2)
+
+        target_above = [round(first_above + i * spacing, 2) for i in range(self._LEVELS_AHEAD)]
+        target_below = [round(first_below - i * spacing, 2) for i in range(self._LEVELS_AHEAD)]
+
+        for level in target_above + target_below:
+            if level not in self._placed_levels and level not in self._filled_levels:
+                self._queue_limit_for_level(bar.symbol, level, price)
 
     def _place_initial_levels(self, bar: BarData) -> None:
         """Place limit orders at the first N levels above and below anchor."""

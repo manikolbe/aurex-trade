@@ -225,22 +225,33 @@ class TestReplenishment:
 class TestSignalRejection:
     """Test on_signal_rejected clears queue and releases level."""
 
-    def test_rejection_removes_level_from_queue(self) -> None:
+    def test_rejection_clears_from_placed_levels(self) -> None:
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
         bars = [_bar(4563.0)]
 
         # Get first signal
         first_signal = strategy.generate(bars)
         assert first_signal is not None
+        level = float(first_signal.metadata["limit_price"])
 
-        # Reject it
+        # Reject it — should remove from placed
         strategy.on_signal_rejected(first_signal.metadata["grid_level"])
+        assert level not in strategy._placed_levels
 
-        # Remaining signals should not include that level
-        remaining = _drain_all(strategy, bars)
-        rejected_level = first_signal.metadata["limit_price"]
-        for sig in remaining:
-            assert sig.metadata["limit_price"] != rejected_level
+    def test_rejected_level_is_re_placed_by_maintenance(self) -> None:
+        """Cancelled/rejected levels get re-placed on the next generate cycle."""
+        strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
+        bars = [_bar(4563.0)]
+        _drain_all(strategy, bars)
+
+        # Reject a level
+        strategy.on_signal_rejected("4570.00_short")
+        assert 4570.0 not in strategy._placed_levels
+
+        # Next generate triggers maintenance → re-places 4570
+        signal = strategy.generate(bars)
+        assert signal is not None
+        assert float(signal.metadata["limit_price"]) == 4570.0
 
     def test_rejection_releases_placed_level(self) -> None:
         strategy = CibyHedgedGridStrategy(grid_spacing=10.0)
