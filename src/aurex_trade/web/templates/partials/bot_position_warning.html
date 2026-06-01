@@ -1,0 +1,38 @@
+<div id="bot-content">
+  <div class="card bg-base-100 shadow-md max-w-lg mx-auto">
+    <div class="card-body">
+      <h2 class="card-title text-lg text-warning">Open Positions Detected</h2>
+      <p class="text-sm text-base-content/70 mb-3">
+        There are <strong>{{ open_trades|length }}</strong> open {{ symbol }} trade(s) on your OANDA account.
+        The bot does not manage pre-existing positions — it will only track trades it opens itself.
+      </p>
+
+      <div class="overflow-x-auto mb-4">
+        <table class="table table-xs">
+          <thead><tr><th>Ticket</th><th>Side</th><th>Units</th><th>Entry</th></tr></thead>
+          <tbody>
+            {% for t in open_trades %}
+            <tr>
+              <td class="font-mono">#{{ t.id }}</td>
+              <td class="{{ 'text-success' if t.side == 'buy' else 'text-error' }}">{{ t.side|upper }}</td>
+              <td class="font-mono">{{ t.quantity }}</td>
+              <td class="font-mono">{{ "%.2f"|format(t.price) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <form hx-post="/htmx/bot/start" hx-target="#bot-content" hx-swap="innerHTML">
+        {% for key, value in form_data.items() %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}">
+        {% endfor %}
+        <input type="hidden" name="force" value="true">
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-warning btn-sm flex-1">Start Anyway</button>
+          <a href="/bot" class="btn btn-ghost btn-sm flex-1">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

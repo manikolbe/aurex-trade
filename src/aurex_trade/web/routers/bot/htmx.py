@@ -11,9 +11,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
+from aurex_trade.adapters.oanda.broker import OANDABrokerAdapter
+from aurex_trade.adapters.oanda.connection import OANDAConnection
 from aurex_trade.adapters.sqlite.credential_store import FernetCredentialStore
 from aurex_trade.adapters.sqlite.user_defaults_store import UserDefaultsStore
+from aurex_trade.config import OANDAConfig
 from aurex_trade.domain.models import User
+from aurex_trade.ports.credential_store import CredentialStorePort
 from aurex_trade.web._bot_sessions import BotAlreadyRunningError, BotSessionManager
 from aurex_trade.web.auth.dependencies import get_current_user
 from aurex_trade.web.dependencies import (
@@ -88,6 +92,37 @@ async def _parse_start_form(request: Request) -> BotStartRequest:
     return BotStartRequest(**body)  # type: ignore[arg-type]
 
 
+def _check_open_positions(
+    credential_store: CredentialStorePort, user_id: str, symbol: str
+) -> list[dict[str, object]]:
+    """Check broker for open positions. Returns list of open trades or empty."""
+    creds = credential_store.retrieve(user_id, "oanda")
+    if creds is None:
+        return []
+    try:
+        config = OANDAConfig(
+            access_token=creds.access_token,
+            account_id=creds.account_id,
+            server=creds.server,
+        )
+        conn = OANDAConnection(config)
+        conn.connect()
+        broker = OANDABrokerAdapter(conn, creds.account_id)
+        trades = broker.get_open_trades(symbol)
+        conn.disconnect()
+        return [
+            {
+                "id": t.broker_trade_id,
+                "side": t.side.value,
+                "quantity": t.quantity,
+                "price": t.open_price,
+            }
+            for t in trades
+        ]
+    except Exception:
+        return []
+
+
 @router.post("/start", response_class=HTMLResponse)
 @limiter.limit(ratelimit_config.bot_control)
 async def htmx_start_bot(
@@ -101,10 +136,24 @@ async def htmx_start_bot(
     """Start the bot and return a running status partial."""
     templates = _get_templates(request)
 
+    # Read form once (Starlette caches it)
+    form = await request.form()
+    force = str(form.get("force", "")).lower() == "true"
+
     try:
         body = await _parse_start_form(request)
     except (ValidationError, ValueError) as exc:
         return templates.TemplateResponse(request, "partials/bot_error.html", {"error": str(exc)})
+
+    # Check for existing open positions (unless user confirmed with force)
+    if not force:
+        open_trades = _check_open_positions(credential_store, user.id, body.symbol)
+        if open_trades:
+            return templates.TemplateResponse(
+                request,
+                "partials/bot_position_warning.html",
+                {"open_trades": open_trades, "symbol": body.symbol, "form_data": form},
+            )
 
     try:
         session = start_bot_session(
