@@ -704,15 +704,22 @@ class TradingEngine:
         if notify is not None:
             notify()
 
-    def _check_closures(self, open_trades: list[OpenBrokerTrade]) -> None:
+    def _check_closures(
+        self,
+        open_trades: list[OpenBrokerTrade],
+        skip_trade_ids: set[str] | None = None,
+    ) -> None:
         """Detect trades closed by the broker (TP/SL hit) and release grid levels."""
         if not self._grid_trade_map:
             return
 
         open_trade_ids = {t.broker_trade_id for t in open_trades}
+        skip = skip_trade_ids or set()
 
         keys_to_free: list[tuple[str, str]] = []
         for grid_key, broker_id in self._grid_trade_map.items():
+            if broker_id in skip:
+                continue
             if broker_id not in open_trade_ids:
                 keys_to_free.append((grid_key, broker_id))
 
@@ -788,8 +795,13 @@ class TradingEngine:
     def _run_fast_poll(self) -> None:
         """Fast poll: detect fills and closures (runs every 5s)."""
         open_trades = self._broker.get_open_trades(self._symbol)
+        # Snapshot trade IDs BEFORE fill detection — any new IDs added during
+        # _check_limit_fills (opposite market orders) must be skipped by closure
+        # detection since they weren't in the open_trades fetch.
+        trade_ids_before = set(self._grid_trade_map.values())
         self._check_limit_fills(open_trades)
-        self._check_closures(open_trades)
+        newly_added = set(self._grid_trade_map.values()) - trade_ids_before
+        self._check_closures(open_trades, skip_trade_ids=newly_added)
 
     def _run_strategy_cycle(self) -> None:
         """Strategy cycle: fetch data, generate signals, place orders."""

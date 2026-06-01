@@ -212,8 +212,13 @@ class TestGetPositions:
         self.adapter.get_positions("XAU_USD")
         self.conn.get.assert_called_once_with("/v3/accounts/101-001-123/positions/XAU_USD")
 
-    def test_api_error_propagates(self) -> None:
+    def test_404_returns_none(self) -> None:
         self.conn.get.side_effect = OANDAAPIError(404, "No such position")
+        result = self.adapter.get_positions("XAU_USD")
+        assert result is None
+
+    def test_non_404_error_propagates(self) -> None:
+        self.conn.get.side_effect = OANDAAPIError(500, "Server error")
         try:
             self.adapter.get_positions("XAU_USD")
             assert False, "Should have raised"  # noqa: B011
