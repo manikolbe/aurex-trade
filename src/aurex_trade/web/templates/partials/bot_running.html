@@ -571,9 +571,19 @@
       var sellCell = statusIcon(lv.sell.status, 'error');
       if (lv.buy.status === 'active' && lv.buy.fill) {
         buyCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.buy.fill.toFixed(2) + ' SL ' + lv.buy.sl.toFixed(2) + '</span>';
+        if (lv.buy.ticket) buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.ticket + '</span>';
+        if (lv.buy.units) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.buy.units + 'u</span>';
       }
       if (lv.sell.status === 'active' && lv.sell.fill) {
         sellCell += '<span class="text-xs text-base-content/50 ml-1">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
+        if (lv.sell.ticket) sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.ticket + '</span>';
+        if (lv.sell.units) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.sell.units + 'u</span>';
+      }
+      if (lv.buy.status === 'placed' && lv.buy.order_id) {
+        buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.order_id + '</span>';
+      }
+      if (lv.sell.status === 'placed' && lv.sell.order_id) {
+        sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.order_id + '</span>';
       }
 
       var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');

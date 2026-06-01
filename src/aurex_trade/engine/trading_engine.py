@@ -267,12 +267,46 @@ class TradingEngine:
         return list(self._event_log)
 
     def get_strategy_state(self) -> dict[str, object] | None:
-        """Return strategy-specific display state, if available."""
+        """Return strategy-specific display state, if available.
+
+        Enriches strategy state with engine-level broker IDs and quantities.
+        """
         get_state = getattr(self._strategy, "get_display_state", None)
-        if get_state is not None:
-            result: dict[str, object] | None = get_state()
-            return result
-        return None
+        if get_state is None:
+            return None
+        result: dict[str, object] | None = get_state()
+        if result is None:
+            return None
+
+        # Enrich grid levels with broker ticket IDs and units
+        grid_levels = result.get("grid_levels")
+        if isinstance(grid_levels, list):
+            grid_units = getattr(self._strategy, "_grid_units", None)
+            for level_info in grid_levels:
+                if not isinstance(level_info, dict):
+                    continue
+                price = level_info.get("price")
+                if price is None:
+                    continue
+                level_str = f"{float(price):.2f}"
+                for side_key, grid_suffix in (("buy", "long"), ("sell", "short")):
+                    side_info = level_info.get(side_key)
+                    if not isinstance(side_info, dict):
+                        continue
+                    grid_key = f"{level_str}_{grid_suffix}"
+                    # Add broker trade ID (filled trades)
+                    trade_id = self._grid_trade_map.get(grid_key)
+                    if trade_id:
+                        side_info["ticket"] = trade_id
+                    # Add broker order ID (pending limits)
+                    order_id = self._pending_order_map.get(grid_key)
+                    if order_id:
+                        side_info["order_id"] = order_id
+                    # Add units
+                    if grid_units is not None:
+                        side_info["units"] = float(grid_units)
+
+        return result
 
     def get_risk_summary(self) -> dict[str, float]:
         """Return risk summary calculations for UI display.
