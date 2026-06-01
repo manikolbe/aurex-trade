@@ -330,6 +330,7 @@ class TradingEngine:
                 "drawdown_limit": round(effective_limit, 2),
                 "headroom": round(headroom, 2),
                 "stop_distance": stop_distance,
+                "risk_enabled": self._risk_engine._enabled,
             }
 
         # Default: dynamic position sizing
@@ -355,6 +356,7 @@ class TradingEngine:
             "drawdown_limit": round(drawdown_limit, 2),
             "headroom": round(headroom, 2),
             "stop_distance": stop_distance,
+            "risk_enabled": self._risk_engine._enabled,
         }
 
     def get_metrics(self) -> EngineMetrics:
@@ -571,10 +573,9 @@ class TradingEngine:
             return
 
         side = OrderSide.BUY if opposite_side_str == "BUY" else OrderSide.SELL
-        quantity = min(
-            float(fixed_units_str),
-            float(self._risk_engine._max_position_size),
-        )
+        quantity = float(fixed_units_str)
+        if self._risk_engine._enabled:
+            quantity = min(quantity, float(self._risk_engine._max_position_size))
         stop_loss = float(opposite_stop_str) if opposite_stop_str else None
 
         order = Order(
@@ -970,19 +971,17 @@ class TradingEngine:
         # Prefer strategy-specified fixed units
         fixed_units_str = sig.metadata.get("fixed_units")
         if fixed_units_str:
-            quantity = min(
-                float(fixed_units_str),
-                float(self._risk_engine._max_position_size),
-            )
+            quantity = float(fixed_units_str)
+            if self._risk_engine._enabled:
+                quantity = min(quantity, float(self._risk_engine._max_position_size))
         else:
             quantity = self._risk_engine.calculate_position_size(
                 sig, account_state, latest_close
             )
             if quantity <= 0.0:
-                quantity = min(
-                    self._fallback_position_size,
-                    float(self._risk_engine._max_position_size),
-                )
+                quantity = self._fallback_position_size
+            if self._risk_engine._enabled:
+                quantity = min(quantity, float(self._risk_engine._max_position_size))
 
         # Determine order type from signal metadata
         is_limit = sig.metadata.get("order_type") == "LIMIT"
