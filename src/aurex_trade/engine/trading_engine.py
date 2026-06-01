@@ -222,7 +222,9 @@ class TradingEngine:
                     )
 
             if self._running and (max_cycles is None or self._cycle_count < max_cycles):
-                time.sleep(self._FILL_POLL_INTERVAL)
+                sleep_seconds = self._FILL_POLL_INTERVAL if self._interval_seconds > 0 else 0
+                if sleep_seconds:
+                    time.sleep(sleep_seconds)
 
         self._running = False
         self._started_at = None
