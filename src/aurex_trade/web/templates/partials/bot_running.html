@@ -582,8 +582,12 @@
         buyCell += '<br>' + buyMeta;
       } else {
         buyCell = statusIcon(lv.buy.status, 'success');
-        if (lv.buy.status === 'placed' && lv.buy.order_id) {
-          buyCell += '<br><span class="text-xs text-base-content/40">#' + lv.buy.order_id + '</span>';
+        if (lv.buy.status === 'placed') {
+          if (lv.buy.sl) buyCell += '<br><span class="text-xs text-base-content/50">SL ' + lv.buy.sl.toFixed(2) + '</span>';
+          var buyPlacedMeta = [];
+          if (lv.buy.units) buyPlacedMeta.push(lv.buy.units + 'u');
+          if (lv.buy.order_id) buyPlacedMeta.push('#' + lv.buy.order_id);
+          if (buyPlacedMeta.length) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + buyPlacedMeta.join(' · ') + '</span>';
         }
       }
 
@@ -599,8 +603,12 @@
         sellCell += '<br>' + sellMeta;
       } else {
         sellCell = statusIcon(lv.sell.status, 'error');
-        if (lv.sell.status === 'placed' && lv.sell.order_id) {
-          sellCell += '<br><span class="text-xs text-base-content/40">#' + lv.sell.order_id + '</span>';
+        if (lv.sell.status === 'placed') {
+          if (lv.sell.sl) sellCell += '<br><span class="text-xs text-base-content/50">SL ' + lv.sell.sl.toFixed(2) + '</span>';
+          var sellPlacedMeta = [];
+          if (lv.sell.units) sellPlacedMeta.push(lv.sell.units + 'u');
+          if (lv.sell.order_id) sellPlacedMeta.push('#' + lv.sell.order_id);
+          if (sellPlacedMeta.length) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + sellPlacedMeta.join(' · ') + '</span>';
         }
       }
 
