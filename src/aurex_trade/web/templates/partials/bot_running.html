@@ -576,11 +576,10 @@
         var buySign = buyPnl >= 0 ? '+' : '';
         buyCell = '<span class="' + buyColor + '">● Active</span>';
         buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + ' SL ' + lv.buy.sl.toFixed(2) + '</span>';
-        buyCell += '<br><span class="text-xs font-mono ' + buyColor + '">' + buySign + '$' + buyPnl.toFixed(2) + '</span>';
-        var buyMeta = [];
-        if (lv.buy.ticket) buyMeta.push('#' + lv.buy.ticket);
-        if (lv.buy.units) buyMeta.push(lv.buy.units + 'u');
-        if (buyMeta.length) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + buyMeta.join(' · ') + '</span>';
+        var buyMeta = '<span class="text-xs font-mono ' + buyColor + '">' + buySign + '$' + buyPnl.toFixed(2) + '</span>';
+        if (lv.buy.units) buyMeta += '<span class="text-xs text-base-content/40 ml-1">' + lv.buy.units + 'u</span>';
+        if (lv.buy.ticket) buyMeta += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.ticket + '</span>';
+        buyCell += '<br>' + buyMeta;
       } else {
         buyCell = statusIcon(lv.buy.status, 'success');
         if (lv.buy.status === 'placed' && lv.buy.order_id) {
@@ -594,11 +593,10 @@
         var sellSign = sellPnl >= 0 ? '+' : '';
         sellCell = '<span class="' + sellColor + '">● Active</span>';
         sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
-        sellCell += '<br><span class="text-xs font-mono ' + sellColor + '">' + sellSign + '$' + sellPnl.toFixed(2) + '</span>';
-        var sellMeta = [];
-        if (lv.sell.ticket) sellMeta.push('#' + lv.sell.ticket);
-        if (lv.sell.units) sellMeta.push(lv.sell.units + 'u');
-        if (sellMeta.length) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + sellMeta.join(' · ') + '</span>';
+        var sellMeta = '<span class="text-xs font-mono ' + sellColor + '">' + sellSign + '$' + sellPnl.toFixed(2) + '</span>';
+        if (lv.sell.units) sellMeta += '<span class="text-xs text-base-content/40 ml-1">' + lv.sell.units + 'u</span>';
+        if (lv.sell.ticket) sellMeta += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.ticket + '</span>';
+        sellCell += '<br>' + sellMeta;
       } else {
         sellCell = statusIcon(lv.sell.status, 'error');
         if (lv.sell.status === 'placed' && lv.sell.order_id) {
