@@ -567,27 +567,43 @@
         html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="3">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
       }
 
-      var buyCell = statusIcon(lv.buy.status, 'success');
-      var sellCell = statusIcon(lv.sell.status, 'error');
+      var curPrice = state.current_price || 0;
+      var buyCell, sellCell;
+
       if (lv.buy.status === 'active' && lv.buy.fill) {
+        var buyPnl = (curPrice - lv.buy.fill) * (lv.buy.units || 1);
+        var buyColor = buyPnl >= 0 ? 'text-success' : 'text-error';
+        var buySign = buyPnl >= 0 ? '+' : '';
+        buyCell = '<span class="' + buyColor + '">● Active</span>';
         buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + ' SL ' + lv.buy.sl.toFixed(2) + '</span>';
+        buyCell += '<br><span class="text-xs font-mono ' + buyColor + '">' + buySign + '$' + buyPnl.toFixed(2) + '</span>';
         var buyMeta = [];
         if (lv.buy.ticket) buyMeta.push('#' + lv.buy.ticket);
         if (lv.buy.units) buyMeta.push(lv.buy.units + 'u');
-        if (buyMeta.length) buyCell += '<br><span class="text-xs text-base-content/40">' + buyMeta.join(' · ') + '</span>';
+        if (buyMeta.length) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + buyMeta.join(' · ') + '</span>';
+      } else {
+        buyCell = statusIcon(lv.buy.status, 'success');
+        if (lv.buy.status === 'placed' && lv.buy.order_id) {
+          buyCell += '<br><span class="text-xs text-base-content/40">#' + lv.buy.order_id + '</span>';
+        }
       }
+
       if (lv.sell.status === 'active' && lv.sell.fill) {
+        var sellPnl = (lv.sell.fill - curPrice) * (lv.sell.units || 1);
+        var sellColor = sellPnl >= 0 ? 'text-success' : 'text-error';
+        var sellSign = sellPnl >= 0 ? '+' : '';
+        sellCell = '<span class="' + sellColor + '">● Active</span>';
         sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
+        sellCell += '<br><span class="text-xs font-mono ' + sellColor + '">' + sellSign + '$' + sellPnl.toFixed(2) + '</span>';
         var sellMeta = [];
         if (lv.sell.ticket) sellMeta.push('#' + lv.sell.ticket);
         if (lv.sell.units) sellMeta.push(lv.sell.units + 'u');
-        if (sellMeta.length) sellCell += '<br><span class="text-xs text-base-content/40">' + sellMeta.join(' · ') + '</span>';
-      }
-      if (lv.buy.status === 'placed' && lv.buy.order_id) {
-        buyCell += '<br><span class="text-xs text-base-content/40">#' + lv.buy.order_id + '</span>';
-      }
-      if (lv.sell.status === 'placed' && lv.sell.order_id) {
-        sellCell += '<br><span class="text-xs text-base-content/40">#' + lv.sell.order_id + '</span>';
+        if (sellMeta.length) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + sellMeta.join(' · ') + '</span>';
+      } else {
+        sellCell = statusIcon(lv.sell.status, 'error');
+        if (lv.sell.status === 'placed' && lv.sell.order_id) {
+          sellCell += '<br><span class="text-xs text-base-content/40">#' + lv.sell.order_id + '</span>';
+        }
       }
 
       var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');

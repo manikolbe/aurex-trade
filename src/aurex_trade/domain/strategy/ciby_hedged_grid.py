@@ -377,6 +377,7 @@ class CibyHedgedGridStrategy:
         return {
             "type": "paired_grid",
             "anchor_price": self._anchor_price,
+            "current_price": self._current_price,
             "grid_levels": grid_levels,
             "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
             "session_profit_target": self._session_profit_target,
