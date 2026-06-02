@@ -150,7 +150,7 @@ class TradingEngine:
         self._close_all_failed_count: int = 0
         self._close_all_next_retry_at: datetime | None = None
         # Hard safety cap on open trades (0 = disabled)
-        self._max_open_trades: int = 20
+        self._max_open_trades: int = 50
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
