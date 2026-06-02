@@ -103,6 +103,7 @@ class Trade:
     commission: float = 0.0
     broker_trade_id: str = ""
     timestamp: datetime = field(default_factory=_utc_now)
+    immediately_filled: bool = False
 
 
 @dataclass(frozen=True)

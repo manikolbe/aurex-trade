@@ -1149,9 +1149,54 @@ class TradingEngine:
                     on_rejected(grid_level_str)
             return
 
-        # Track pending order for fill detection
         grid_level_str = signal.metadata.get("grid_level")
         broker_order_id = trade.broker_trade_id
+
+        # Handle immediate fill (limit was marketable at placement time)
+        if trade.immediately_filled:
+            self._log.info(
+                "limit_order_filled_immediately",
+                side=order.side.value,
+                quantity=order.quantity,
+                limit_price=order.limit_price,
+                fill_price=trade.price,
+                broker_trade_id=broker_order_id,
+                grid_level=grid_level_str,
+            )
+            self._event_log.append(EventLogEntry(
+                timestamp=datetime.now(UTC).isoformat(),
+                event="limit_fill",
+                details=(
+                    f"{order.side.value.upper()} limit filled immediately"
+                    f" @ {trade.price:.2f} (#{broker_order_id})"
+                ),
+            ))
+            self._trade_markers.append(
+                TradeMarker(
+                    timestamp=datetime.now(UTC).isoformat(),
+                    price=trade.price,
+                    side=order.side.value.lower(),
+                    quantity=order.quantity,
+                    stop_loss=order.stop_loss,
+                    take_profit=order.take_profit,
+                    broker_trade_id=broker_order_id,
+                )
+            )
+            self._session_trades += 1
+
+            # Map trade for closure detection
+            if grid_level_str:
+                self._grid_trade_map[grid_level_str] = broker_order_id
+                # Report fill to strategy
+                report_fill = getattr(self._strategy, "report_fill", None)
+                if report_fill is not None:
+                    report_fill(grid_level_str, trade.price)
+                # Store metadata then place opposite side
+                self._pending_order_meta[grid_level_str] = dict(signal.metadata)
+                self._place_opposite_market_order(grid_level_str, trade.price)
+            return
+
+        # Normal path: track as pending order for fill detection
         if grid_level_str and broker_order_id:
             self._pending_order_map[grid_level_str] = broker_order_id
             # Store metadata for placing opposite side on fill

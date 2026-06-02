@@ -155,6 +155,48 @@ class OANDABrokerAdapter:
 
         broker_order_id = create_txn["id"]
 
+        # Check if the limit order was immediately cancelled (e.g. price already
+        # past limit in wrong direction, or trigger condition not met)
+        cancel_txn = data.get("orderCancelTransaction")
+        if cancel_txn is not None:
+            reason = cancel_txn.get("reason", "UNKNOWN")
+            log.warning(
+                "oanda_limit_order_immediately_cancelled",
+                symbol=order.symbol,
+                side=order.side.value,
+                limit_price=order.limit_price,
+                reason=reason,
+                broker_order_id=broker_order_id,
+            )
+            msg = f"OANDA limit order immediately cancelled: {reason}"
+            raise RuntimeError(msg)
+
+        # Check if the limit order filled immediately (price was already marketable)
+        fill_txn = data.get("orderFillTransaction")
+        if fill_txn is not None:
+            trade_opened = fill_txn.get("tradeOpened")
+            broker_trade_id = trade_opened["tradeID"] if trade_opened else broker_order_id
+            fill_price = float(fill_txn["price"])
+            log.info(
+                "oanda_limit_order_filled_immediately",
+                symbol=order.symbol,
+                side=order.side.value,
+                quantity=order.quantity,
+                limit_price=order.limit_price,
+                fill_price=fill_price,
+                broker_trade_id=broker_trade_id,
+            )
+            return Trade(
+                order_id=order.id,
+                symbol=order.symbol,
+                side=order.side,
+                quantity=order.quantity,
+                price=fill_price,
+                commission=0.0,
+                broker_trade_id=broker_trade_id,
+                immediately_filled=True,
+            )
+
         log.info(
             "oanda_limit_order_placed",
             symbol=order.symbol,
