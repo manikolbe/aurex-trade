@@ -1024,6 +1024,11 @@ class TradingEngine:
                 current=open_trade_count,
                 max=self._max_open_trades,
             )
+            self._event_log.append(EventLogEntry(
+                timestamp=datetime.now(UTC).isoformat(),
+                event="rejected",
+                details=f"Max open trades reached ({open_trade_count}/{self._max_open_trades})",
+            ))
             return
 
         self._session_signals += 1
