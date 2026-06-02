@@ -540,6 +540,11 @@ class CibyHedgedGridStrategy:
             return
         self._queue_limit_for_level(self._symbol, level, self._current_price)
 
+    # Minimum distance from current price to place a limit order.
+    # If price is closer than this, the order would likely fill immediately
+    # or be rejected by the broker (ACCOUNT_ORDER_FILL_LOCKED on OANDA).
+    _MIN_LIMIT_DISTANCE: float = 2.0
+
     def _queue_limit_for_level(
         self, symbol: str, level: float, current_price: float
     ) -> None:
@@ -550,6 +555,11 @@ class CibyHedgedGridStrategy:
         On fill, the engine places the opposite side as a market order.
         """
         if level in self._placed_levels or level in self._filled_levels:
+            return
+
+        # Skip levels too close to current price — they would fill immediately
+        # or get rejected by the broker. They'll be placed once price moves away.
+        if abs(level - current_price) < self._MIN_LIMIT_DISTANCE:
             return
 
         self._placed_levels.add(level)
