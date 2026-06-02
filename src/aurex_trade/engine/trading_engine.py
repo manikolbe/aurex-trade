@@ -5,7 +5,7 @@ Depends ONLY on port interfaces and domain types. Never imports adapters.
 
 import contextlib
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
 import structlog
@@ -146,6 +146,11 @@ class TradingEngine:
         self._pending_order_meta: dict[str, dict[str, str]] = {}
         # Event log for UI
         self._event_log: list[EventLogEntry] = []
+        # Close-all circuit breaker state
+        self._close_all_failed_count: int = 0
+        self._close_all_next_retry_at: datetime | None = None
+        # Hard safety cap on open trades (0 = disabled)
+        self._max_open_trades: int = 20
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -682,12 +687,37 @@ class TradingEngine:
 
         self._session_trades += 1
 
+    # Circuit breaker for close-all: exponential backoff + max retries
+    _MAX_CLOSE_ALL_RETRIES: int = 5
+    _CLOSE_ALL_BASE_BACKOFF: int = 10  # seconds
+
     def _close_all_trades(self, reason: str) -> None:
         """Close all open trades for the symbol and clear grid state.
 
         Used by strategies with session P&L exits (e.g., paired grid) to
         liquidate all positions when a profit target or loss limit is hit.
+
+        Only notifies strategy (triggering session restart) if ALL trades are
+        successfully closed. On partial failure, increments retry counter and
+        schedules backoff. After max retries, stops the engine.
         """
+        # Circuit breaker: check if we've exceeded max retries
+        if self._close_all_failed_count >= self._MAX_CLOSE_ALL_RETRIES:
+            self._log.error(
+                "close_all_circuit_breaker",
+                retries=self._close_all_failed_count,
+                reason=reason,
+            )
+            self._running = False
+            return
+
+        # Backoff: skip if waiting for next retry window
+        if self._close_all_next_retry_at is not None:
+            if datetime.now(UTC) < self._close_all_next_retry_at:
+                return
+            # Backoff expired — proceed with retry
+            self._close_all_next_retry_at = None
+
         # Cancel all pending limit orders first
         try:
             cancelled = self._broker.cancel_all_orders(self._symbol)
@@ -695,41 +725,87 @@ class TradingEngine:
                 self._log.info("pending_orders_cancelled", count=cancelled, reason=reason)
         except Exception:
             self._log.exception("cancel_pending_orders_failed")
-        self._pending_order_map.clear()
-        self._pending_order_meta.clear()
 
         open_trades = self._broker.get_open_trades(self._symbol)
         if not open_trades:
             self._log.info("close_all_no_trades", reason=reason)
-        else:
-            for trade in open_trades:
-                # Place counter-order to close each trade
-                close_side = (
-                    OrderSide.SELL if trade.side == OrderSide.BUY else OrderSide.BUY
-                )
-                close_order = Order(
-                    symbol=self._symbol,
-                    side=close_side,
-                    quantity=trade.quantity,
-                )
-                try:
-                    self._broker.place_order(close_order)
-                except Exception:
+            # Success — no trades to close
+            self._close_all_failed_count = 0
+            self._close_all_next_retry_at = None
+            self._pending_order_map.clear()
+            self._pending_order_meta.clear()
+            self._grid_trade_map.clear()
+            self._event_log.append(EventLogEntry(
+                timestamp=datetime.now(UTC).isoformat(),
+                event="close_all",
+                details=f"All positions closed: {reason}",
+            ))
+            notify = getattr(self._strategy, "notify_close_all_complete", None)
+            if notify is not None:
+                notify()
+            return
+
+        # Close each trade using dedicated close endpoint
+        failed = 0
+        for trade in open_trades:
+            try:
+                self._broker.close_trade(trade.broker_trade_id)
+            except Exception:
+                failed += 1
+                if failed == 1:
                     self._log.exception(
                         "close_all_order_failed",
                         broker_trade_id=trade.broker_trade_id,
                     )
 
-            self._log.info(
-                "close_all_executed",
-                reason=reason,
-                trades_closed=len(open_trades),
+        if failed > 0:
+            # Log summary of failures (avoid spamming 86 identical messages)
+            if failed > 1:
+                self._log.error(
+                    "close_all_order_failed_summary",
+                    failed_count=failed,
+                    total=len(open_trades),
+                )
+            self._close_all_failed_count += 1
+            backoff = self._CLOSE_ALL_BASE_BACKOFF * (
+                2 ** (self._close_all_failed_count - 1)
             )
+            self._close_all_next_retry_at = datetime.now(UTC) + timedelta(
+                seconds=backoff
+            )
+            self._log.warning(
+                "close_all_retry_scheduled",
+                attempt=self._close_all_failed_count,
+                max_retries=self._MAX_CLOSE_ALL_RETRIES,
+                next_retry_in_seconds=backoff,
+                reason=reason,
+            )
+            return  # Do NOT notify strategy — trades still open
 
-        # Clear grid trade map
+        # Verify broker confirms zero remaining trades (defense in depth)
+        remaining = self._broker.get_open_trades(self._symbol)
+        if remaining:
+            self._log.error(
+                "close_all_residual_trades",
+                count=len(remaining),
+                reason=reason,
+            )
+            self._close_all_failed_count += 1
+            return  # Treat as failure
+
+        # All trades closed successfully
+        self._close_all_failed_count = 0
+        self._close_all_next_retry_at = None
+        self._pending_order_map.clear()
+        self._pending_order_meta.clear()
         self._grid_trade_map.clear()
 
-        # Add event log entry
+        self._log.info(
+            "close_all_executed",
+            reason=reason,
+            trades_closed=len(open_trades),
+        )
+
         self._event_log.append(EventLogEntry(
             timestamp=datetime.now(UTC).isoformat(),
             event="close_all",
@@ -912,10 +988,12 @@ class TradingEngine:
         trades_today = self._repository.get_trades_today(
             self._symbol, user_id=self._user_id
         )
+        # Cache open trade count for max-trades cap (avoid repeated API calls)
+        open_trade_count = len(self._broker.get_open_trades(self._symbol))
 
         # Process each signal
         for sig in all_signals:
-            self._process_signal(sig, latest_close, position, trades_today)
+            self._process_signal(sig, latest_close, position, trades_today, open_trade_count)
 
     def _process_signal(
         self,
@@ -923,6 +1001,7 @@ class TradingEngine:
         latest_close: float,
         pos: Position | None,
         trades_list: list[Trade],
+        open_trade_count: int = 0,
     ) -> None:
         """Process a single signal: risk check → order placement.
 
@@ -936,6 +1015,15 @@ class TradingEngine:
         ):
             reason = sig.metadata.get("reason", "unknown")
             self._close_all_trades(reason)
+            return
+
+        # Hard safety cap: reject new orders if too many trades open
+        if self._max_open_trades > 0 and open_trade_count >= self._max_open_trades:
+            self._log.warning(
+                "max_open_trades_reached",
+                current=open_trade_count,
+                max=self._max_open_trades,
+            )
             return
 
         self._session_signals += 1

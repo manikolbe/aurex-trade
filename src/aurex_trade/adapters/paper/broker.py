@@ -109,6 +109,13 @@ class PaperBrokerAdapter:
         """Paper broker has no pending orders."""
         return []
 
+    def close_trade(self, broker_trade_id: str) -> None:
+        """Close a specific open trade by removing it from tracked trades."""
+        if broker_trade_id not in self._open_trades:
+            msg = f"Trade {broker_trade_id} not found"
+            raise RuntimeError(msg)
+        del self._open_trades[broker_trade_id]
+
     def cancel_all_orders(self, symbol: str) -> int:
         """Paper broker has no pending orders to cancel."""
         return 0

@@ -335,8 +335,9 @@ class TestCloseTrade:
 
         # Price moved up
         broker.set_current_bar(_bar(close=4580.0))
-        closed = broker.close_trade(trade.broker_trade_id)
+        broker.close_trade(trade.broker_trade_id)
 
+        closed = broker.get_closed_trade_details(trade.broker_trade_id)
         assert closed is not None
         assert closed.realized_pnl == 100.0  # 10 * (4580 - 4570)
         assert closed.close_reason == "MARKET_CLOSE"
@@ -371,7 +372,8 @@ class TestEquityAfterClosures:
 
         # Now close SELL via close_trade
         sell_trade = broker._open_trades[0]
-        closed = broker.close_trade(sell_trade.broker_trade_id)
+        broker.close_trade(sell_trade.broker_trade_id)
+        closed = broker.get_closed_trade_details(sell_trade.broker_trade_id)
         assert closed is not None
         # SELL closed at market (4555): pnl = 10*(4570-4555) = +150
         assert closed.realized_pnl == 150.0

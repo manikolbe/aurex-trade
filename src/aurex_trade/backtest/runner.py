@@ -362,7 +362,8 @@ class BacktestRunner:
         # Close all open trades at market
         for trade in list(self._broker._open_trades):
             if trade.symbol == self._config.symbol:
-                closed = self._broker.close_trade(trade.broker_trade_id)
+                self._broker.close_trade(trade.broker_trade_id)
+                closed = self._broker.get_closed_trade_details(trade.broker_trade_id)
                 if closed:
                     # Find grid key and report
                     for key, tid in list(self._grid_trade_map.items()):

@@ -318,6 +318,18 @@ class OANDABrokerAdapter:
             )
         return orders
 
+    def close_trade(self, broker_trade_id: str) -> None:
+        """Close a specific trade using OANDA's dedicated close endpoint.
+
+        Uses PUT /trades/{id}/close which does NOT require margin (unlike
+        placing a counter-order). Raises on failure.
+        """
+        self._connection.put(
+            f"/v3/accounts/{self._account_id}/trades/{broker_trade_id}/close",
+            json={"units": "ALL"},
+        )
+        log.info("oanda_trade_closed", broker_trade_id=broker_trade_id)
+
     def cancel_all_orders(self, symbol: str) -> int:
         """Cancel all pending orders for a symbol. Returns count cancelled."""
         pending = self.get_pending_orders(symbol)

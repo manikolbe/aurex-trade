@@ -255,14 +255,15 @@ class SimulatedBrokerAdapter:
 
         return newly_filled, newly_closed
 
-    def close_trade(self, broker_trade_id: str) -> ClosedTradeInfo | None:
+    def close_trade(self, broker_trade_id: str) -> None:
         """Close a specific open trade at current market price."""
         trade = next(
             (t for t in self._open_trades if t.broker_trade_id == broker_trade_id),
             None,
         )
         if trade is None:
-            return None
+            msg = f"Trade {broker_trade_id} not found"
+            raise RuntimeError(msg)
 
         assert self._current_bar is not None
         close_side = OrderSide.SELL if trade.side == OrderSide.BUY else OrderSide.BUY
@@ -284,7 +285,6 @@ class SimulatedBrokerAdapter:
         )
         self._closed_trades[trade.broker_trade_id] = closed_info
         self._open_trades.remove(trade)
-        return closed_info
 
     def cancel_order(self, order_id: UUID) -> bool:
         """Cancel a pending limit order by ID."""

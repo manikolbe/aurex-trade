@@ -57,6 +57,7 @@ class CibyHedgedGridStrategy:
         self._session_active: bool = True
         self._current_date: str = ""
         self._close_all_pending: bool = False
+        self._close_all_in_progress: bool = False
         self._close_reason: str = ""
         self._session_count: int = 1
         self._session_history: list[dict[str, object]] = []
@@ -171,6 +172,11 @@ class CibyHedgedGridStrategy:
 
         if self._close_all_pending:
             self._close_all_pending = False
+            return self._flat_close_all(current_bar, self._close_reason)
+
+        # If close-all is in progress (engine retrying), re-emit FLAT without
+        # re-triggering history recording or session state changes
+        if self._close_all_in_progress:
             return self._flat_close_all(current_bar, self._close_reason)
 
         if not self._session_active:
@@ -404,6 +410,7 @@ class CibyHedgedGridStrategy:
     def _trigger_close_all(self, reason: str) -> None:
         """Record session history and prepare for restart after close-all."""
         self._close_reason = reason
+        self._close_all_in_progress = True
         self._session_history.append({
             "session": self._session_count,
             "reason": reason,
@@ -412,6 +419,7 @@ class CibyHedgedGridStrategy:
 
     def notify_close_all_complete(self) -> None:
         """Called by engine after all positions are closed. Triggers session restart."""
+        self._close_all_in_progress = False
         if self._session_active:
             self._restart_session()
 
@@ -428,6 +436,7 @@ class CibyHedgedGridStrategy:
         self._session_realized_pnl = 0.0
         self._session_unrealized_pnl = 0.0
         self._close_all_pending = False
+        self._close_all_in_progress = False
         self._session_count += 1
 
     def _build_grid(self, anchor: float) -> list[float]:
