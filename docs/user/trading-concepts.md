@@ -122,6 +122,53 @@ but the winning bet can pay multiples of the losing one.
 
 ---
 
+### Ciby Hedged Doubling Grid (Breakout Capture)
+
+**The idea:** Do nothing in sideways markets, capture big directional moves, and
+never bleed from whipsaw. Instead of using stop losses that get picked off in
+choppy conditions, this strategy uses **hedged pairs with no stop loss** and only
+profits from **doubled positions** at outer grid levels.
+
+**How it works:**
+
+When the bot starts, it places 4 grid levels around the current price (2 above,
+2 below). At each level, it opens a **hedged pair** (one buy AND one sell) with
+**no stop loss**. Hedged pairs always net to zero P&L — they exist to mark that
+price has visited a level.
+
+The real action happens at the **outer levels** (the 2nd level from the anchor):
+
+- When price drops to the outer-below level: an extra **buy** is placed (betting
+  on a bounce back up)
+- When price rises to the outer-above level: an extra **sell** is placed (betting
+  on a reversal back down)
+
+These extra "doubled" positions have a **trailing stop** that locks in profit
+once the price moves favourably by one grid spacing.
+
+**Take profit:** When price breaks out 2 full spacings beyond the doubled level,
+all positions are closed for a profit.
+
+**Protection mechanisms:**
+
+- **No stop loss on hedged pairs** — eliminates all whipsaw bleeding
+- **Trailing stop on doubled position** — captures breakout profit, limits giveback
+- **Session loss limit** — circuit breaker if the doubled position goes against you
+- **Whipsaw detection** — if the same level re-triggers too many times, the session
+  pauses automatically
+
+**When it works best:** Markets that range quietly, then break out in one direction.
+Gold (XAU/USD) during news events or session opens is ideal.
+
+**When it struggles:** Sustained adverse moves immediately after doubling (the
+doubled position loses). However, loss is bounded by the session loss limit.
+
+**Analogy:** It's like setting a net at the edge of a fish pond. You don't catch
+anything while the fish swim in circles in the middle (zero cost). But when they
+make a break for the edge, you catch them.
+
+---
+
 ### Simple Grid (Direction-Neutral)
 
 **The idea:** Place a grid of price levels above and below the current price,
@@ -165,6 +212,7 @@ does the work.
 | Clear trends (up or down for weeks) | SMA Crossover |
 | Choppy, sideways, range-bound | RSI Mean-Reversion |
 | Volatile with sustained moves (gold) | Ciby Hedged Grid |
+| Quiet ranges followed by breakouts | Ciby Hedged Doubling Grid |
 | Uncertain direction, want to capture either way | Simple Grid |
 | Not sure | Test with a backtest and compare results |
 

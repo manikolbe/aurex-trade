@@ -78,6 +78,7 @@ class Order:
     limit_price: float | None = None  # Required for LIMIT orders, None for MARKET
     stop_loss: float | None = None  # Stop-loss price level (for broker to respect)
     take_profit: float | None = None  # Take-profit price level (for broker to respect)
+    trailing_stop_distance: float | None = None  # Trailing stop distance (broker-managed)
     status: OrderStatus = OrderStatus.PENDING
     timestamp: datetime = field(default_factory=_utc_now)
 

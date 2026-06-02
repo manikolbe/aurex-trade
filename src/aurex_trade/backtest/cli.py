@@ -17,6 +17,7 @@ from aurex_trade.config import OANDAConfig
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
+from aurex_trade.domain.strategy.ciby_hedged_doubling_grid import CibyHedgedDoublingGridStrategy
 from aurex_trade.domain.strategy.ciby_hedged_grid import CibyHedgedGridStrategy
 from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
 from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
@@ -55,6 +56,13 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         session_loss_limit=float(p.get("session_loss_limit", 50.0)),
         daily_loss_limit=float(p.get("daily_loss_limit", 200.0)),
     ),
+    "ciby_hedged_doubling_grid": lambda p: CibyHedgedDoublingGridStrategy(
+        spacing=float(p.get("spacing", 20.0)),
+        units=float(p.get("units", 2.0)),
+        trailing_stop_distance=float(p.get("trailing_stop_distance", 20.0)),
+        session_loss_limit=float(p.get("session_loss_limit", 100.0)),
+        whipsaw_limit=int(p.get("whipsaw_limit", 3)),
+    ),
 }
 
 # Per-strategy validators — filters out invalid param combos
@@ -77,6 +85,13 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
         and p.get("session_loss_limit", 50.0) > 0
         and p.get("daily_loss_limit", 200.0) > 0
     ),
+    "ciby_hedged_doubling_grid": lambda p: (
+        p.get("spacing", 20.0) > 0
+        and p.get("units", 2.0) > 0
+        and p.get("trailing_stop_distance", 20.0) > 0
+        and p.get("session_loss_limit", 100.0) > 0
+        and p.get("whipsaw_limit", 3) >= 1
+    ),
 }
 
 # Maps strategy names to their metadata accessor
@@ -85,6 +100,7 @@ STRATEGY_METADATA: dict[str, Callable[[], StrategyMetadata]] = {
     "rsi_mean_reversion": RSIMeanReversion.metadata,
     "simple_grid": SimpleGridStrategy.metadata,
     "ciby_hedged_grid": CibyHedgedGridStrategy.metadata,
+    "ciby_hedged_doubling_grid": CibyHedgedDoublingGridStrategy.metadata,
 }
 
 

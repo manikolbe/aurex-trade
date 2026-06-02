@@ -616,6 +616,8 @@ class TradingEngine:
         if self._risk_engine._enabled:
             quantity = min(quantity, float(self._risk_engine._max_position_size))
         stop_loss = float(opposite_stop_str) if opposite_stop_str else None
+        trailing_stop_str = meta.get("trailing_stop_distance")
+        trailing_stop_distance = float(trailing_stop_str) if trailing_stop_str else None
 
         order = Order(
             symbol=self._symbol,
@@ -623,6 +625,7 @@ class TradingEngine:
             quantity=quantity,
             order_type=OrderType.MARKET,
             stop_loss=stop_loss,
+            trailing_stop_distance=trailing_stop_distance,
         )
 
         try:
@@ -1115,6 +1118,9 @@ class TradingEngine:
         limit_price_str = sig.metadata.get("limit_price")
         limit_price = float(limit_price_str) if limit_price_str else None
 
+        trailing_stop_str = sig.metadata.get("trailing_stop_distance")
+        trailing_stop_distance = float(trailing_stop_str) if trailing_stop_str else None
+
         order = Order(
             signal_id=sig.id,
             symbol=self._symbol,
@@ -1124,6 +1130,7 @@ class TradingEngine:
             limit_price=limit_price,
             stop_loss=sig.stop_loss,
             take_profit=sig.take_profit,
+            trailing_stop_distance=trailing_stop_distance,
         )
 
         if is_limit:

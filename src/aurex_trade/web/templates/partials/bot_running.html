@@ -426,6 +426,11 @@
       return;
     }
 
+    if (state.type === 'doubled_grid') {
+      renderDoubledGrid(state);
+      return;
+    }
+
     if (state.type !== 'grid') {
       gridContent.innerHTML = '<p class="text-sm text-base-content/60">Waiting for grid initialization...</p>';
       return;
@@ -636,6 +641,97 @@
       }
       html += '</tbody></table></div>';
     }
+
+    gridContent.innerHTML = html;
+  }
+
+  function renderDoubledGrid(state) {
+    var html = '';
+
+    // Session paused alert
+    if (state.session_paused) {
+      html += '<div class="alert alert-warning py-2 px-3 mb-3"><span class="text-sm">Session paused — whipsaw limit reached (' + state.whipsaw_count + '/' + state.whipsaw_limit + ')</span></div>';
+    }
+
+    // Anchor + doubled info
+    html += '<div class="text-sm text-base-content/60 mb-2">Anchor: <span class="font-mono font-semibold text-base-content">' + state.anchor_price.toFixed(2) + '</span>';
+    if (state.doubled_level && state.doubled_active) {
+      var doubSide = state.doubled_side === 'long' ? 'BUY' : 'SELL';
+      var doubColor = state.doubled_side === 'long' ? 'text-success' : 'text-error';
+      html += ' &middot; <span class="badge badge-sm badge-warning">DOUBLED</span> <span class="' + doubColor + ' text-xs">' + doubSide + ' @ ' + state.doubled_level.toFixed(2) + '</span>';
+    }
+    html += '</div>';
+
+    // Whipsaw counter
+    if (state.whipsaw_count > 0) {
+      html += '<div class="text-xs text-base-content/50 mb-2">Whipsaw: ' + state.whipsaw_count + '/' + state.whipsaw_limit + '</div>';
+    }
+
+    // Session P&L gauge (loss-limit only, no profit target)
+    html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
+
+    // Grid levels table
+    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
+
+    var levels = state.grid_levels;
+    var foundAnchor = false;
+    for (var i = 0; i < levels.length; i++) {
+      var lv = levels[i];
+
+      // Insert anchor separator
+      if (!foundAnchor && lv.price < state.anchor_price) {
+        foundAnchor = true;
+        html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="3">';
+        html += '— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
+      }
+
+      var buyCell, sellCell;
+
+      // Buy cell
+      if (lv.buy.status === 'active') {
+        buyCell = '<span class="text-success">● Active</span>';
+        if (lv.buy.fill) buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + '</span>';
+        buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        if (lv.buy.units) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.buy.units + 'u</span>';
+        if (lv.buy.ticket) buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.ticket + '</span>';
+      } else if (lv.buy.status === 'placed') {
+        buyCell = '<span class="text-info">◎ Placed</span>';
+        buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+      } else {
+        buyCell = '<span class="text-base-content/30">—</span>';
+      }
+
+      // Sell cell
+      if (lv.sell.status === 'active') {
+        sellCell = '<span class="text-error">● Active</span>';
+        if (lv.sell.fill) sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + '</span>';
+        sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        if (lv.sell.units) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.sell.units + 'u</span>';
+        if (lv.sell.ticket) sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.ticket + '</span>';
+      } else if (lv.sell.status === 'placed') {
+        sellCell = '<span class="text-info">◎ Placed</span>';
+        sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+      } else {
+        sellCell = '<span class="text-base-content/30">—</span>';
+      }
+
+      // Doubled position badge on the relevant side
+      if (lv.doubled && lv.doubled.side === 'long') {
+        buyCell += '<br><span class="badge badge-warning badge-xs">[DOUBLED]</span>';
+        buyCell += '<br><span class="text-xs text-info">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
+      } else if (lv.doubled && lv.doubled.side === 'short') {
+        sellCell += '<br><span class="badge badge-warning badge-xs">[DOUBLED]</span>';
+        sellCell += '<br><span class="text-xs text-info">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
+      }
+
+      var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : 'opacity-60';
+      html += '<tr class="' + rowClass + '">';
+      html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
+      html += '<td class="text-sm">' + buyCell + '</td>';
+      html += '<td class="text-sm">' + sellCell + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
 
     gridContent.innerHTML = html;
   }

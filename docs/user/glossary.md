@@ -64,6 +64,12 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## D
 
+**Doubling**
+:   Adding extra units at an outer grid level to create a directional bet. In the
+    Hedged Doubling Grid strategy, when price reaches the outermost level, extra
+    units are placed on the reversal side (e.g., extra buy if price dropped to the
+    outer-below level). These doubled units are the only source of profit.
+
 **Daily Loss Limit**
 :   The maximum amount of money the bot is allowed to lose in a single day. Once
     this limit is hit, the bot stops trading for the rest of the day.
@@ -114,9 +120,10 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 **Hedged Pair**
 :   Two simultaneous trades in opposite directions (one buy and one sell) placed
-    at the same price. Used by the Ciby Hedged Grid strategy. One side profits
-    while the other gets stopped out — the net result depends on how far price
-    moves in one direction.
+    at the same price. In the Ciby Hedged Grid strategy, one side profits while
+    the other gets stopped out. In the Hedged Doubling Grid strategy, hedged pairs
+    have no stop loss and always net to zero P&L — they mark that price visited
+    a level.
 
 ## I
 
@@ -260,7 +267,19 @@ Quick definitions of terms you'll encounter in AurexTrade.
 :   How often the strategy opens trades. Higher frequency means more opportunities
     but also more commission costs.
 
+**Trailing Stop**
+:   A stop-loss that follows the price as it moves in your favour, locking in
+    profit. Unlike a fixed stop-loss that stays at one price, a trailing stop
+    moves with the market. If price reverses by the trail distance, the position
+    is closed with some profit preserved.
+
 ## W
+
+**Whipsaw**
+:   Rapid back-and-forth price action that crosses the same level repeatedly without
+    committing to a direction. In grid strategies, whipsaw can trigger the same
+    level multiple times. The Hedged Doubling Grid detects this and pauses the
+    session after a configurable number of re-triggers.
 
 **Walk-Forward Validation**
 :   A test that splits data into alternating learning and exam periods to check if

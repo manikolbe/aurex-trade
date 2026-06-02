@@ -78,6 +78,10 @@ class OANDABrokerAdapter:
             order_body["stopLossOnFill"] = {"price": f"{order.stop_loss:.5f}"}
         if order.take_profit is not None:
             order_body["takeProfitOnFill"] = {"price": f"{order.take_profit:.5f}"}
+        if order.trailing_stop_distance is not None:
+            order_body["trailingStopLossOnFill"] = {
+                "distance": f"{order.trailing_stop_distance:.5f}",
+            }
 
         body = {"order": order_body}
 
@@ -139,6 +143,10 @@ class OANDABrokerAdapter:
             order_body["stopLossOnFill"] = {"price": f"{order.stop_loss:.5f}"}
         if order.take_profit is not None:
             order_body["takeProfitOnFill"] = {"price": f"{order.take_profit:.5f}"}
+        if order.trailing_stop_distance is not None:
+            order_body["trailingStopLossOnFill"] = {
+                "distance": f"{order.trailing_stop_distance:.5f}",
+            }
 
         body = {"order": order_body}
 
