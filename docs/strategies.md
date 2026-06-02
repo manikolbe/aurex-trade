@@ -103,6 +103,80 @@ Ranging/sideways markets where price oscillates around a mean. May give false
 signals during strong trends (price can stay overbought/oversold for extended
 periods in trending markets).
 
+## Ciby Hedged Grid
+
+**File:** `src/aurex_trade/domain/strategy/ciby_hedged_grid.py`
+
+A stateful grid strategy that places hedged pairs (buy + sell) at grid levels.
+Unlike simple strategies, it uses callbacks to track fills and closures, and
+manages its own session/daily risk limits.
+
+### Signal Logic
+
+- On first bar: anchor at current price, place initial hedged pair (market)
+- When price crosses a grid level: place limit order at that level
+- When a limit fills: runner places opposite market order (forming a pair)
+- Each position gets a stop-loss just past the adjacent grid level
+- Session profit target or loss limit triggers FLAT/close_all signal
+
+### Parameters
+
+| Key | Default | Range | Description |
+|-----|---------|-------|-------------|
+| `grid_spacing` | 10.0 | 5-50 | Distance between grid levels ($) |
+| `grid_units` | 10.0 | 1-100 | Units per grid pair |
+| `session_profit_target` | 100.0 | 10-5000 | Close all & restart when hit ($) |
+| `session_loss_limit` | 50.0 | 10-5000 | Close all & restart when hit ($) |
+| `daily_loss_limit` | 200.0 | 50-10000 | Stop trading for the day ($) |
+
+### Grid Strategy Protocol Extensions
+
+Grid strategies extend the base `Strategy` Protocol with additional methods:
+
+```python
+def report_fill(self, grid_level_key: str, fill_price: float) -> None: ...
+def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None: ...
+def notify_close_all_complete(self) -> None: ...
+def update_unrealized_pnl(self, unrealized_pnl: float) -> None: ...
+```
+
+The backtest runner auto-detects grid strategies via `hasattr(strategy, "report_fill")`
+and switches to grid orchestration mode (signal drain loop, limit order simulation,
+stop-loss enforcement, strategy callbacks).
+
+### Risk Engine
+
+The risk engine is **disabled** for grid backtests — the strategy manages its own
+risk via session/daily loss limits. Detection is automatic via duck-typing.
+
+### When It Works Best
+
+Volatile instruments with sustained directional moves (gold/XAU_USD). Oscillating
+markets within one grid band cost nothing (no stops hit).
+
+### When It Struggles
+
+Whipsaw markets where price repeatedly reverses at exactly stop-loss distance,
+hitting stops on both sides of pairs. Strong trends with tight grid spacing can
+also bleed through rapid stop-outs.
+
+## Simple Grid
+
+**File:** `src/aurex_trade/domain/strategy/simple_grid.py`
+
+A direction-neutral grid that places orders when price crosses levels. Unlike the
+hedged grid, it places single-direction orders (not pairs).
+
+### Parameters
+
+| Key | Default | Range | Description |
+|-----|---------|-------|-------------|
+| `grid_spacing` | 10.0 | 5-50 | Distance between grid levels ($) |
+| `max_levels` | 6 | 2-20 | Maximum active grid levels |
+| `stop_distance` | 30.0 | 5-100 | Stop-loss distance ($) |
+| `num_levels_above` | 3 | 1-10 | Grid levels above anchor |
+| `num_levels_below` | 3 | 1-10 | Grid levels below anchor |
+
 ## Adding a New Strategy
 
 1. Create `src/aurex_trade/domain/strategy/your_strategy.py`

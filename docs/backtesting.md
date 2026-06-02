@@ -31,12 +31,21 @@ just backtest --strategy rsi_mean_reversion --param period=14 --param overbought
 just backtest --strategy sma_crossover --param short_window=20 --param long_window=50 --spread 0.6 --slippage 0.2
 ```
 
+```bash
+# 5. Run with Ciby Hedged Grid (grid strategy — risk engine auto-disabled)
+just backtest --strategy ciby_hedged_grid \
+    --param grid_spacing=15 --param grid_units=10 \
+    --param session_profit_target=100 --param session_loss_limit=50 \
+    --param daily_loss_limit=200 --spread 0.5
+```
+
 ## Key Properties
 
 - **Deterministic**: Same seed + same data = identical results every time
 - **Strategy-agnostic**: Any class satisfying the `Strategy` Protocol works
 - **Realistic costs**: Configurable spread, slippage (randomized per fill), commission
 - **Full risk engine**: Same risk checks as live (stop-loss, drawdown, consecutive losses, position limits, daily loss, trade frequency)
+- **Grid mode**: Auto-detected for strategies with `report_fill` — limit order simulation, stop-loss enforcement, signal drain loop, risk engine disabled (strategy manages own risk)
 - **Dynamic position sizing**: Risk-based sizing `units = (equity * risk_pct) / stop_distance`
 
 ## CLI: `run` Subcommand
@@ -105,6 +114,12 @@ just sweep --strategy sma_crossover \
 just sweep --strategy rsi_mean_reversion \
     --param period=7,14,21 --param overbought=70,75,80 --param oversold=20,25,30 \
     --spread 0.6
+
+# Ciby Hedged Grid sweep
+just sweep --strategy ciby_hedged_grid \
+    --param grid_spacing=10,15,20 --param grid_units=10,20 \
+    --param session_profit_target=100 --param session_loss_limit=50,100 \
+    --param daily_loss_limit=200,500 --spread 0.5
 ```
 
 - Generic `--param key=v1,v2,...` design — works for any strategy
@@ -124,6 +139,12 @@ just walk-forward --strategy sma_crossover \
 just walk-forward --strategy rsi_mean_reversion \
     --param period=7,14,21 --param overbought=70,75 --param oversold=25,30 \
     --train-bars 7200 --test-bars 7200 --spread 0.6
+
+# Ciby Hedged Grid walk-forward
+just walk-forward --strategy ciby_hedged_grid \
+    --param grid_spacing=10,15 --param grid_units=10,20 \
+    --param session_profit_target=100 --param session_loss_limit=50,100 \
+    --param daily_loss_limit=200 --spread 0.5
 ```
 
 - Non-overlapping windows: Train [Wk1] -> Test [Wk2], Train [Wk3] -> Test [Wk4], ...
