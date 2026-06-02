@@ -173,6 +173,7 @@ class WalkForwardValidator:
             slippage=self._config.slippage_pips,
             commission_per_trade=self._config.commission_per_trade,
             seed=self._config.deterministic_seed,
+            grid_mode=hasattr(strategy, "report_fill"),
         )
         repository = InMemoryRepository()
 

@@ -1,17 +1,21 @@
 """Backtest runner — orchestrates historical replay through strategy and risk.
 
-Depends ONLY on port interfaces, domain types, and shared metrics.
-Never imports concrete adapters.
+Supports two modes:
+- Simple: stateless strategies (SMA, RSI) — single signal per bar, risk-gated
+- Grid: stateful strategies (ciby_hedged_grid) — signal drain, limit orders,
+  stop-loss enforcement, strategy callbacks, risk engine disabled
+
+Mode is auto-detected via `hasattr(strategy, "report_fill")`.
 """
 
 from __future__ import annotations
 
-from aurex_trade.adapters.backtest.broker import SimulatedBrokerAdapter
+from aurex_trade.adapters.backtest.broker import SimulatedBrokerAdapter, _OpenTrade
 from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapter
 from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.results import BacktestResult, BacktestTradeRecord
-from aurex_trade.domain.enums import OrderSide, RiskAction, SignalType
-from aurex_trade.domain.models import AccountState, Order
+from aurex_trade.domain.enums import OrderSide, OrderType, RiskAction, SignalType
+from aurex_trade.domain.models import AccountState, BarData, ClosedTradeInfo, Order, Signal
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.metrics import calculate_metrics
@@ -21,8 +25,8 @@ from aurex_trade.ports.repository import RepositoryPort
 class BacktestRunner:
     """Replays historical bars through a strategy, producing BacktestResult.
 
-    Mirrors TradingEngine._run_cycle() logic:
-    bars -> signal -> risk -> order -> position update -> record equity.
+    For simple strategies: bars -> signal -> risk -> order -> position update.
+    For grid strategies: bars -> process_bar -> callbacks -> drain signals -> place orders.
     """
 
     def __init__(
@@ -46,6 +50,12 @@ class BacktestRunner:
         self._peak_equity: float = config.initial_capital
         self._trade_pnls: list[float] = []
 
+        # Grid mode state
+        self._is_grid = hasattr(strategy, "report_fill")
+        self._pending_order_map: dict[str, str] = {}  # grid_key → broker_order_id
+        self._pending_order_meta: dict[str, dict[str, str]] = {}
+        self._grid_trade_map: dict[str, str] = {}  # grid_key → broker_trade_id
+
     def run(self) -> BacktestResult:
         """Execute the full backtest and return results."""
         equity_curve: list[float] = [self._config.initial_capital]
@@ -53,19 +63,21 @@ class BacktestRunner:
         bar_index = 0
 
         while not self._market_data.is_exhausted:
-            # Update broker with current market price
             current_bar = self._market_data.current_bar
             self._broker.set_current_bar(current_bar)
 
-            # Run one trading step — track realized P&L delta
-            prev_realized = self._get_realized_pnl()
-            record = self._run_step(bar_index)
-            if record is not None:
-                trade_records.append(record)
-                new_realized = self._get_realized_pnl()
-                pnl = new_realized - prev_realized
-                if pnl != 0.0:
-                    self._trade_pnls.append(pnl)
+            if self._is_grid:
+                records = self._run_grid_step(bar_index)
+                trade_records.extend(records)
+            else:
+                prev_realized = self._get_realized_pnl()
+                record = self._run_simple_step(bar_index)
+                if record is not None:
+                    trade_records.append(record)
+                    new_realized = self._get_realized_pnl()
+                    pnl = new_realized - prev_realized
+                    if pnl != 0.0:
+                        self._trade_pnls.append(pnl)
 
             # Record equity after this step and update peak
             current_equity = self._broker.equity
@@ -100,10 +112,300 @@ class BacktestRunner:
             parameters={},
         )
 
-    def _run_step(self, bar_index: int) -> BacktestTradeRecord | None:
-        """Execute one trading step. Returns a trade record if a trade was placed."""
+    # ──────────────────────────────────────────────────────────────────────
+    # Grid mode
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _run_grid_step(self, bar_index: int) -> list[BacktestTradeRecord]:
+        """Execute one grid trading step: process bar, callbacks, drain signals."""
+        records: list[BacktestTradeRecord] = []
+
+        # 1. Process bar — trigger SLs and fill limits
+        newly_filled, newly_closed = self._broker.process_bar(
+            self._market_data.current_bar
+        )
+
+        # 2. Handle fills — call report_fill + place opposite market order
+        self._handle_fills(newly_filled)
+
+        # 3. Handle closures — call report_trade_closed
+        self._handle_closures(newly_closed)
+
+        # 4. Update unrealized P&L for strategy
+        update_pnl = getattr(self._strategy, "update_unrealized_pnl", None)
+        if update_pnl is not None:
+            unrealized = self._calculate_grid_unrealized()
+            update_pnl(unrealized)
+
+        # 5. Drain signals from strategy
+        bars = self._market_data.get_latest_bars(
+            self._config.symbol, self._config.bar_count
+        )
+        if not bars:
+            return records
+
+        signal_count = 0
+        signal = self._strategy.generate(bars)
+        while signal is not None and signal_count < 50:
+            signal_count += 1
+            record = self._process_grid_signal(signal, bar_index, bars)
+            if record is not None:
+                records.append(record)
+            signal = self._strategy.generate(bars)
+
+        return records
+
+    def _handle_fills(self, newly_filled: list[_OpenTrade]) -> None:
+        """Process limit order fills: match to grid keys, report, place opposite."""
+        report_fill = getattr(self._strategy, "report_fill", None)
+
+        for trade in newly_filled:
+            # Find which grid key this fill belongs to
+            grid_key = self._find_grid_key_for_order(trade.broker_trade_id)
+            if not grid_key:
+                # Try matching by the pending order that created this trade
+                grid_key = self._find_grid_key_by_pending_fill(trade)
+
+            if grid_key:
+                # Update tracking: move from pending to active
+                self._grid_trade_map[grid_key] = trade.broker_trade_id
+                # Update the trade's grid_level_key on the broker side
+                for bt in self._broker._open_trades:
+                    if bt.broker_trade_id == trade.broker_trade_id:
+                        bt.grid_level_key = grid_key
+                        break
+
+                if report_fill:
+                    report_fill(grid_key, trade.open_price)
+
+                # Place opposite market order
+                self._place_opposite_market_order(grid_key, trade)
+
+    def _handle_closures(self, newly_closed: list[ClosedTradeInfo]) -> None:
+        """Process trade closures: report to strategy, track P&L."""
+        report_closed = getattr(self._strategy, "report_trade_closed", None)
+
+        for closed in newly_closed:
+            # Find grid key by broker_trade_id
+            grid_key = None
+            for key, trade_id in list(self._grid_trade_map.items()):
+                if trade_id == closed.broker_trade_id:
+                    grid_key = key
+                    break
+
+            if grid_key:
+                if report_closed:
+                    report_closed(grid_key, closed.realized_pnl)
+                self._trade_pnls.append(closed.realized_pnl)
+                del self._grid_trade_map[grid_key]
+
+    def _find_grid_key_for_order(self, broker_trade_id: str) -> str | None:
+        """Find grid key from pending_order_map where order filled into this trade."""
+        # The broker generates a new trade ID on fill, but the pending order had
+        # its own broker_order_id. We need to match by checking which pending
+        # orders disappeared.
+        return None  # Matching done in _find_grid_key_by_pending_fill
+
+    def _find_grid_key_by_pending_fill(self, trade: _OpenTrade) -> str | None:
+        """Match a newly filled trade to a grid key via pending order map.
+
+        After process_bar fills a limit, the pending order is gone. We match
+        by comparing: the fill's limit_price + side against our tracked orders.
+        """
+        for grid_key, broker_order_id in list(self._pending_order_map.items()):
+            # Check if this order is still in the broker's pending list
+            still_pending = any(
+                p.broker_order_id == broker_order_id
+                for p in self._broker._pending_orders
+            )
+            if not still_pending:
+                # This order was filled — check if it matches this trade
+                meta = self._pending_order_meta.get(grid_key, {})
+                expected_price = float(meta.get("limit_price", "0"))
+                if abs(trade.open_price - expected_price) < 0.01:
+                    del self._pending_order_map[grid_key]
+                    return grid_key
+        return None
+
+    def _place_opposite_market_order(
+        self, grid_key: str, filled_trade: _OpenTrade
+    ) -> None:
+        """After a limit fills, place the opposite side as a market order."""
+        meta = self._pending_order_meta.get(grid_key, {})
+        if not meta:
+            return
+
+        opposite_side_str = meta.get("opposite_side", "")
+        opposite_grid_key = meta.get("opposite_grid_level", "")
+        opposite_stop_loss_str = meta.get("opposite_stop_loss", "")
+        fixed_units_str = meta.get("fixed_units", "")
+
+        if not opposite_side_str or not opposite_grid_key:
+            return
+
+        opposite_side = OrderSide.BUY if opposite_side_str == "BUY" else OrderSide.SELL
+        opposite_stop_loss = (
+            float(opposite_stop_loss_str) if opposite_stop_loss_str else None
+        )
+        quantity = float(fixed_units_str) if fixed_units_str else filled_trade.quantity
+
+        order = Order(
+            symbol=filled_trade.symbol,
+            side=opposite_side,
+            order_type=OrderType.MARKET,
+            quantity=quantity,
+            stop_loss=opposite_stop_loss,
+        )
+        trade = self._broker.place_order(order)
+
+        # Track the opposite side
+        self._grid_trade_map[opposite_grid_key] = trade.broker_trade_id
+        # Update grid_level_key on the broker's open trade
+        for bt in self._broker._open_trades:
+            if bt.broker_trade_id == trade.broker_trade_id:
+                bt.grid_level_key = opposite_grid_key
+                break
+
+        # Report fill to strategy
+        report_fill = getattr(self._strategy, "report_fill", None)
+        if report_fill:
+            report_fill(opposite_grid_key, trade.price)
+
+        # Clean up metadata
+        self._pending_order_meta.pop(grid_key, None)
+
+    def _process_grid_signal(
+        self,
+        signal: Signal,
+        bar_index: int,
+        bars: list[BarData],
+    ) -> BacktestTradeRecord | None:
+        """Process a single signal from a grid strategy."""
+        # Handle FLAT / close_all
+        if (
+            signal.signal_type == SignalType.FLAT
+            and signal.metadata.get("action") == "close_all"
+        ):
+            self._close_all_trades(signal.metadata.get("reason", ""))
+            return None
+
+        # Determine order type from metadata
+        order_type_str = signal.metadata.get("order_type", "MARKET")
+        is_limit = order_type_str == "LIMIT"
+
+        side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
+        quantity = float(signal.metadata.get("fixed_units", self._config.position_size))
+        grid_key = signal.metadata.get("grid_level", "")
+
+        if is_limit:
+            limit_price = float(signal.metadata.get("limit_price", "0"))
+            order = Order(
+                signal_id=signal.id,
+                symbol=self._config.symbol,
+                side=side,
+                order_type=OrderType.LIMIT,
+                quantity=quantity,
+                limit_price=limit_price,
+                stop_loss=signal.stop_loss,
+            )
+            trade = self._broker.place_order(order)
+
+            # Track pending order
+            if grid_key:
+                self._pending_order_map[grid_key] = trade.broker_trade_id
+                self._pending_order_meta[grid_key] = dict(signal.metadata)
+                # Update grid_level_key on the broker's pending order
+                for p in self._broker._pending_orders:
+                    if p.broker_order_id == trade.broker_trade_id:
+                        p.grid_level_key = grid_key
+                        break
+
+            return None  # No trade record for pending limits
+
+        # Market order
+        order = Order(
+            signal_id=signal.id,
+            symbol=self._config.symbol,
+            side=side,
+            order_type=OrderType.MARKET,
+            quantity=quantity,
+            stop_loss=signal.stop_loss,
+        )
+        trade = self._broker.place_order(order)
+
+        # Track in grid map
+        if grid_key:
+            self._grid_trade_map[grid_key] = trade.broker_trade_id
+            for bt in self._broker._open_trades:
+                if bt.broker_trade_id == trade.broker_trade_id:
+                    bt.grid_level_key = grid_key
+                    break
+
+            report_fill = getattr(self._strategy, "report_fill", None)
+            if report_fill:
+                report_fill(grid_key, trade.price)
+
+        return BacktestTradeRecord(
+            trade=trade,
+            signal=signal,
+            bar_index=bar_index,
+            equity_after=self._broker.equity,
+        )
+
+    def _close_all_trades(self, reason: str) -> None:
+        """Close all open trades and cancel all pending orders."""
+        # Cancel pending orders
+        self._broker.cancel_all_orders(self._config.symbol)
+        self._pending_order_map.clear()
+        self._pending_order_meta.clear()
+
+        # Close all open trades at market
+        for trade in list(self._broker._open_trades):
+            if trade.symbol == self._config.symbol:
+                closed = self._broker.close_trade(trade.broker_trade_id)
+                if closed:
+                    # Find grid key and report
+                    for key, tid in list(self._grid_trade_map.items()):
+                        if tid == trade.broker_trade_id:
+                            report_closed = getattr(
+                                self._strategy, "report_trade_closed", None
+                            )
+                            if report_closed:
+                                report_closed(key, closed.realized_pnl)
+                            self._trade_pnls.append(closed.realized_pnl)
+                            del self._grid_trade_map[key]
+                            break
+
+        self._grid_trade_map.clear()
+
+        # Notify strategy that close_all is complete
+        notify = getattr(self._strategy, "notify_close_all_complete", None)
+        if notify:
+            notify()
+
+    def _calculate_grid_unrealized(self) -> float:
+        """Calculate total unrealized P&L across all open grid trades."""
+        if self._broker._current_bar is None:
+            return 0.0
+        price = self._broker._current_bar.close
+        unrealized = 0.0
+        for trade in self._broker._open_trades:
+            if trade.side == OrderSide.BUY:
+                unrealized += trade.quantity * (price - trade.open_price)
+            else:
+                unrealized += trade.quantity * (trade.open_price - price)
+        return round(unrealized, 2)
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Simple mode (original behavior)
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _run_simple_step(self, bar_index: int) -> BacktestTradeRecord | None:
+        """Execute one trading step for simple strategies."""
         # Step 1: Get bars for strategy
-        bars = self._market_data.get_latest_bars(self._config.symbol, self._config.bar_count)
+        bars = self._market_data.get_latest_bars(
+            self._config.symbol, self._config.bar_count
+        )
         if not bars:
             return None
 
@@ -141,7 +443,9 @@ class BacktestRunner:
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
         entry_price = bars[-1].close
 
-        quantity = self._risk_engine.calculate_position_size(signal, account_state, entry_price)
+        quantity = self._risk_engine.calculate_position_size(
+            signal, account_state, entry_price
+        )
         if quantity <= 0.0:
             quantity = self._config.position_size
 

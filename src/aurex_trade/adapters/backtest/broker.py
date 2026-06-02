@@ -2,14 +2,20 @@
 
 Tracks positions, capital, and P&L internally. Deterministic via seeded RNG.
 Satisfies BrokerPort Protocol.
+
+Supports two modes:
+- Simple: single net position per symbol (SMA, RSI strategies)
+- Grid: multiple individual open trades with pending limit orders and stop-loss
+  enforcement (ciby_hedged_grid and similar stateful strategies)
 """
 
 from __future__ import annotations
 
 import random
-from uuid import UUID
+from dataclasses import dataclass
+from uuid import UUID, uuid4
 
-from aurex_trade.domain.enums import OrderSide
+from aurex_trade.domain.enums import OrderSide, OrderType
 from aurex_trade.domain.models import (
     BarData,
     ClosedTradeInfo,
@@ -21,11 +27,39 @@ from aurex_trade.domain.models import (
 )
 
 
+@dataclass
+class _PendingLimitOrder:
+    """Internal tracking for a limit order awaiting fill."""
+
+    broker_order_id: str
+    symbol: str
+    side: OrderSide
+    quantity: float
+    limit_price: float
+    stop_loss: float | None
+    grid_level_key: str
+    metadata: dict[str, str]
+
+
+@dataclass
+class _OpenTrade:
+    """Internal tracking for an individual open trade."""
+
+    broker_trade_id: str
+    symbol: str
+    side: OrderSide
+    quantity: float
+    open_price: float
+    stop_loss: float | None
+    grid_level_key: str
+
+
 class SimulatedBrokerAdapter:
     """Simulated broker for backtesting.
 
     Fills at current_bar.close ± half_spread ± random_slippage.
-    Tracks a single position per symbol with full P&L accounting.
+    Tracks positions with full P&L accounting. Supports both simple net-position
+    mode and individual trade tracking for grid strategies.
     """
 
     def __init__(
@@ -35,6 +69,8 @@ class SimulatedBrokerAdapter:
         slippage: float = 0.005,
         commission_per_trade: float = 0.0,
         seed: int = 42,
+        *,
+        grid_mode: bool = False,
     ) -> None:
         self._capital = initial_capital
         self._initial_capital = initial_capital
@@ -45,23 +81,90 @@ class SimulatedBrokerAdapter:
         self._positions: dict[str, Position] = {}
         self._current_bar: BarData | None = None
         self._total_commission: float = 0.0
+        self._grid_mode = grid_mode
+
+        # Grid mode state
+        self._pending_orders: list[_PendingLimitOrder] = []
+        self._open_trades: list[_OpenTrade] = []
+        self._closed_trades: dict[str, ClosedTradeInfo] = {}
 
     def set_current_bar(self, bar: BarData) -> None:
         """Update the current market bar (called by runner each step)."""
         self._current_bar = bar
 
     def place_order(self, order: Order) -> Trade:
-        """Simulate filling an order at current price with spread + slippage."""
+        """Place an order. LIMIT orders become pending; MARKET orders fill immediately."""
         if self._current_bar is None:
             msg = "No current bar set — call set_current_bar() first"
             raise RuntimeError(msg)
 
+        if order.order_type == OrderType.LIMIT:
+            return self._place_limit_order(order)
+
+        return self._fill_market_order(order)
+
+    def _place_limit_order(self, order: Order) -> Trade:
+        """Create a pending limit order (does not fill immediately)."""
+        assert self._current_bar is not None
+        broker_order_id = str(uuid4())
+
+        grid_level_key = ""
+        metadata: dict[str, str] = {}
+        if hasattr(order, "signal_id"):
+            # Metadata will be attached by the runner via _pending_order_meta
+            pass
+
+        self._pending_orders.append(
+            _PendingLimitOrder(
+                broker_order_id=broker_order_id,
+                symbol=order.symbol,
+                side=order.side,
+                quantity=order.quantity,
+                limit_price=order.limit_price or 0.0,
+                stop_loss=order.stop_loss,
+                grid_level_key=grid_level_key,
+                metadata=metadata,
+            )
+        )
+
+        # Return a Trade with the broker_order_id for tracking.
+        # Price is limit_price (placement, not fill).
+        return Trade(
+            order_id=order.id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            price=order.limit_price or 0.0,
+            commission=0.0,
+            broker_trade_id=broker_order_id,
+            timestamp=self._current_bar.timestamp,
+        )
+
+    def _fill_market_order(self, order: Order) -> Trade:
+        """Fill a market order immediately with spread + slippage."""
+        assert self._current_bar is not None
         fill_price = self._calculate_fill_price(order.side)
         commission = self._commission_per_trade
         self._total_commission += commission
         self._capital -= commission
 
-        self._update_position(order.symbol, order.side, order.quantity, fill_price)
+        if not self._grid_mode:
+            self._update_position(order.symbol, order.side, order.quantity, fill_price)
+
+        broker_trade_id = str(uuid4())
+
+        # Track as open trade for grid mode
+        self._open_trades.append(
+            _OpenTrade(
+                broker_trade_id=broker_trade_id,
+                symbol=order.symbol,
+                side=order.side,
+                quantity=order.quantity,
+                open_price=fill_price,
+                stop_loss=order.stop_loss,
+                grid_level_key="",  # Set by runner after placement
+            )
+        )
 
         return Trade(
             order_id=order.id,
@@ -70,11 +173,125 @@ class SimulatedBrokerAdapter:
             quantity=order.quantity,
             price=fill_price,
             commission=commission,
+            broker_trade_id=broker_trade_id,
             timestamp=self._current_bar.timestamp,
         )
 
+    def process_bar(self, bar: BarData) -> tuple[list[_OpenTrade], list[ClosedTradeInfo]]:
+        """Process a bar: trigger stop-losses and fill limit orders.
+
+        Called each step BEFORE strategy generates signals.
+        Returns (newly_filled_trades, newly_closed_trades) for the runner to
+        drive strategy callbacks.
+
+        Order of operations (conservative):
+        1. Stop-losses checked first (realize losses before new fills)
+        2. Limit fills checked second
+        """
+        newly_filled: list[_OpenTrade] = []
+        newly_closed: list[ClosedTradeInfo] = []
+
+        if not self._open_trades and not self._pending_orders:
+            return newly_filled, newly_closed
+
+        # 1. Check stop-losses on open trades
+        trades_to_close: list[_OpenTrade] = []
+        for trade in self._open_trades:
+            if trade.stop_loss is None:
+                continue
+            if (trade.side == OrderSide.BUY and bar.low <= trade.stop_loss) or (
+                trade.side == OrderSide.SELL and bar.high >= trade.stop_loss
+            ):
+                trades_to_close.append(trade)
+
+        for trade in trades_to_close:
+            close_price = trade.stop_loss or 0.0
+            if trade.side == OrderSide.BUY:
+                pnl = trade.quantity * (close_price - trade.open_price)
+            else:
+                pnl = trade.quantity * (trade.open_price - close_price)
+
+            pnl = round(pnl, 2)
+            self._capital += pnl
+
+            closed_info = ClosedTradeInfo(
+                broker_trade_id=trade.broker_trade_id,
+                close_price=close_price,
+                realized_pnl=pnl,
+                close_reason="STOP_LOSS",
+            )
+            self._closed_trades[trade.broker_trade_id] = closed_info
+            newly_closed.append(closed_info)
+            self._open_trades.remove(trade)
+
+        # 2. Check limit fills
+        orders_to_fill: list[_PendingLimitOrder] = []
+        for pending in self._pending_orders:
+            if (pending.side == OrderSide.BUY and bar.low <= pending.limit_price) or (
+                pending.side == OrderSide.SELL and bar.high >= pending.limit_price
+            ):
+                orders_to_fill.append(pending)
+
+        for pending in orders_to_fill:
+            # Limit orders fill at exact limit price (no spread/slippage)
+            fill_price = pending.limit_price
+            commission = self._commission_per_trade
+            self._total_commission += commission
+            self._capital -= commission
+
+            broker_trade_id = str(uuid4())
+            open_trade = _OpenTrade(
+                broker_trade_id=broker_trade_id,
+                symbol=pending.symbol,
+                side=pending.side,
+                quantity=pending.quantity,
+                open_price=fill_price,
+                stop_loss=pending.stop_loss,
+                grid_level_key=pending.grid_level_key,
+            )
+            self._open_trades.append(open_trade)
+            newly_filled.append(open_trade)
+            self._pending_orders.remove(pending)
+
+        return newly_filled, newly_closed
+
+    def close_trade(self, broker_trade_id: str) -> ClosedTradeInfo | None:
+        """Close a specific open trade at current market price."""
+        trade = next(
+            (t for t in self._open_trades if t.broker_trade_id == broker_trade_id),
+            None,
+        )
+        if trade is None:
+            return None
+
+        assert self._current_bar is not None
+        close_side = OrderSide.SELL if trade.side == OrderSide.BUY else OrderSide.BUY
+        close_price = self._calculate_fill_price(close_side)
+
+        if trade.side == OrderSide.BUY:
+            pnl = trade.quantity * (close_price - trade.open_price)
+        else:
+            pnl = trade.quantity * (trade.open_price - close_price)
+
+        pnl = round(pnl, 2)
+        self._capital += pnl
+
+        closed_info = ClosedTradeInfo(
+            broker_trade_id=trade.broker_trade_id,
+            close_price=close_price,
+            realized_pnl=pnl,
+            close_reason="MARKET_CLOSE",
+        )
+        self._closed_trades[trade.broker_trade_id] = closed_info
+        self._open_trades.remove(trade)
+        return closed_info
+
     def cancel_order(self, order_id: UUID) -> bool:
-        """Simulated broker fills immediately — cancellation not possible."""
+        """Cancel a pending limit order by ID."""
+        for i, pending in enumerate(self._pending_orders):
+            if pending.broker_order_id == str(order_id):
+                self._pending_orders.pop(i)
+                return True
         return False
 
     def get_positions(self, symbol: str) -> Position | None:
@@ -102,13 +319,23 @@ class SimulatedBrokerAdapter:
 
     @property
     def equity(self) -> float:
-        """Current equity: capital + unrealized P&L on all positions."""
+        """Current equity: capital + unrealized P&L on all open trades/positions."""
         unrealized = 0.0
         if self._current_bar is not None:
-            for pos in self._positions.values():
-                if pos.quantity != 0:
-                    price = self._current_bar.close
-                    unrealized += pos.quantity * (price - pos.average_cost)
+            if self._grid_mode:
+                # Grid mode: compute from individual open trades only
+                price = self._current_bar.close
+                for trade in self._open_trades:
+                    if trade.side == OrderSide.BUY:
+                        unrealized += trade.quantity * (price - trade.open_price)
+                    else:
+                        unrealized += trade.quantity * (trade.open_price - price)
+            else:
+                # Simple mode: compute from net positions
+                for pos in self._positions.values():
+                    if pos.quantity != 0:
+                        price = self._current_bar.close
+                        unrealized += pos.quantity * (price - pos.average_cost)
         return self._capital + unrealized
 
     @property
@@ -117,7 +344,7 @@ class SimulatedBrokerAdapter:
         return self._total_commission
 
     def _calculate_fill_price(self, side: OrderSide) -> float:
-        """Calculate fill price with spread and slippage."""
+        """Calculate fill price with spread and slippage (market orders only)."""
         assert self._current_bar is not None
         mid_price = self._current_bar.close
         half_spread = self._spread / 2.0
@@ -129,20 +356,43 @@ class SimulatedBrokerAdapter:
             return round(mid_price - half_spread - slip, 5)
 
     def get_open_trades(self, symbol: str) -> list[OpenBrokerTrade]:
-        """Backtest broker does not track individual open trades."""
-        return []
+        """Return all currently open individual trades for a symbol."""
+        return [
+            OpenBrokerTrade(
+                broker_trade_id=t.broker_trade_id,
+                symbol=t.symbol,
+                side=t.side,
+                quantity=t.quantity,
+                open_price=t.open_price,
+            )
+            for t in self._open_trades
+            if t.symbol == symbol
+        ]
 
     def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None:
-        """Backtest broker does not track closed trade details."""
-        return None
+        """Return details of a closed trade."""
+        return self._closed_trades.get(broker_trade_id)
 
     def get_pending_orders(self, symbol: str) -> list[PendingOrder]:
-        """Backtest broker has no pending orders."""
-        return []
+        """Return all pending limit orders for a symbol."""
+        return [
+            PendingOrder(
+                broker_order_id=p.broker_order_id,
+                symbol=p.symbol,
+                side=p.side,
+                quantity=p.quantity,
+                limit_price=p.limit_price,
+                grid_level_key=p.grid_level_key,
+            )
+            for p in self._pending_orders
+            if p.symbol == symbol
+        ]
 
     def cancel_all_orders(self, symbol: str) -> int:
-        """Backtest broker has no pending orders to cancel."""
-        return 0
+        """Cancel all pending orders for a symbol. Returns count cancelled."""
+        before = len(self._pending_orders)
+        self._pending_orders = [p for p in self._pending_orders if p.symbol != symbol]
+        return before - len(self._pending_orders)
 
     def _update_position(
         self, symbol: str, side: OrderSide, quantity: float, price: float

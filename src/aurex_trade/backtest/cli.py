@@ -329,6 +329,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
     )
 
     bars = _load_bars(config, Path(args.db_path))
+
+    # Grid strategies manage their own risk (session/daily limits) — disable engine
+    is_grid_strategy = hasattr(strategy, "report_fill")
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
@@ -337,6 +340,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         risk_per_trade=args.risk_per_trade,
         max_drawdown_pct=args.max_drawdown_pct,
         max_consecutive_losses=args.max_consecutive_losses,
+        enabled=not is_grid_strategy,
     )
     market_data = HistoricalMarketDataAdapter(bars, config.bar_count)
     broker = SimulatedBrokerAdapter(
@@ -345,6 +349,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         slippage=config.slippage_pips,
         commission_per_trade=config.commission_per_trade,
         seed=config.deterministic_seed,
+        grid_mode=is_grid_strategy,
     )
     repository = InMemoryRepository()
 
@@ -468,6 +473,10 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
 
     bars = _load_bars(config, Path(args.db_path))
 
+    # Grid strategies manage their own risk — disable engine
+    _sample = STRATEGY_REGISTRY[strategy_name]({k: vs[0] for k, vs in param_grid.items()})
+    is_grid_strategy = hasattr(_sample, "report_fill")
+    del _sample
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
@@ -476,6 +485,7 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
         risk_per_trade=args.risk_per_trade,
         max_drawdown_pct=args.max_drawdown_pct,
         max_consecutive_losses=args.max_consecutive_losses,
+        enabled=not is_grid_strategy,
     )
 
     sweep = ParameterSweep(
@@ -523,6 +533,10 @@ def _cmd_walk_forward(args: argparse.Namespace) -> None:
 
     bars = _load_bars(config, Path(args.db_path))
 
+    # Grid strategies manage their own risk — disable engine
+    _sample = STRATEGY_REGISTRY[strategy_name]({k: vs[0] for k, vs in param_grid.items()})
+    is_grid_strategy = hasattr(_sample, "report_fill")
+    del _sample
     risk_engine = RiskEngine(
         max_position_size=args.max_position,
         max_daily_loss=args.max_daily_loss,
@@ -531,6 +545,7 @@ def _cmd_walk_forward(args: argparse.Namespace) -> None:
         risk_per_trade=args.risk_per_trade,
         max_drawdown_pct=args.max_drawdown_pct,
         max_consecutive_losses=args.max_consecutive_losses,
+        enabled=not is_grid_strategy,
     )
 
     validator = WalkForwardValidator(
