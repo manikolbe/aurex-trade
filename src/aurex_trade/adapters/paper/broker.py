@@ -116,6 +116,9 @@ class PaperBrokerAdapter:
             raise RuntimeError(msg)
         del self._open_trades[broker_trade_id]
 
+    def set_trailing_stop(self, broker_trade_id: str, distance: float) -> None:
+        """Paper broker — trailing stop is tracked but not simulated."""
+
     def cancel_all_orders(self, symbol: str) -> int:
         """Paper broker has no pending orders to cancel."""
         return 0

@@ -157,7 +157,7 @@ class TestScenario1BreakoutDownThenRally:
         doubled = doubled_signals[0]
         assert doubled.signal_type == SignalType.LONG  # Buy (betting on bounce)
         assert doubled.metadata["order_type"] == "MARKET"
-        assert doubled.metadata["trailing_stop_distance"] == "10.00000"
+        assert "trailing_stop_distance" not in doubled.metadata
         assert doubled.metadata["fixed_units"] == "2.0"
 
         # Take profit at 3 + 2*10 = 23
@@ -197,7 +197,7 @@ class TestScenario2BreakoutUpThenDrop:
         doubled = doubled_signals[0]
         assert doubled.signal_type == SignalType.SHORT  # Sell (betting on reversal)
         assert doubled.metadata["order_type"] == "MARKET"
-        assert doubled.metadata["trailing_stop_distance"] == "10.00000"
+        assert "trailing_stop_distance" not in doubled.metadata
 
         # Take profit at 43 - 2*10 = 23
         assert strategy._check_take_profit(20.1) is False
@@ -432,3 +432,49 @@ class TestNotifyCloseAllComplete:
         strategy._close_all_in_progress = True
         strategy.notify_close_all_complete()
         assert strategy._session_active is False
+
+
+class TestDeferredTrailingStop:
+    """Test the deferred trailing stop activation mechanism."""
+
+    def test_returns_config_when_doubled_active(self) -> None:
+        strategy = _make_strategy(spacing=10.0, trailing_stop_distance=10.0)
+        _drain_all(strategy, _bars(23.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
+
+        config = strategy.get_deferred_trailing_stop()
+        assert config is not None
+        assert config["grid_key"] == "10.00_doubled"
+        assert config["side"] == "long"
+        assert config["distance"] == 10.0
+        assert config["activation_profit"] == 10.0
+
+    def test_returns_none_before_doubling(self) -> None:
+        strategy = _make_strategy(spacing=10.0)
+        _drain_all(strategy, _bars(23.0))
+        assert strategy.get_deferred_trailing_stop() is None
+
+    def test_returns_none_after_trailing_stop_set(self) -> None:
+        strategy = _make_strategy(spacing=10.0, trailing_stop_distance=10.0)
+        _drain_all(strategy, _bars(23.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
+
+        strategy.notify_trailing_stop_set()
+        assert strategy.get_deferred_trailing_stop() is None
+
+    def test_returns_none_after_doubled_closed(self) -> None:
+        strategy = _make_strategy(spacing=10.0, trailing_stop_distance=10.0)
+        _drain_all(strategy, _bars(23.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
+
+        strategy.report_trade_closed("10.00_doubled", 20.0)
+        assert strategy.get_deferred_trailing_stop() is None

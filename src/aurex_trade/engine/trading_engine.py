@@ -920,6 +920,83 @@ class TradingEngine:
         self._check_limit_fills(open_trades)
         newly_added = set(self._grid_trade_map.values()) - trade_ids_before
         self._check_closures(open_trades, skip_trade_ids=newly_added)
+        self._check_deferred_trailing_stop(open_trades)
+
+    def _check_deferred_trailing_stop(
+        self, open_trades: list[OpenBrokerTrade]
+    ) -> None:
+        """Activate trailing stop on doubled position once profit threshold reached."""
+        get_config = getattr(self._strategy, "get_deferred_trailing_stop", None)
+        if get_config is None:
+            return
+        config = get_config()
+        if config is None:
+            return
+
+        grid_key = str(config["grid_key"])
+        side = str(config["side"])
+        distance = float(config["distance"])
+        activation_profit = float(config["activation_profit"])
+
+        broker_trade_id = self._grid_trade_map.get(grid_key)
+        if not broker_trade_id:
+            return
+
+        # Find the open trade to get its open price
+        trade_info = next(
+            (t for t in open_trades if t.broker_trade_id == broker_trade_id),
+            None,
+        )
+        if trade_info is None:
+            return
+
+        if self._last_price is None:
+            return
+
+        # Calculate unrealized profit on this specific trade
+        if side == "long":
+            profit = (self._last_price - trade_info.open_price) * trade_info.quantity
+        else:
+            profit = (trade_info.open_price - self._last_price) * trade_info.quantity
+
+        if profit < activation_profit:
+            return
+
+        # Profit threshold reached — set trailing stop
+        set_ts = getattr(self._broker, "set_trailing_stop", None)
+        if set_ts is None:
+            return
+
+        try:
+            set_ts(broker_trade_id, distance)
+        except Exception:
+            self._log.exception(
+                "trailing_stop_set_failed",
+                broker_trade_id=broker_trade_id,
+                distance=distance,
+            )
+            return
+
+        # Notify strategy
+        notify = getattr(self._strategy, "notify_trailing_stop_set", None)
+        if notify is not None:
+            notify()
+
+        self._log.info(
+            "deferred_trailing_stop_activated",
+            broker_trade_id=broker_trade_id,
+            grid_key=grid_key,
+            distance=distance,
+            profit=round(profit, 2),
+        )
+        self._event_log.append(EventLogEntry(
+            timestamp=datetime.now(UTC).isoformat(),
+            event="trailing_stop",
+            details=(
+                f"TS activated on #{broker_trade_id}"
+                f" (profit ${profit:.2f}, trail ${distance:.0f})"
+            ),
+        ))
 
     def _run_strategy_cycle(self) -> None:
         """Strategy cycle: fetch data, generate signals, place orders."""

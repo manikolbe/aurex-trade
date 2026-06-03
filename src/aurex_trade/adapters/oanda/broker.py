@@ -380,6 +380,24 @@ class OANDABrokerAdapter:
         )
         log.info("oanda_trade_closed", broker_trade_id=broker_trade_id)
 
+    def set_trailing_stop(self, broker_trade_id: str, distance: float) -> None:
+        """Add or replace a trailing stop loss on an existing open trade."""
+        body = {
+            "trailingStopLoss": {
+                "distance": f"{distance:.5f}",
+                "timeInForce": "GTC",
+            },
+        }
+        self._connection.put(
+            f"/v3/accounts/{self._account_id}/trades/{broker_trade_id}/orders",
+            json=body,
+        )
+        log.info(
+            "oanda_trailing_stop_set",
+            broker_trade_id=broker_trade_id,
+            distance=distance,
+        )
+
     def cancel_all_orders(self, symbol: str) -> int:
         """Cancel all pending orders for a symbol. Returns count cancelled."""
         pending = self.get_pending_orders(symbol)

@@ -388,6 +388,9 @@ class SimulatedBrokerAdapter:
             if p.symbol == symbol
         ]
 
+    def set_trailing_stop(self, broker_trade_id: str, distance: float) -> None:
+        """Store trailing stop for future simulation (not yet implemented)."""
+
     def cancel_all_orders(self, symbol: str) -> int:
         """Cancel all pending orders for a symbol. Returns count cancelled."""
         before = len(self._pending_orders)

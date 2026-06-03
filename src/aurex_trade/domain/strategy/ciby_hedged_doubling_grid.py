@@ -73,6 +73,7 @@ class CibyHedgedDoublingGridStrategy:
         self._doubled_side: str = ""  # "long" or "short"
         self._doubled_grid_key: str = ""
         self._doubled_active: bool = False
+        self._doubled_trailing_stop_set: bool = False
 
         # Whipsaw detection
         self._level_trigger_counts: dict[float, int] = {}
@@ -326,6 +327,30 @@ class CibyHedgedDoublingGridStrategy:
         self._filled_levels.pop(level, None)
         self._filled_entry_prices.pop(level, None)
 
+    def get_deferred_trailing_stop(self) -> dict[str, object] | None:
+        """Return trailing stop config if doubled position needs activation.
+
+        The engine calls this each fast poll. Returns None if no action needed,
+        or a dict with grid_key, distance, and activation_profit if the trailing
+        stop should be set once the position is sufficiently in profit.
+        """
+        if (
+            not self._doubled_active
+            or self._doubled_trailing_stop_set
+            or not self._doubled_grid_key
+        ):
+            return None
+        return {
+            "grid_key": self._doubled_grid_key,
+            "side": self._doubled_side,
+            "distance": self._trailing_stop_distance,
+            "activation_profit": self._spacing,
+        }
+
+    def notify_trailing_stop_set(self) -> None:
+        """Called by engine after trailing stop is successfully set on the doubled position."""
+        self._doubled_trailing_stop_set = True
+
     def release_level(self, grid_level: float) -> bool:
         """Compatibility — no-op."""
         return False
@@ -578,7 +603,6 @@ class CibyHedgedDoublingGridStrategy:
                 "grid_level": self._doubled_grid_key,
                 "fixed_units": f"{self._units:.1f}",
                 "order_type": "MARKET",
-                "trailing_stop_distance": f"{self._trailing_stop_distance:.5f}",
             },
             stop_loss=None,
             take_profit=None,
@@ -630,6 +654,7 @@ class CibyHedgedDoublingGridStrategy:
         self._doubled_side = ""
         self._doubled_grid_key = ""
         self._doubled_active = False
+        self._doubled_trailing_stop_set = False
         self._level_trigger_counts = {}
         self._session_paused = False
         self._session_realized_pnl = 0.0
