@@ -88,12 +88,12 @@ class TestInitialization:
             assert sig.take_profit is None
 
     def test_grid_levels_are_correct(self) -> None:
-        """spacing=10, anchor=23 -> levels at 33, 43 (above) and 13, 3 (below)."""
+        """spacing=10, anchor=23 -> levels at 30, 40 (above) and 20, 10 (below)."""
         strategy = _make_strategy(spacing=10.0)
         _drain_all(strategy, _bars(23.0))
 
-        assert sorted(strategy._levels_above) == [33.0, 43.0]
-        assert sorted(strategy._levels_below, reverse=True) == [13.0, 3.0]
+        assert sorted(strategy._levels_above) == [30.0, 40.0]
+        assert sorted(strategy._levels_below, reverse=True) == [20.0, 10.0]
 
     def test_correct_limit_side_per_level(self) -> None:
         """Above price -> sell limit (waits for rise). Below -> buy limit (waits for drop)."""
@@ -138,8 +138,8 @@ class TestScenario1BreakoutDownThenRally:
         _drain_all(strategy, _bars(23.0))
 
         # Price drops to inner level 13 — both sides fill
-        _fill_level(strategy, 13.0)
-        inner_signals = _drain_all(strategy, _bars(13.0))
+        _fill_level(strategy, 20.0)
+        inner_signals = _drain_all(strategy, _bars(20.0))
         doubled_signals = [
             s for s in inner_signals
             if "doubled" in s.metadata.get("grid_level", "")
@@ -147,8 +147,8 @@ class TestScenario1BreakoutDownThenRally:
         assert len(doubled_signals) == 0  # No doubling at inner level
 
         # Price drops to outer level 3 — both sides fill
-        _fill_level(strategy, 3.0)
-        outer_signals = _drain_all(strategy, _bars(3.0))
+        _fill_level(strategy, 10.0)
+        outer_signals = _drain_all(strategy, _bars(10.0))
         doubled_signals = [
             s for s in outer_signals
             if "doubled" in s.metadata.get("grid_level", "")
@@ -162,9 +162,9 @@ class TestScenario1BreakoutDownThenRally:
 
         # Take profit at 3 + 2*10 = 23
         assert strategy._doubled_active is True
-        assert strategy._doubled_level == 3.0
-        assert strategy._check_take_profit(22.9) is False
-        assert strategy._check_take_profit(23.0) is True
+        assert strategy._doubled_level == 10.0
+        assert strategy._check_take_profit(29.9) is False
+        assert strategy._check_take_profit(30.0) is True
 
 
 class TestScenario2BreakoutUpThenDrop:
@@ -182,12 +182,12 @@ class TestScenario2BreakoutUpThenDrop:
         _drain_all(strategy, _bars(23.0))
 
         # Fill inner above (33)
-        _fill_level(strategy, 33.0)
-        _drain_all(strategy, _bars(33.0))
+        _fill_level(strategy, 30.0)
+        _drain_all(strategy, _bars(30.0))
 
         # Fill outer above (43)
-        _fill_level(strategy, 43.0)
-        signals = _drain_all(strategy, _bars(43.0))
+        _fill_level(strategy, 40.0)
+        signals = _drain_all(strategy, _bars(40.0))
 
         doubled_signals = [
             s for s in signals
@@ -200,8 +200,8 @@ class TestScenario2BreakoutUpThenDrop:
         assert doubled.metadata["trailing_stop_distance"] == "10.00000"
 
         # Take profit at 43 - 2*10 = 23
-        assert strategy._check_take_profit(23.1) is False
-        assert strategy._check_take_profit(23.0) is True
+        assert strategy._check_take_profit(20.1) is False
+        assert strategy._check_take_profit(20.0) is True
 
 
 class TestScenario3FlatAfterDoubling:
@@ -214,15 +214,15 @@ class TestScenario3FlatAfterDoubling:
         strategy = _make_strategy(spacing=10.0, units=2.0)
         _drain_all(strategy, _bars(23.0))
 
-        _fill_level(strategy, 13.0)
-        _drain_all(strategy, _bars(13.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
 
-        _fill_level(strategy, 3.0)
-        _drain_all(strategy, _bars(3.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
 
         # Price stays at 3 — no take profit, no session loss
-        assert strategy._check_take_profit(3.0) is False
-        signals = _drain_all(strategy, _bars(3.0))
+        assert strategy._check_take_profit(10.0) is False
+        signals = _drain_all(strategy, _bars(10.0))
         flat_signals = [s for s in signals if s.signal_type == SignalType.FLAT]
         assert len(flat_signals) == 0
 
@@ -236,10 +236,10 @@ class TestScenario4AdverseContinuation:
         )
         _drain_all(strategy, _bars(23.0))
 
-        _fill_level(strategy, 13.0)
-        _drain_all(strategy, _bars(13.0))
-        _fill_level(strategy, 3.0)
-        _drain_all(strategy, _bars(3.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
 
         # Simulate adverse move — engine reports unrealized loss
         strategy.update_unrealized_pnl(-101.0)
@@ -258,38 +258,38 @@ class TestScenario5TrailingStopCapture:
         strategy = _make_strategy(spacing=10.0, units=2.0, trailing_stop_distance=10.0)
         _drain_all(strategy, _bars(23.0))
 
-        _fill_level(strategy, 13.0)
-        _drain_all(strategy, _bars(13.0))
-        _fill_level(strategy, 3.0)
-        _drain_all(strategy, _bars(3.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
 
         assert strategy._doubled_active is True
-        assert strategy._doubled_grid_key == "3.00_doubled"
+        assert strategy._doubled_grid_key == "10.00_doubled"
 
         # Broker closes the doubled position (trailing stop hit)
-        strategy.report_trade_closed("3.00_doubled", 20.0)
+        strategy.report_trade_closed("10.00_doubled", 20.0)
 
         assert strategy._doubled_active is False
         assert strategy._session_realized_pnl == 20.0
 
         # Take profit no longer triggers (doubled inactive)
-        assert strategy._check_take_profit(23.0) is False
+        assert strategy._check_take_profit(30.0) is False
 
 
 class TestScenario6SlowRangeNoLevelsHit:
     """Price oscillates within inner levels, never reaches outer.
 
-    spacing=20, anchor=23 -> levels at 43, 63 (above), 3, -17 (below)
-    Only inner level (3) fills — no doubling.
+    spacing=20, anchor=23 -> levels at 40, 60 (above), 20, 0 (below)
+    Only inner level (20) fills — no doubling.
     """
 
     def test_slow_range_no_doubling(self) -> None:
         strategy = _make_strategy(spacing=20.0, units=2.0)
         _drain_all(strategy, _bars(23.0))
 
-        # Fill inner below (3) — this is the inner level
-        _fill_level(strategy, 3.0)
-        signals = _drain_all(strategy, _bars(3.0))
+        # Fill inner below (20) — this is the inner level
+        _fill_level(strategy, 20.0)
+        signals = _drain_all(strategy, _bars(20.0))
 
         # No doubling at inner level
         doubled_signals = [
@@ -308,25 +308,25 @@ class TestScenario7WhipsawDetectionAndPause:
         _drain_all(strategy, _bars(23.0))
 
         # First trigger at level 13 (limit fills)
-        strategy.report_fill("13.00_long", 13.0)
+        strategy.report_fill("20.00_long", 20.0)
         assert strategy._session_paused is False
 
         # Simulate level release (both sides closed) and re-placement
-        strategy._filled_levels.pop(13.0, None)
-        strategy._filled_entry_prices.pop(13.0, None)
-        strategy._placed_levels.add(13.0)  # maintenance re-places it
+        strategy._filled_levels.pop(20.0, None)
+        strategy._filled_entry_prices.pop(20.0, None)
+        strategy._placed_levels.add(20.0)  # maintenance re-places it
 
         # Second trigger
-        strategy.report_fill("13.00_long", 13.0)
+        strategy.report_fill("20.00_long", 20.0)
         assert strategy._session_paused is False
 
         # Reset again
-        strategy._filled_levels.pop(13.0, None)
-        strategy._filled_entry_prices.pop(13.0, None)
-        strategy._placed_levels.add(13.0)
+        strategy._filled_levels.pop(20.0, None)
+        strategy._filled_entry_prices.pop(20.0, None)
+        strategy._placed_levels.add(20.0)
 
         # Third trigger — should pause
-        strategy.report_fill("13.00_long", 13.0)
+        strategy.report_fill("20.00_long", 20.0)
         assert strategy._session_paused is True
         assert strategy._close_all_pending is True
 
@@ -345,8 +345,8 @@ class TestScenario8MultipleLevelsFillInSequence:
         _drain_all(strategy, _bars(23.0))
 
         # Fill inner level first
-        _fill_level(strategy, 13.0)
-        inner_signals = _drain_all(strategy, _bars(13.0))
+        _fill_level(strategy, 20.0)
+        inner_signals = _drain_all(strategy, _bars(20.0))
         inner_doubled = [
             s for s in inner_signals
             if "doubled" in s.metadata.get("grid_level", "")
@@ -354,8 +354,8 @@ class TestScenario8MultipleLevelsFillInSequence:
         assert len(inner_doubled) == 0
 
         # Fill outer level
-        _fill_level(strategy, 3.0)
-        outer_signals = _drain_all(strategy, _bars(3.0))
+        _fill_level(strategy, 10.0)
+        outer_signals = _drain_all(strategy, _bars(10.0))
         outer_doubled = [
             s for s in outer_signals
             if "doubled" in s.metadata.get("grid_level", "")
@@ -363,10 +363,10 @@ class TestScenario8MultipleLevelsFillInSequence:
         assert len(outer_doubled) == 1
 
         # Verify strategy state
-        assert strategy._doubled_level == 3.0
+        assert strategy._doubled_level == 10.0
         assert strategy._doubled_side == "long"
         assert strategy._doubled_active is True
-        assert strategy._doubled_grid_key == "3.00_doubled"
+        assert strategy._doubled_grid_key == "10.00_doubled"
 
 
 class TestDisplayState:
@@ -391,14 +391,14 @@ class TestDisplayState:
     def test_display_state_with_doubled(self) -> None:
         strategy = _make_strategy(spacing=10.0, trailing_stop_distance=10.0)
         _drain_all(strategy, _bars(23.0))
-        _fill_level(strategy, 13.0)
-        _drain_all(strategy, _bars(13.0))
-        _fill_level(strategy, 3.0)
-        _drain_all(strategy, _bars(3.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
 
         state = strategy.get_display_state()
         assert state is not None
-        assert state["doubled_level"] == 3.0
+        assert state["doubled_level"] == 10.0
         assert state["doubled_side"] == "long"
         assert state["doubled_active"] is True
 
@@ -409,8 +409,8 @@ class TestNotifyCloseAllComplete:
     def test_restart_resets_state(self) -> None:
         strategy = _make_strategy(spacing=10.0)
         _drain_all(strategy, _bars(23.0))
-        _fill_level(strategy, 13.0)
-        _drain_all(strategy, _bars(13.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
 
         strategy._trigger_close_all("session_loss_limit")
         strategy.notify_close_all_complete()
@@ -425,7 +425,7 @@ class TestNotifyCloseAllComplete:
         _drain_all(strategy, _bars(23.0))
 
         # One fill triggers whipsaw (limit=1)
-        strategy.report_fill("13.00_long", 13.0)
+        strategy.report_fill("20.00_long", 20.0)
         assert strategy._session_paused is True
 
         # After close-all completes, session should stay inactive
