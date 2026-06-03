@@ -665,13 +665,15 @@ class TradingEngine:
             fill_price=trade.price,
             slippage=round(slippage, 4),
             broker_trade_id=broker_trade_id,
+            trailing_stop_distance=trailing_stop_distance,
         )
+        ts_detail = f", TS trail ${trailing_stop_distance:.0f}" if trailing_stop_distance else ""
         self._event_log.append(EventLogEntry(
             timestamp=datetime.now(UTC).isoformat(),
             event="market_fill",
             details=(
                 f"{opposite_side_str} market @ {trade.price:.2f}"
-                f" (#{broker_trade_id}, slippage ${slippage:.2f})"
+                f" (#{broker_trade_id}, slippage ${slippage:.2f}{ts_detail})"
             ),
         ))
 
@@ -1258,13 +1260,16 @@ class TradingEngine:
             trigger_price=latest_close,
             slippage=round(slippage, 4),
             broker_trade_id=broker_trade_id,
+            trailing_stop_distance=order.trailing_stop_distance,
         )
+        ts_dist = order.trailing_stop_distance
+        ts_detail = f" TS trail ${ts_dist:.0f}" if ts_dist else ""
         self._event_log.append(EventLogEntry(
             timestamp=datetime.now(UTC).isoformat(),
             event="trade",
             details=(
                 f"{trade.side.value.upper()} {trade.quantity}"
-                f" @ {trade.price:.2f} (#{broker_trade_id})"
+                f" @ {trade.price:.2f} (#{broker_trade_id}){ts_detail}"
             ),
         ))
         self._repository.save_trade(trade, user_id=self._user_id)
