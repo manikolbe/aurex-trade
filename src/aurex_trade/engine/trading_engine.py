@@ -56,6 +56,17 @@ class EventLogEntry(TypedDict):
     details: str
 
 
+class SessionSummary(TypedDict):
+    """Record of a completed strategy session (grid lifecycle)."""
+
+    session_number: int
+    started_at: str
+    ended_at: str
+    reason: str
+    trades_closed: int
+    realized_pnl: float
+
+
 class EngineMetrics(TypedDict):
     """Snapshot of engine state, safe to read from any thread (GIL-protected)."""
 
@@ -151,6 +162,10 @@ class TradingEngine:
         self._close_all_next_retry_at: datetime | None = None
         # Hard safety cap on open trades (0 = disabled)
         self._max_open_trades: int = 50
+        # Session history: completed strategy sessions (grid lifecycles)
+        self._session_history: list[SessionSummary] = []
+        self._session_start_at: datetime | None = None
+        self._session_trades_count: int = 0
 
     def run(self, max_cycles: int | None = None) -> None:
         """Start the trading loop.
@@ -270,6 +285,10 @@ class TradingEngine:
     def get_event_log(self) -> list[EventLogEntry]:
         """Return event log for UI display. Thread-safe (GIL)."""
         return list(self._event_log)
+
+    def get_session_history(self) -> list[SessionSummary]:
+        """Return completed session summaries for UI display. Thread-safe (GIL)."""
+        return list(self._session_history)
 
     def get_strategy_state(self) -> dict[str, object] | None:
         """Return strategy-specific display state, if available.
@@ -734,17 +753,11 @@ class TradingEngine:
         open_trades = self._broker.get_open_trades(self._symbol)
         if not open_trades:
             self._log.info("close_all_no_trades", reason=reason)
-            # Success — no trades to close
             self._close_all_failed_count = 0
             self._close_all_next_retry_at = None
             self._pending_order_map.clear()
             self._pending_order_meta.clear()
             self._grid_trade_map.clear()
-            self._event_log.append(EventLogEntry(
-                timestamp=datetime.now(UTC).isoformat(),
-                event="close_all",
-                details=f"All positions closed: {reason}",
-            ))
             notify = getattr(self._strategy, "notify_close_all_complete", None)
             if notify is not None:
                 notify()
@@ -811,10 +824,40 @@ class TradingEngine:
             trades_closed=len(open_trades),
         )
 
+        # Record session summary
+        now = datetime.now(UTC)
+        session_pnl = 0.0
+        get_state = getattr(self._strategy, "get_display_state", None)
+        if get_state is not None:
+            state = get_state()
+            if state and "session_pnl" in state:
+                session_pnl = float(state["session_pnl"])
+
+        self._session_history.append(SessionSummary(
+            session_number=len(self._session_history) + 1,
+            started_at=(
+                self._session_start_at.isoformat()
+                if self._session_start_at
+                else now.isoformat()
+            ),
+            ended_at=now.isoformat(),
+            reason=reason,
+            trades_closed=len(open_trades),
+            realized_pnl=session_pnl,
+        ))
+        self._session_start_at = None
+        self._grid_logged = False
+        self._session_trades_count = 0
+
+        reason_label = reason.replace("_", " ")
+        pnl_str = f"+${session_pnl:.2f}" if session_pnl >= 0 else f"-${abs(session_pnl):.2f}"
         self._event_log.append(EventLogEntry(
-            timestamp=datetime.now(UTC).isoformat(),
-            event="close_all",
-            details=f"All positions closed: {reason}",
+            timestamp=now.isoformat(),
+            event="session_end",
+            details=(
+                f"Session #{len(self._session_history)} ended: "
+                f"{reason_label} | {len(open_trades)} trades closed | P&L: {pnl_str}"
+            ),
         ))
 
         # Notify strategy that close-all is complete (for session restart)
@@ -1049,6 +1092,8 @@ class TradingEngine:
                     levels=state.get("levels") or state.get("grid_levels"),
                 )
                 self._grid_logged = True
+                if self._session_start_at is None:
+                    self._session_start_at = datetime.now(UTC)
 
         if signal is None:
             self._log.debug("no_signal", strategy=self._strategy.name)

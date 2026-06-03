@@ -132,6 +132,13 @@
         </div>
       </div>
     </div>
+
+    <div id="bot-session-history" class="card bg-base-100 shadow-md col-span-1 md:col-span-2 hidden">
+      <div class="card-body p-4">
+        <h2 class="card-title text-lg">Session History</h2>
+        <div id="bot-session-list" class="space-y-2"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Detect bot stop — if bot stops, this swaps the whole view to idle -->
@@ -267,10 +274,40 @@
             if (e.event === 'trade') color = 'text-info';
             else if (e.event === 'close_tp') color = 'text-success';
             else if (e.event === 'close_sl') color = 'text-error';
+            else if (e.event === 'session_end') color = 'text-accent font-semibold';
             else if (e.event === 'rejected') color = 'text-warning';
             html += '<div class="' + color + '">' + time + ' ' + e.details + '</div>';
           }
           logEl.innerHTML = html;
+        }
+
+        // Update session history panel
+        var sessions = resp.session_history || [];
+        var historyCard = document.getElementById('bot-session-history');
+        var historyList = document.getElementById('bot-session-list');
+        if (historyCard && historyList && sessions.length > 0) {
+          historyCard.classList.remove('hidden');
+          var shtml = '';
+          for (var si = sessions.length - 1; si >= 0; si--) {
+            var s = sessions[si];
+            var startTime = toTimeLabel(s.started_at);
+            var endTime = toTimeLabel(s.ended_at);
+            var pnlClass = s.realized_pnl >= 0 ? 'text-success' : 'text-error';
+            var pnlStr = s.realized_pnl >= 0 ? '+$' + s.realized_pnl.toFixed(2) : '-$' + Math.abs(s.realized_pnl).toFixed(2);
+            var reasonLabel = s.reason.replace(/_/g, ' ');
+            var badge = s.realized_pnl >= 0 ? 'badge-success' : 'badge-error';
+            shtml += '<div class="flex items-center justify-between border border-base-300 rounded-lg px-3 py-2 text-sm">';
+            shtml += '<div class="flex items-center gap-2">';
+            shtml += '<span class="font-mono text-base-content/60">#' + s.session_number + '</span>';
+            shtml += '<span class="badge badge-sm ' + badge + ' badge-outline">' + reasonLabel + '</span>';
+            shtml += '</div>';
+            shtml += '<div class="flex items-center gap-4 text-xs">';
+            shtml += '<span class="text-base-content/60">' + startTime + ' → ' + endTime + '</span>';
+            shtml += '<span class="font-mono font-semibold ' + pnlClass + '">' + pnlStr + '</span>';
+            shtml += '<span class="text-base-content/50">' + s.trades_closed + ' trades</span>';
+            shtml += '</div></div>';
+          }
+          historyList.innerHTML = shtml;
         }
 
         if (data.length < 2) return;
