@@ -686,14 +686,22 @@
       }
 
       var buyCell, sellCell;
+      var curPrice = state.current_price || 0;
 
       // Buy cell
-      if (lv.buy.status === 'active') {
+      if (lv.buy.status === 'active' && lv.buy.fill) {
+        var buyPnl = (curPrice - lv.buy.fill) * (lv.buy.units || 2);
+        var buyColor = buyPnl >= 0 ? 'text-success' : 'text-error';
+        var buySign = buyPnl >= 0 ? '+' : '';
         buyCell = '<span class="text-success">● Active</span>';
-        if (lv.buy.fill) buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + '</span>';
+        buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + '</span>';
+        buyCell += '<br><span class="text-xs font-mono ' + buyColor + '">' + buySign + '$' + buyPnl.toFixed(2) + '</span>';
         buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
         if (lv.buy.units) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.buy.units + 'u</span>';
         if (lv.buy.ticket) buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.ticket + '</span>';
+      } else if (lv.buy.status === 'active') {
+        buyCell = '<span class="text-success">● Active</span>';
+        buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
       } else if (lv.buy.status === 'placed') {
         buyCell = '<span class="text-info">◎ Placed</span>';
         buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
@@ -702,12 +710,19 @@
       }
 
       // Sell cell
-      if (lv.sell.status === 'active') {
+      if (lv.sell.status === 'active' && lv.sell.fill) {
+        var sellPnl = (lv.sell.fill - curPrice) * (lv.sell.units || 2);
+        var sellColor = sellPnl >= 0 ? 'text-success' : 'text-error';
+        var sellSign = sellPnl >= 0 ? '+' : '';
         sellCell = '<span class="text-error">● Active</span>';
-        if (lv.sell.fill) sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + '</span>';
+        sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + '</span>';
+        sellCell += '<br><span class="text-xs font-mono ' + sellColor + '">' + sellSign + '$' + sellPnl.toFixed(2) + '</span>';
         sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
         if (lv.sell.units) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.sell.units + 'u</span>';
         if (lv.sell.ticket) sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.ticket + '</span>';
+      } else if (lv.sell.status === 'active') {
+        sellCell = '<span class="text-error">● Active</span>';
+        sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
       } else if (lv.sell.status === 'placed') {
         sellCell = '<span class="text-info">◎ Placed</span>';
         sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
