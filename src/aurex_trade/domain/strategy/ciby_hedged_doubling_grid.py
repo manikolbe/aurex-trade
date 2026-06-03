@@ -185,12 +185,9 @@ class CibyHedgedDoublingGridStrategy:
         current_bar = bars[-1]
         self._current_price = current_bar.close
 
-        # Drain signal queue first
-        if self._signal_queue:
-            return self._signal_queue.popleft()
-
         if self._close_all_pending:
             self._close_all_pending = False
+            self._signal_queue.clear()
             return self._flat_close_all(current_bar, self._close_reason)
 
         if self._close_all_in_progress:
@@ -199,10 +196,12 @@ class CibyHedgedDoublingGridStrategy:
         if not self._session_active:
             return None
 
-        # Check session loss limit
+        # Check session loss limit BEFORE draining queue (prevents opening
+        # new positions when session should be shutting down)
         if self._anchor_price is not None:
             total_pnl = self._session_realized_pnl + self._session_unrealized_pnl
             if total_pnl <= -self._session_loss_limit:
+                self._signal_queue.clear()
                 self._trigger_close_all("session_loss_limit")
                 return self._flat_close_all(current_bar, "session_loss_limit")
 
@@ -212,8 +211,13 @@ class CibyHedgedDoublingGridStrategy:
             and self._doubled_active
             and self._check_take_profit(current_bar.close)
         ):
+            self._signal_queue.clear()
             self._trigger_close_all("take_profit")
             return self._flat_close_all(current_bar, "take_profit")
+
+        # Drain signal queue (after safety checks pass)
+        if self._signal_queue:
+            return self._signal_queue.popleft()
 
         # Initialize: anchor + build grid + place hedged pairs
         if self._anchor_price is None:
@@ -277,9 +281,11 @@ class CibyHedgedDoublingGridStrategy:
         """Called by engine when a broker-side closure is detected."""
         self._session_realized_pnl += realized_pnl
 
-        # If the doubled position closed (trailing stop hit), mark inactive
+        # If the doubled position closed (trailing stop hit), close all and restart
         if grid_level_key == self._doubled_grid_key:
             self._doubled_active = False
+            self._close_reason = "doubled_closed"
+            self._close_all_pending = True
             return
 
         # Track which sides of a pair have closed

@@ -1315,9 +1315,13 @@ class TradingEngine:
             )
             grid_level_str = signal.metadata.get("grid_level")
             if grid_level_str:
+                on_rejected = getattr(self._strategy, "on_signal_rejected", None)
+                if on_rejected is not None:
+                    on_rejected(grid_level_str)
                 release = getattr(self._strategy, "release_level", None)
                 if release is not None:
-                    release(float(grid_level_str))
+                    with contextlib.suppress(ValueError):
+                        release(float(grid_level_str))
             return
 
         self._session_trades += 1
