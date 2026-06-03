@@ -1054,16 +1054,26 @@ class TradingEngine:
             self._log.debug("no_signal", strategy=self._strategy.name)
             return
 
-        # Collect all signals (strategy may queue multiple, capped for safety)
+        # Collect all signals (strategy may queue multiple, capped for safety).
+        # Stop immediately on FLAT close-all — nothing else matters after that.
         all_signals.append(signal)
-        max_drain = 50
-        for _ in range(max_drain):
-            next_signal = self._strategy.generate(bars)
-            if next_signal is None:
-                break
-            all_signals.append(next_signal)
-        else:
-            self._log.warning("signal_drain_limit_reached", max=max_drain)
+        if not (
+            signal.signal_type == SignalType.FLAT
+            and signal.metadata.get("action") == "close_all"
+        ):
+            max_drain = 50
+            for _ in range(max_drain):
+                next_signal = self._strategy.generate(bars)
+                if next_signal is None:
+                    break
+                all_signals.append(next_signal)
+                if (
+                    next_signal.signal_type == SignalType.FLAT
+                    and next_signal.metadata.get("action") == "close_all"
+                ):
+                    break
+            else:
+                self._log.warning("signal_drain_limit_reached", max=max_drain)
 
         # Fetch position once for all signals (doesn't change during limit placement)
         position = self._broker.get_positions(self._symbol)
