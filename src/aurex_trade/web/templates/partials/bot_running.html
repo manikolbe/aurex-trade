@@ -688,44 +688,41 @@
       var buyCell, sellCell;
       var curPrice = state.current_price || 0;
 
+      // Helper to render one side cell
+      function renderSideCell(side, sideColor, fillPrice, units, orderType, ticket) {
+        var cell = '<span class="' + sideColor + '">● Active</span>';
+        var typeBadge = orderType === 'limit' ? '<span class="badge badge-outline badge-xs">L</span>' : '<span class="badge badge-outline badge-xs">M</span>';
+        cell += ' ' + typeBadge;
+        if (fillPrice) cell += '<br><span class="text-xs text-base-content/50">@' + fillPrice.toFixed(2) + '</span>';
+        // P&L
+        var pnl = sideColor === 'text-success' ? (curPrice - fillPrice) * units : (fillPrice - curPrice) * units;
+        var pnlColor = pnl >= 0 ? 'text-success' : 'text-error';
+        var pnlSign = pnl >= 0 ? '+' : '';
+        cell += '<br><span class="text-xs font-mono ' + pnlColor + '">' + pnlSign + '$' + pnl.toFixed(2) + '</span>';
+        cell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        cell += '<span class="text-xs text-base-content/40 ml-1">' + units + 'u</span>';
+        if (ticket) cell += '<span class="text-xs text-base-content/40 ml-1">#' + ticket + '</span>';
+        return cell;
+      }
+
       // Buy cell
       if (lv.buy.status === 'active' && lv.buy.fill) {
-        var buyPnl = (curPrice - lv.buy.fill) * (lv.buy.units || 2);
-        var buyColor = buyPnl >= 0 ? 'text-success' : 'text-error';
-        var buySign = buyPnl >= 0 ? '+' : '';
-        buyCell = '<span class="text-success">● Active</span>';
-        buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + '</span>';
-        buyCell += '<br><span class="text-xs font-mono ' + buyColor + '">' + buySign + '$' + buyPnl.toFixed(2) + '</span>';
-        buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
-        if (lv.buy.units) buyCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.buy.units + 'u</span>';
-        if (lv.buy.ticket) buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.ticket + '</span>';
-      } else if (lv.buy.status === 'active') {
-        buyCell = '<span class="text-success">● Active</span>';
-        buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        buyCell = renderSideCell('buy', 'text-success', lv.buy.fill, lv.buy.units || 2, lv.buy.order_type || '', lv.buy.ticket || '');
       } else if (lv.buy.status === 'placed') {
-        buyCell = '<span class="text-info">◎ Placed</span>';
+        buyCell = '<span class="text-info">◎ Placed</span> <span class="badge badge-outline badge-xs">L</span>';
         buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        buyCell += '<span class="text-xs text-base-content/40 ml-1">' + (lv.buy.units || 2) + 'u</span>';
       } else {
         buyCell = '<span class="text-base-content/30">—</span>';
       }
 
       // Sell cell
       if (lv.sell.status === 'active' && lv.sell.fill) {
-        var sellPnl = (lv.sell.fill - curPrice) * (lv.sell.units || 2);
-        var sellColor = sellPnl >= 0 ? 'text-success' : 'text-error';
-        var sellSign = sellPnl >= 0 ? '+' : '';
-        sellCell = '<span class="text-error">● Active</span>';
-        sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + '</span>';
-        sellCell += '<br><span class="text-xs font-mono ' + sellColor + '">' + sellSign + '$' + sellPnl.toFixed(2) + '</span>';
-        sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
-        if (lv.sell.units) sellCell += '<span class="text-xs text-base-content/40 ml-1">' + lv.sell.units + 'u</span>';
-        if (lv.sell.ticket) sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.ticket + '</span>';
-      } else if (lv.sell.status === 'active') {
-        sellCell = '<span class="text-error">● Active</span>';
-        sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        sellCell = renderSideCell('sell', 'text-error', lv.sell.fill, lv.sell.units || 2, lv.sell.order_type || '', lv.sell.ticket || '');
       } else if (lv.sell.status === 'placed') {
-        sellCell = '<span class="text-info">◎ Placed</span>';
+        sellCell = '<span class="text-info">◎ Placed</span> <span class="badge badge-outline badge-xs">L</span>';
         sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        sellCell += '<span class="text-xs text-base-content/40 ml-1">' + (lv.sell.units || 2) + 'u</span>';
       } else {
         sellCell = '<span class="text-base-content/30">—</span>';
       }
@@ -739,9 +736,17 @@
         sellCell += '<br><span class="text-xs text-info">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
       }
 
+      // Level label with inner/outer badge
+      var levelLabel = lv.price.toFixed(2);
+      if (lv.is_outer) {
+        levelLabel += ' <span class="badge badge-xs badge-primary">outer</span>';
+      } else {
+        levelLabel += ' <span class="badge badge-xs badge-ghost">inner</span>';
+      }
+
       var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : 'opacity-60';
       html += '<tr class="' + rowClass + '">';
-      html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
+      html += '<td class="font-mono text-sm">' + levelLabel + '</td>';
       html += '<td class="text-sm">' + buyCell + '</td>';
       html += '<td class="text-sm">' + sellCell + '</td>';
       html += '</tr>';

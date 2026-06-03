@@ -352,6 +352,13 @@ class CibyHedgedDoublingGridStrategy:
             doubled_key = f"{level_str}_doubled"
             fills = self._filled_entry_prices.get(level, {})
 
+            # Determine which side was limit vs market
+            limit_side = self._placed_limit_side.get(level, "")
+            if not limit_side and level in self._filled_levels:
+                # Already filled — infer from entry prices
+                # The limit side fills at level price, market side fills at spread
+                limit_side = "short" if level > (self._anchor_price or 0) else "long"
+
             if level in self._filled_levels:
                 pair_id = self._filled_levels[level]
                 closed_sides = self._pair_closed_sides.get(pair_id, set())
@@ -368,7 +375,6 @@ class CibyHedgedDoublingGridStrategy:
                 sell_fill = fills.get("short", 0.0)
             elif level in self._placed_levels:
                 status = "placed"
-                limit_side = self._placed_limit_side.get(level, "long")
                 buy_status = "placed" if limit_side == "long" else "waiting"
                 sell_status = "placed" if limit_side == "short" else "waiting"
                 buy_fill = 0.0
@@ -379,6 +385,14 @@ class CibyHedgedDoublingGridStrategy:
                 sell_status = "none"
                 buy_fill = 0.0
                 sell_fill = 0.0
+
+            buy_order_type = "limit" if limit_side == "long" else "market"
+            sell_order_type = "limit" if limit_side == "short" else "market"
+
+            is_outer = (
+                (level in self._levels_above and level == self._levels_above[-1])
+                or (level in self._levels_below and level == self._levels_below[-1])
+            )
 
             is_doubled = level == self._doubled_level
             doubled_info: dict[str, object] | None = None
@@ -392,8 +406,21 @@ class CibyHedgedDoublingGridStrategy:
             grid_levels.append({
                 "price": level,
                 "status": status,
-                "buy": {"status": buy_status, "fill": buy_fill, "sl": "none"},
-                "sell": {"status": sell_status, "fill": sell_fill, "sl": "none"},
+                "is_outer": is_outer,
+                "buy": {
+                    "status": buy_status,
+                    "fill": buy_fill,
+                    "sl": "none",
+                    "order_type": buy_order_type,
+                    "units": self._units,
+                },
+                "sell": {
+                    "status": sell_status,
+                    "fill": sell_fill,
+                    "sl": "none",
+                    "order_type": sell_order_type,
+                    "units": self._units,
+                },
                 "doubled": doubled_info,
             })
 
