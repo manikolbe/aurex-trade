@@ -60,11 +60,12 @@ class CibyHedgedDoublingGridStrategy:
         self._levels_above: list[float] = []  # [inner_above, outer_above] ascending
         self._levels_below: list[float] = []  # [inner_below, outer_below] descending
 
-        # Level state tracking
+        # Level state tracking (same pattern as v1)
         self._placed_levels: set[float] = set()  # Levels with pending limit orders
-        self._placed_sides: dict[str, str] = {}  # grid_key → "buy"|"sell"
-        self._filled_keys: dict[str, float] = {}  # grid_key → fill_price
-        self._level_pair_complete: dict[float, set[str]] = {}  # level → {filled sides}
+        self._placed_limit_side: dict[float, str] = {}  # level → "long"|"short"
+        self._filled_levels: dict[float, str] = {}  # level → pair_id (active pairs)
+        self._filled_entry_prices: dict[float, dict[str, float]] = {}  # level → {side: price}
+        self._pair_closed_sides: dict[str, set[str]] = {}  # pair_id → {closed sides}
 
         # Doubling state
         self._doubled_level: float | None = None
@@ -227,29 +228,35 @@ class CibyHedgedDoublingGridStrategy:
         return None
 
     def report_fill(self, grid_level_key: str, fill_price: float) -> None:
-        """Called by engine when a trade fills at the broker.
+        """Called by engine when a trade fills (limit or opposite market).
 
-        Tracks hedged pair completion and triggers doubling at outer levels.
+        First fill at a level (the limit side) transitions it from placed → active.
+        Second fill (the opposite market side) records the entry price.
+        Once both sides fill, check for doubling trigger at outer levels.
         """
-        self._filled_keys[grid_level_key] = fill_price
-
-        # Parse level and side from key
-        level, side = self._parse_grid_key(grid_level_key)
-        if level is None:
+        parts = grid_level_key.rsplit("_", 1)
+        if len(parts) != 2:
+            return
+        level_str, side = parts
+        try:
+            level = float(level_str)
+        except ValueError:
             return
 
-        # Track which sides have filled at this level
-        if level not in self._level_pair_complete:
-            self._level_pair_complete[level] = set()
-        self._level_pair_complete[level].add(side)
+        # Record fill price for display
+        if level in self._filled_entry_prices:
+            self._filled_entry_prices[level][side] = fill_price
+        else:
+            self._filled_entry_prices[level] = {side: fill_price}
 
-        # Remove from placed tracking
-        if side in ("buy", "sell"):
+        # First fill at this level: limit side fills, mark active
+        if level in self._placed_levels and level not in self._filled_levels:
+            pair_id = str(uuid4())
+            self._filled_levels[level] = pair_id
             self._placed_levels.discard(level)
+            self._placed_limit_side.pop(level, None)
 
-        # Increment whipsaw counter for the level
-        # Only count the first fill per level visit (buy side triggers the count)
-        if side == "buy":
+            # Increment whipsaw counter on first fill
             self._level_trigger_counts[level] = (
                 self._level_trigger_counts.get(level, 0) + 1
             )
@@ -259,8 +266,9 @@ class CibyHedgedDoublingGridStrategy:
                 self._close_all_pending = True
                 return
 
-        # Check if this is an outer level with both sides filled → trigger doubling
-        if self._doubled_level is None:
+        # Check if both sides are now filled → trigger doubling at outer levels
+        fills = self._filled_entry_prices.get(level, {})
+        if "long" in fills and "short" in fills and self._doubled_level is None:
             self._check_doubling_trigger(level)
 
     def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None:
@@ -270,23 +278,52 @@ class CibyHedgedDoublingGridStrategy:
         # If the doubled position closed (trailing stop hit), mark inactive
         if grid_level_key == self._doubled_grid_key:
             self._doubled_active = False
+            return
 
-        # Remove from filled tracking
-        self._filled_keys.pop(grid_level_key, None)
+        # Track which sides of a pair have closed
+        parts = grid_level_key.rsplit("_", 1)
+        if len(parts) != 2:
+            return
+        level_str, side = parts
+        try:
+            level = float(level_str)
+        except ValueError:
+            return
+
+        pair_id = self._filled_levels.get(level)
+        if pair_id is None:
+            return
+
+        if pair_id not in self._pair_closed_sides:
+            self._pair_closed_sides[pair_id] = set()
+        self._pair_closed_sides[pair_id].add(side)
+
+        # Release level when both sides close
+        if len(self._pair_closed_sides[pair_id]) >= 2:
+            del self._filled_levels[level]
+            del self._pair_closed_sides[pair_id]
+            self._filled_entry_prices.pop(level, None)
 
     def on_signal_rejected(self, grid_level_key: str) -> None:
         """Called by engine when risk rejects a signal."""
-        level, _side = self._parse_grid_key(grid_level_key)
-        if level is None:
+        parts = grid_level_key.rsplit("_", 1)
+        if len(parts) != 2:
+            return
+        level_str, _side = parts
+        try:
+            level = float(level_str)
+        except ValueError:
             return
 
-        # Remove queued signals for this key
+        # Remove queued signals for this level
         self._signal_queue = deque(
             s for s in self._signal_queue
-            if s.metadata.get("grid_level") != grid_level_key
+            if not s.metadata.get("grid_level", "").startswith(level_str)
         )
         self._placed_levels.discard(level)
-        self._placed_sides.pop(grid_level_key, None)
+        self._placed_limit_side.pop(level, None)
+        self._filled_levels.pop(level, None)
+        self._filled_entry_prices.pop(level, None)
 
     def release_level(self, grid_level: float) -> bool:
         """Compatibility — no-op."""
@@ -311,27 +348,36 @@ class CibyHedgedDoublingGridStrategy:
 
         for level in all_levels:
             level_str = f"{level:.2f}"
-            buy_key = f"{level_str}_buy"
-            sell_key = f"{level_str}_sell"
             doubled_key = f"{level_str}_doubled"
+            fills = self._filled_entry_prices.get(level, {})
 
-            buy_fill = self._filled_keys.get(buy_key, 0.0)
-            sell_fill = self._filled_keys.get(sell_key, 0.0)
+            if level in self._filled_levels:
+                pair_id = self._filled_levels[level]
+                closed_sides = self._pair_closed_sides.get(pair_id, set())
 
-            filled_sides = self._level_pair_complete.get(level, set())
-
-            if "buy" in filled_sides and "sell" in filled_sides:
-                status = "active"
-                buy_status = "active"
-                sell_status = "active"
+                buy_status = "closed" if "long" in closed_sides else (
+                    "active" if "long" in fills else "placed"
+                )
+                sell_status = "closed" if "short" in closed_sides else (
+                    "active" if "short" in fills else "placed"
+                )
+                both_closed = "long" in closed_sides and "short" in closed_sides
+                status = "closed" if both_closed else "active"
+                buy_fill = fills.get("long", 0.0)
+                sell_fill = fills.get("short", 0.0)
             elif level in self._placed_levels:
                 status = "placed"
-                buy_status = "active" if "buy" in filled_sides else "placed"
-                sell_status = "active" if "sell" in filled_sides else "placed"
+                limit_side = self._placed_limit_side.get(level, "long")
+                buy_status = "placed" if limit_side == "long" else "waiting"
+                sell_status = "placed" if limit_side == "short" else "waiting"
+                buy_fill = 0.0
+                sell_fill = 0.0
             else:
                 status = "waiting"
                 buy_status = "none"
                 sell_status = "none"
+                buy_fill = 0.0
+                sell_fill = 0.0
 
             is_doubled = level == self._doubled_level
             doubled_info: dict[str, object] | None = None
@@ -371,7 +417,7 @@ class CibyHedgedDoublingGridStrategy:
     # --- Private helpers ---
 
     def _initialize_grid(self, bar: BarData) -> None:
-        """Set anchor, compute 4 grid levels, and queue hedged pairs."""
+        """Set anchor, compute 4 grid levels, and queue limit orders."""
         self._symbol = bar.symbol
         self._anchor_price = bar.close
         anchor = bar.close
@@ -388,79 +434,80 @@ class CibyHedgedDoublingGridStrategy:
             round(anchor - 2 * spacing, 2),
         ]
 
-        # Place hedged pairs at all 4 levels
+        # Place ONE limit per level (engine places opposite on fill)
         for level in self._levels_above + self._levels_below:
-            self._queue_hedged_pair(level)
+            self._queue_limit_for_level(level)
 
-    def _queue_hedged_pair(self, level: float) -> None:
-        """Queue buy + sell limit orders at a level (hedged pair, no SL)."""
-        if level in self._placed_levels:
+    def _queue_limit_for_level(self, level: float) -> None:
+        """Queue ONE limit order for a grid level (the side that waits).
+
+        If current price is below the level → place SELL LIMIT (waits for rise).
+        If current price is above the level → place BUY LIMIT (waits for drop).
+        On fill, the engine places the opposite side as a market order (no SL).
+        """
+        if level in self._placed_levels or level in self._filled_levels:
             return
 
-        # Skip if too close to current price
         if abs(level - self._current_price) < self._MIN_LIMIT_DISTANCE:
             return
 
         self._placed_levels.add(level)
+        self._filled_entry_prices[level] = {}
+
         level_str = f"{level:.2f}"
+        pair_id = str(uuid4())
         units = self._units
 
-        # Buy limit
-        buy_key = f"{level_str}_buy"
-        buy_signal = Signal(
-            symbol=self._symbol,
-            signal_type=SignalType.LONG,
-            strategy_name=self.name,
-            strength=1.0,
-            metadata={
-                "grid_level": buy_key,
-                "pair_id": str(uuid4()),
-                "fixed_units": f"{units:.1f}",
-                "order_type": "LIMIT",
-                "limit_price": f"{level:.5f}",
-            },
-            stop_loss=None,
-            take_profit=None,
-        )
-        self._signal_queue.append(buy_signal)
-        self._placed_sides[buy_key] = "buy"
+        if self._current_price < level:
+            # Price below level → sell limit waits for price to rise
+            limit_side = "short"
+            opposite_side = "long"
+            signal_type = SignalType.SHORT
+        else:
+            # Price above level → buy limit waits for price to drop
+            limit_side = "long"
+            opposite_side = "short"
+            signal_type = SignalType.LONG
 
-        # Sell limit
-        sell_key = f"{level_str}_sell"
-        sell_signal = Signal(
+        grid_key = f"{level_str}_{limit_side}"
+        opposite_grid_key = f"{level_str}_{opposite_side}"
+
+        self._placed_limit_side[level] = limit_side
+
+        signal = Signal(
             symbol=self._symbol,
-            signal_type=SignalType.SHORT,
+            signal_type=signal_type,
             strategy_name=self.name,
             strength=1.0,
             metadata={
-                "grid_level": sell_key,
-                "pair_id": str(uuid4()),
+                "grid_level": grid_key,
+                "pair_id": pair_id,
+                "pair_side": limit_side,
                 "fixed_units": f"{units:.1f}",
                 "order_type": "LIMIT",
                 "limit_price": f"{level:.5f}",
+                "entry_price": f"{level:.5f}",
+                "opposite_side": "BUY" if opposite_side == "long" else "SELL",
+                "opposite_grid_level": opposite_grid_key,
+                "opposite_stop_loss": "",
             },
             stop_loss=None,
             take_profit=None,
         )
-        self._signal_queue.append(sell_signal)
-        self._placed_sides[sell_key] = "sell"
+
+        self._signal_queue.append(signal)
 
     def _maintain_grid(self, bar: BarData) -> None:
         """Re-place levels that were cancelled or not yet placed."""
         for level in self._levels_above + self._levels_below:
-            filled_sides = self._level_pair_complete.get(level, set())
-            # If level has both sides filled, it's complete — no maintenance needed
-            if "buy" in filled_sides and "sell" in filled_sides:
-                continue
-            # If not placed and not fully filled, try to place
-            if level not in self._placed_levels:
-                self._queue_hedged_pair(level)
+            if level not in self._placed_levels and level not in self._filled_levels:
+                self._queue_limit_for_level(level)
 
     def _check_doubling_trigger(self, level: float) -> None:
         """Check if the filled level is an outer level and trigger doubling."""
-        filled_sides = self._level_pair_complete.get(level, set())
+        fills = self._filled_entry_prices.get(level, {})
         # Both sides must be filled to confirm price visited the level
-        if "buy" not in filled_sides or "sell" not in filled_sides:
+        if "long" not in fills or "short" not in fills:
             return
 
         # Check if this is an outer level (2nd from anchor)
@@ -539,9 +586,10 @@ class CibyHedgedDoublingGridStrategy:
         self._levels_below = []
         self._signal_queue = deque()
         self._placed_levels = set()
-        self._placed_sides = {}
-        self._filled_keys = {}
-        self._level_pair_complete = {}
+        self._placed_limit_side = {}
+        self._filled_levels = {}
+        self._filled_entry_prices = {}
+        self._pair_closed_sides = {}
         self._doubled_level = None
         self._doubled_side = ""
         self._doubled_grid_key = ""
@@ -553,14 +601,3 @@ class CibyHedgedDoublingGridStrategy:
         self._close_all_pending = False
         self._close_all_in_progress = False
 
-    def _parse_grid_key(self, grid_level_key: str) -> tuple[float | None, str]:
-        """Parse a grid key like '4500.00_buy' into (level, side)."""
-        parts = grid_level_key.rsplit("_", 1)
-        if len(parts) != 2:
-            return None, ""
-        level_str, side = parts
-        try:
-            level = float(level_str)
-        except ValueError:
-            return None, ""
-        return level, side
