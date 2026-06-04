@@ -718,7 +718,7 @@
       // Insert anchor separator
       if (!foundAnchor && lv.price < state.anchor_price) {
         foundAnchor = true;
-        html += '<tr class="border-t-2 border-warning/60"><td class="font-mono text-xs text-warning py-1 text-center" colspan="3">';
+        html += '<tr><td class="font-mono text-xs text-warning py-1 text-center" colspan="3">';
         html += '— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
       }
 
