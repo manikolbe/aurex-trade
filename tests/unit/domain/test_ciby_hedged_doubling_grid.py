@@ -158,7 +158,7 @@ class TestScenario1BreakoutDownThenRally:
         assert doubled.signal_type == SignalType.LONG  # Buy (betting on bounce)
         assert doubled.metadata["order_type"] == "MARKET"
         assert "trailing_stop_distance" not in doubled.metadata
-        assert doubled.metadata["fixed_units"] == "2.0"
+        assert doubled.metadata["fixed_units"] == "4.0"
 
         # Doubled signal carries broker-side TP at 3 + 2*10 = 23
         assert strategy._doubled_active is True

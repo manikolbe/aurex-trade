@@ -615,6 +615,8 @@ class CibyHedgedDoublingGridStrategy:
         else:
             doubled_tp = round(level - tp_distance, 5)
 
+        doubled_units = self._units * 2
+
         doubled_signal = Signal(
             symbol=self._symbol,
             signal_type=signal_type,
@@ -622,7 +624,7 @@ class CibyHedgedDoublingGridStrategy:
             strength=1.0,
             metadata={
                 "grid_level": self._doubled_grid_key,
-                "fixed_units": f"{self._units:.1f}",
+                "fixed_units": f"{doubled_units:.1f}",
                 "order_type": "MARKET",
             },
             stop_loss=None,
