@@ -99,20 +99,17 @@
       </div>
     </div>
 
-    <div id="bot-state-banner" class="col-span-1 md:col-span-2" style="display:none;">
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 md:px-4 md:py-3 rounded-lg bg-base-200">
-        <div id="banner-state" class="font-bold text-lg"></div>
-        <div class="flex-1 min-w-0"></div>
-        <div id="banner-metrics" class="flex flex-wrap gap-x-4 gap-y-1 text-sm font-mono"></div>
-      </div>
-    </div>
+    <!-- State banner removed — badge moved inside grid card -->
 
     <div id="bot-strategy-panel" class="card bg-base-100 shadow-md col-span-1 md:col-span-2" style="display:none;">
       <div class="card-body p-3 md:p-6">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div id="bot-grid-levels" class="lg:col-span-2">
             <div class="flex items-center justify-between mb-3">
-              <h2 class="card-title text-lg">Grid Levels</h2>
+              <div class="flex items-center gap-2">
+                <h2 class="card-title text-lg">Grid Levels</h2>
+                <span id="banner-state"></span>
+              </div>
               <span id="bot-grid-updated" class="text-xs text-base-content/30 font-mono"></span>
             </div>
             <div id="bot-grid-content"></div>
@@ -792,7 +789,7 @@
     html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
 
     // Strategy note
-    html += '<p class="text-xs text-base-content/40 mb-2 italic">Hedge markers exit at TP only — no stop loss</p>';
+    html += '<div id="grid-price-ticker" class="mb-3"></div>';
 
     // Grid levels table — 3 columns, zone label inside price cell
     html += '<table class="table table-xs w-full mt-3 [&_td]:py-2.5 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
@@ -924,14 +921,16 @@
     riskContent.innerHTML = html;
   }
 
+  var lastTickPrice = 0;
+
   function renderStateBanner(state) {
-    var banner = document.getElementById('bot-state-banner');
     var bannerState = document.getElementById('banner-state');
-    var bannerMetrics = document.getElementById('banner-metrics');
-    if (!banner || !bannerState || !bannerMetrics) return;
+    var ticker = document.getElementById('grid-price-ticker');
+    if (!bannerState) return;
 
     if (!state) {
-      banner.style.display = 'none';
+      bannerState.innerHTML = '';
+      if (ticker) ticker.innerHTML = '';
       return;
     }
 
@@ -945,10 +944,9 @@
       label = 'Session Paused — Loss Limit';
       badgeClass = 'badge-error';
     } else if (state.doubled_active) {
-      label = 'Doubled Active — Trailing';
+      label = 'Doubled Active';
       badgeClass = 'badge-warning';
     } else {
-      // Check if any grid level has active/placed status
       var gridActive = false;
       var levels = state.grid_levels || [];
       for (var i = 0; i < levels.length; i++) {
@@ -960,18 +958,27 @@
         label = 'Grid Active';
         badgeClass = 'badge-info';
       } else {
-        label = 'Waiting for Fill';
+        label = 'Waiting';
         badgeClass = 'badge-ghost';
       }
     }
 
-    bannerState.innerHTML = '<span class="badge ' + badgeClass + ' badge-lg">' + label + '</span>';
+    bannerState.innerHTML = '<span class="badge ' + badgeClass + ' badge-sm">' + label + '</span>';
 
-    // Metrics: current price, anchor, distance, nearest level
+    // Price ticker
+    if (!ticker) return;
     var curPrice = state.current_price || 0;
     var anchor = state.anchor_price || 0;
     var distance = curPrice - anchor;
     var distStr = (distance >= 0 ? '+' : '') + distance.toFixed(2);
+
+    // Tick direction colour
+    var tickColor = 'text-base-content';
+    if (lastTickPrice > 0 && curPrice > 0) {
+      if (curPrice > lastTickPrice) tickColor = 'text-success';
+      else if (curPrice < lastTickPrice) tickColor = 'text-error';
+    }
+    lastTickPrice = curPrice;
 
     // Find nearest level
     var nearestLabel = '—';
@@ -993,13 +1000,13 @@
       }
     }
 
-    bannerMetrics.innerHTML =
-      '<span>Price: ' + curPrice.toFixed(2) + '</span>' +
-      '<span>Anchor: ' + anchor.toFixed(2) + '</span>' +
-      '<span>Dist: ' + distStr + '</span>' +
-      '<span>Nearest: ' + nearestLabel + '</span>';
-
-    banner.style.display = '';
+    var html = '<div class="flex items-baseline gap-3 flex-wrap">';
+    html += '<span class="text-2xl font-bold font-mono ' + tickColor + '">' + curPrice.toFixed(2) + '</span>';
+    html += '<span class="text-xs text-base-content/50">Anchor ' + anchor.toFixed(2) + '</span>';
+    html += '<span class="text-xs font-mono ' + (distance >= 0 ? 'text-success' : 'text-error') + '">' + distStr + '</span>';
+    html += '<span class="text-xs text-base-content/40">→ ' + nearestLabel + '</span>';
+    html += '</div>';
+    ticker.innerHTML = html;
   }
 
   function updateStrategyState() {
