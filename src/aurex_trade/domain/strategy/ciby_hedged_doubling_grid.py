@@ -435,6 +435,10 @@ class CibyHedgedDoublingGridStrategy:
                     "grid_key": doubled_key,
                 }
 
+            tp_distance = 2 * self._spacing
+            buy_tp = round(level + tp_distance, 2) if buy_fill else round(level + tp_distance, 2)
+            sell_tp = round(level - tp_distance, 2) if sell_fill else round(level - tp_distance, 2)
+
             grid_levels.append({
                 "price": level,
                 "status": status,
@@ -443,6 +447,7 @@ class CibyHedgedDoublingGridStrategy:
                     "status": buy_status,
                     "fill": buy_fill,
                     "sl": "none",
+                    "tp": buy_tp,
                     "order_type": buy_order_type,
                     "units": self._units,
                 },
@@ -450,6 +455,7 @@ class CibyHedgedDoublingGridStrategy:
                     "status": sell_status,
                     "fill": sell_fill,
                     "sl": "none",
+                    "tp": sell_tp,
                     "order_type": sell_order_type,
                     "units": self._units,
                 },
