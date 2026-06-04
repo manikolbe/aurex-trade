@@ -100,10 +100,10 @@
     </div>
 
     <div id="bot-state-banner" class="col-span-1 md:col-span-2" style="display:none;">
-      <div class="flex items-center gap-4 px-4 py-3 rounded-lg bg-base-200">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 rounded-lg bg-base-200">
         <div id="banner-state" class="font-bold text-lg"></div>
-        <div class="flex-1"></div>
-        <div id="banner-metrics" class="flex gap-6 text-sm font-mono"></div>
+        <div class="flex-1 min-w-0"></div>
+        <div id="banner-metrics" class="flex flex-wrap gap-x-4 gap-y-1 text-sm font-mono"></div>
       </div>
     </div>
 
@@ -774,8 +774,8 @@
     // Strategy note
     html += '<p class="text-xs text-base-content/40 mb-2 italic">Hedge markers exit at TP only — no stop loss</p>';
 
-    // Grid levels table — Zone as first column
-    html += '<table class="table table-xs w-full mt-3 [&_td]:py-2.5 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th class="w-24">Zone</th><th>Price</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
+    // Grid levels table — 3 columns, zone label inside price cell
+    html += '<table class="table table-xs w-full mt-3 [&_td]:py-2.5 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
 
     var levels = state.grid_levels;
     var foundAnchor = false;
@@ -786,29 +786,28 @@
       // Insert anchor separator row
       if (!foundAnchor && lv.price < state.anchor_price) {
         foundAnchor = true;
-        html += '<tr><td class="font-mono text-xs text-warning py-1 text-center" colspan="4">';
+        html += '<tr><td class="font-mono text-xs text-warning py-1 text-center" colspan="3">';
         html += '— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
       }
 
       var buyCell, sellCell;
       var curPrice = state.current_price || 0;
 
-      // Helper to render one side cell
+      // Helper to render one side cell — stacked vertically for mobile
       function renderSideCell(side, sideColor, fillPrice, units, orderType, ticket, tp, hasDoubled) {
         var arrow = sideColor === 'text-success' ? '↑' : '↓';
         var label = hasDoubled ? ' Doubled active' : ' Hedge active';
         var cell = '<span class="' + sideColor + '">' + arrow + label + '</span>';
-        var typeBadge = orderType === 'limit' ? '<span class="badge badge-outline badge-xs">L</span>' : '<span class="badge badge-outline badge-xs">M</span>';
-        cell += ' ' + typeBadge;
+        var typeBadge = orderType === 'limit' ? ' <span class="badge badge-outline badge-xs">L</span>' : ' <span class="badge badge-outline badge-xs">M</span>';
+        cell += typeBadge;
         if (fillPrice) cell += '<br><span class="text-xs text-base-content/50">@' + fillPrice.toFixed(2) + '</span>';
-        // P&L
         var pnl = sideColor === 'text-success' ? (curPrice - fillPrice) * units : (fillPrice - curPrice) * units;
         var pnlColor = pnl >= 0 ? 'text-success' : 'text-error';
         var pnlSign = pnl >= 0 ? '+' : '';
         cell += '<br><span class="text-xs font-mono ' + pnlColor + '">' + pnlSign + '$' + pnl.toFixed(2) + '</span>';
-        if (tp) cell += '<span class="badge badge-info badge-xs ml-1">TP ' + tp.toFixed(0) + '</span>';
-        cell += '<span class="text-xs text-base-content/20 ml-1">' + units + 'u</span>';
-        if (ticket) cell += '<span class="text-[10px] text-base-content/20 ml-1">#' + ticket + '</span>';
+        if (tp) cell += '<br><span class="badge badge-info badge-xs">TP ' + tp.toFixed(0) + '</span>';
+        cell += ' <span class="text-[10px] text-base-content/20">' + units + 'u</span>';
+        if (ticket) cell += ' <span class="text-[10px] text-base-content/20">#' + ticket + '</span>';
         return cell;
       }
 
@@ -817,9 +816,9 @@
         buyCell = renderSideCell('buy', 'text-success', lv.buy.fill, lv.buy.units || 2, lv.buy.order_type || '', lv.buy.ticket || '', lv.buy.tp || 0, !!(lv.doubled && lv.doubled.side === 'long'));
       } else if (lv.buy.status === 'placed') {
         buyCell = '<span class="text-info/70">↑ Hedge placed</span> <span class="badge badge-outline badge-xs">L</span>';
-        if (lv.buy.tp) buyCell += '<span class="badge badge-info badge-xs ml-1">TP ' + lv.buy.tp.toFixed(0) + '</span>';
-        buyCell += '<span class="text-xs text-base-content/20 ml-1">' + (lv.buy.units || 2) + 'u</span>';
-        if (lv.buy.order_id) buyCell += '<span class="text-[10px] text-base-content/20 ml-1">#' + lv.buy.order_id + '</span>';
+        if (lv.buy.tp) buyCell += '<br><span class="badge badge-info badge-xs">TP ' + lv.buy.tp.toFixed(0) + '</span>';
+        buyCell += ' <span class="text-[10px] text-base-content/20">' + (lv.buy.units || 2) + 'u</span>';
+        if (lv.buy.order_id) buyCell += ' <span class="text-[10px] text-base-content/20">#' + lv.buy.order_id + '</span>';
       } else {
         buyCell = '<span class="text-base-content/30">—</span>';
       }
@@ -829,9 +828,9 @@
         sellCell = renderSideCell('sell', 'text-error', lv.sell.fill, lv.sell.units || 2, lv.sell.order_type || '', lv.sell.ticket || '', lv.sell.tp || 0, !!(lv.doubled && lv.doubled.side === 'short'));
       } else if (lv.sell.status === 'placed') {
         sellCell = '<span class="text-info/70">↓ Hedge placed</span> <span class="badge badge-outline badge-xs">L</span>';
-        if (lv.sell.tp) sellCell += '<span class="badge badge-info badge-xs ml-1">TP ' + lv.sell.tp.toFixed(0) + '</span>';
-        sellCell += '<span class="text-xs text-base-content/20 ml-1">' + (lv.sell.units || 2) + 'u</span>';
-        if (lv.sell.order_id) sellCell += '<span class="text-[10px] text-base-content/20 ml-1">#' + lv.sell.order_id + '</span>';
+        if (lv.sell.tp) sellCell += '<br><span class="badge badge-info badge-xs">TP ' + lv.sell.tp.toFixed(0) + '</span>';
+        sellCell += ' <span class="text-[10px] text-base-content/20">' + (lv.sell.units || 2) + 'u</span>';
+        if (lv.sell.order_id) sellCell += ' <span class="text-[10px] text-base-content/20">#' + lv.sell.order_id + '</span>';
       } else {
         sellCell = '<span class="text-base-content/30">—</span>';
       }
@@ -845,16 +844,15 @@
         sellCell += '<br><span class="text-xs text-warning">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
       }
 
-      // Zone label as first column
+      // Zone label inline with price
       var isAbove = lv.price >= state.anchor_price;
-      var zoneName = (lv.is_outer ? 'Outer' : 'Inner') + ' ' + (isAbove ? 'Above' : 'Below');
+      var zoneName = (lv.is_outer ? 'Outer' : 'Inner') + ' ' + (isAbove ? '↑' : '↓');
 
       var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : 'opacity-60';
       html += '<tr class="' + rowClass + '">';
-      html += '<td class="text-xs text-base-content/50 uppercase tracking-wider">' + zoneName + '</td>';
-      html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
-      html += '<td class="text-sm">' + buyCell + '</td>';
-      html += '<td class="text-sm">' + sellCell + '</td>';
+      html += '<td class="font-mono text-sm"><span class="text-[10px] text-base-content/40 uppercase block">' + zoneName + '</span>' + lv.price.toFixed(2) + '</td>';
+      html += '<td class="text-sm align-top">' + buyCell + '</td>';
+      html += '<td class="text-sm align-top">' + sellCell + '</td>';
       html += '</tr>';
     }
     html += '</tbody></table>';
