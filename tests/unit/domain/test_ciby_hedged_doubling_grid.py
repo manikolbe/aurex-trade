@@ -85,7 +85,7 @@ class TestInitialization:
         for sig in signals:
             assert sig.metadata["order_type"] == "LIMIT"
             assert sig.stop_loss is None
-            assert sig.take_profit is None
+            assert sig.take_profit is not None
 
     def test_grid_levels_are_correct(self) -> None:
         """spacing=10, anchor=23 -> levels at 30, 40 (above) and 20, 10 (below)."""
@@ -160,11 +160,13 @@ class TestScenario1BreakoutDownThenRally:
         assert "trailing_stop_distance" not in doubled.metadata
         assert doubled.metadata["fixed_units"] == "2.0"
 
-        # Take profit at 3 + 2*10 = 23
+        # Doubled signal carries broker-side TP at 10 + 2*10 = 30
         assert strategy._doubled_active is True
         assert strategy._doubled_level == 10.0
-        assert strategy._check_take_profit(29.9) is False
-        assert strategy._check_take_profit(30.0) is True
+        assert doubled.take_profit == 30.0
+        # Software TP check defers to broker TP
+        assert strategy._doubled_has_broker_tp is True
+        assert strategy._check_take_profit(30.0) is False
 
 
 class TestScenario2BreakoutUpThenDrop:
@@ -199,9 +201,11 @@ class TestScenario2BreakoutUpThenDrop:
         assert doubled.metadata["order_type"] == "MARKET"
         assert "trailing_stop_distance" not in doubled.metadata
 
-        # Take profit at 43 - 2*10 = 23
-        assert strategy._check_take_profit(20.1) is False
-        assert strategy._check_take_profit(20.0) is True
+        # Doubled signal carries broker-side TP at 40 - 2*10 = 20
+        assert doubled.take_profit == 20.0
+        # Software TP check defers to broker TP
+        assert strategy._doubled_has_broker_tp is True
+        assert strategy._check_take_profit(20.0) is False
 
 
 class TestScenario3FlatAfterDoubling:
@@ -478,3 +482,80 @@ class TestDeferredTrailingStop:
 
         strategy.report_trade_closed("10.00_doubled", 20.0)
         assert strategy.get_deferred_trailing_stop() is None
+
+
+class TestTakeProfit:
+    """Test broker-side take-profit on all order types."""
+
+    def test_long_limit_tp_above_entry(self) -> None:
+        """Buy limit at 20 (below anchor 23, spacing 10) → TP = 20 + 20 = 40."""
+        strategy = _make_strategy(spacing=10.0)
+        signals = _drain_all(strategy, _bars(23.0))
+
+        long_signals = [s for s in signals if s.signal_type == SignalType.LONG]
+        assert len(long_signals) > 0
+        for sig in long_signals:
+            level = float(sig.metadata["limit_price"])
+            assert sig.take_profit == round(level + 20.0, 5)
+
+    def test_short_limit_tp_below_entry(self) -> None:
+        """Sell limit at 30 (above anchor 23, spacing 10) → TP = 30 - 20 = 10."""
+        strategy = _make_strategy(spacing=10.0)
+        signals = _drain_all(strategy, _bars(23.0))
+
+        short_signals = [s for s in signals if s.signal_type == SignalType.SHORT]
+        assert len(short_signals) > 0
+        for sig in short_signals:
+            level = float(sig.metadata["limit_price"])
+            assert sig.take_profit == round(level - 20.0, 5)
+
+    def test_opposite_take_profit_in_metadata(self) -> None:
+        """Opposite-side TP metadata is set correctly."""
+        strategy = _make_strategy(spacing=10.0)
+        signals = _drain_all(strategy, _bars(23.0))
+
+        for sig in signals:
+            assert "opposite_take_profit" in sig.metadata
+            level = float(sig.metadata["limit_price"])
+            opposite_side = sig.metadata["opposite_side"]
+            expected_tp = level + 20.0 if opposite_side == "BUY" else level - 20.0
+            assert float(sig.metadata["opposite_take_profit"]) == round(expected_tp, 5)
+
+    def test_doubled_signal_has_tp(self) -> None:
+        """Doubled long at outer below (10) → TP = 10 + 20 = 30."""
+        strategy = _make_strategy(spacing=10.0)
+        _drain_all(strategy, _bars(23.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        signals = _drain_all(strategy, _bars(10.0))
+
+        doubled = [s for s in signals if "doubled" in s.metadata.get("grid_level", "")]
+        assert len(doubled) == 1
+        assert doubled[0].take_profit == 30.0
+
+    def test_software_tp_defers_when_broker_tp_set(self) -> None:
+        """_check_take_profit returns False when broker TP is active."""
+        strategy = _make_strategy(spacing=10.0)
+        _drain_all(strategy, _bars(23.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
+
+        assert strategy._doubled_has_broker_tp is True
+        # Even at the exact TP level, software check defers
+        assert strategy._check_take_profit(30.0) is False
+
+    def test_software_tp_works_as_fallback(self) -> None:
+        """If broker TP flag is manually cleared, software check still works."""
+        strategy = _make_strategy(spacing=10.0)
+        _drain_all(strategy, _bars(23.0))
+        _fill_level(strategy, 20.0)
+        _drain_all(strategy, _bars(20.0))
+        _fill_level(strategy, 10.0)
+        _drain_all(strategy, _bars(10.0))
+
+        strategy._doubled_has_broker_tp = False
+        assert strategy._check_take_profit(29.9) is False
+        assert strategy._check_take_profit(30.0) is True

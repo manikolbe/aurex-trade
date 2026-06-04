@@ -160,6 +160,59 @@ Whipsaw markets where price repeatedly reverses at exactly stop-loss distance,
 hitting stops on both sides of pairs. Strong trends with tight grid spacing can
 also bleed through rapid stop-outs.
 
+## Ciby Hedged Doubling Grid
+
+**File:** `src/aurex_trade/domain/strategy/ciby_hedged_doubling_grid.py`
+
+Evolution of the hedged grid that removes stop losses and adds a doubling
+mechanism at outer levels. Designed for breakout capture with zero bleed in
+sideways markets.
+
+### Signal Logic
+
+- On first bar: anchor at current price, build 4 levels (2 above, 2 below)
+- Each level gets a single limit order; when it fills, the engine places the
+  opposite-side market order (forming a hedged pair with no stop loss)
+- When both sides fill at an outer level: a doubled market order is placed
+  (long at outer-below, short at outer-above) betting on mean-reversion
+- All orders (limit, opposite market, doubled) carry broker-side take-profit
+  at `2 * spacing` from entry — OANDA executes server-side even if bot is offline
+- Session loss limit triggers close-all if the doubled position goes against
+
+### Parameters
+
+| Key | Default | Range | Description |
+|-----|---------|-------|-------------|
+| `spacing` | 20.0 | 5-100 | Distance between grid levels ($) |
+| `units` | 2.0 | 1-100 | Units per trade |
+| `trailing_stop_distance` | 20.0 | 5-100 | Trailing stop on doubled position ($) |
+| `session_loss_limit` | 100.0 | 10-5000 | Close all & restart when hit ($) |
+| `whipsaw_limit` | 3 | 1-10 | Max re-triggers per level before pause |
+
+### Take-Profit Mechanism
+
+Every trade placed by this strategy has an automatic take-profit at
+`entry ± (2 * spacing)`:
+
+- Long (buy): TP = entry + 2*spacing
+- Short (sell): TP = entry - 2*spacing
+
+This applies to hedged-pair legs and the doubled position. The broker
+executes the TP server-side. For the doubled position, trailing stop and TP
+coexist — whichever fires first closes the trade.
+
+### When It Works Best
+
+Markets that oscillate within the grid or break out then revert. Hedged pairs
+cost nothing during sideways movement; TP locks in profit on each leg
+independently before price can reverse and neutralise gains.
+
+### When It Struggles
+
+Sustained trends beyond the outer level. The doubled position loses, and
+hedged-pair short legs accumulate unrealised loss until the session loss limit
+fires a close-all.
+
 ## Simple Grid
 
 **File:** `src/aurex_trade/domain/strategy/simple_grid.py`

@@ -146,11 +146,15 @@ The real action happens at the **outer levels** (the 2nd level from the anchor):
 These extra "doubled" positions have a **trailing stop** that locks in profit
 once the price moves favourably by one grid spacing.
 
-**Take profit:** When price breaks out 2 full spacings beyond the doubled level,
-all positions are closed for a profit.
+**Take profit:** Every trade has an automatic broker-side take-profit set at 2
+grid spacings from entry. Long trades close when price rises 2 spacings; short
+trades close when price drops 2 spacings. This locks in profit per-leg before
+price can reverse and neutralise gains.
 
 **Protection mechanisms:**
 
+- **Auto take-profit on every trade** — each leg closes automatically when price
+  moves 2 spacings in the profitable direction, banking gains before price reverses
 - **No stop loss on hedged pairs** — eliminates all whipsaw bleeding
 - **Trailing stop on doubled position** — captures breakout profit, limits giveback
 - **Session loss limit** — circuit breaker if the doubled position goes against you

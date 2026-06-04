@@ -637,6 +637,8 @@ class TradingEngine:
         stop_loss = float(opposite_stop_str) if opposite_stop_str else None
         trailing_stop_str = meta.get("trailing_stop_distance")
         trailing_stop_distance = float(trailing_stop_str) if trailing_stop_str else None
+        take_profit_str = meta.get("opposite_take_profit")
+        take_profit = float(take_profit_str) if take_profit_str else None
 
         order = Order(
             symbol=self._symbol,
@@ -644,6 +646,7 @@ class TradingEngine:
             quantity=quantity,
             order_type=OrderType.MARKET,
             stop_loss=stop_loss,
+            take_profit=take_profit,
             trailing_stop_distance=trailing_stop_distance,
         )
 

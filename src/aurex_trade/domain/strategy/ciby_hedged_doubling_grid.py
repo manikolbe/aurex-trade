@@ -74,6 +74,7 @@ class CibyHedgedDoublingGridStrategy:
         self._doubled_grid_key: str = ""
         self._doubled_active: bool = False
         self._doubled_trailing_stop_set: bool = False
+        self._doubled_has_broker_tp: bool = False
 
         # Whipsaw detection
         self._level_trigger_counts: dict[float, int] = {}
@@ -541,6 +542,17 @@ class CibyHedgedDoublingGridStrategy:
 
         self._placed_limit_side[level] = limit_side
 
+        tp_distance = 2 * self._spacing
+        if signal_type == SignalType.LONG:
+            take_profit = round(level + tp_distance, 5)
+        else:
+            take_profit = round(level - tp_distance, 5)
+
+        if opposite_side == "long":
+            opposite_tp = round(level + tp_distance, 5)
+        else:
+            opposite_tp = round(level - tp_distance, 5)
+
         signal = Signal(
             symbol=self._symbol,
             signal_type=signal_type,
@@ -557,9 +569,10 @@ class CibyHedgedDoublingGridStrategy:
                 "opposite_side": "BUY" if opposite_side == "long" else "SELL",
                 "opposite_grid_level": opposite_grid_key,
                 "opposite_stop_loss": "",
+                "opposite_take_profit": f"{opposite_tp:.5f}",
             },
             stop_loss=None,
-            take_profit=None,
+            take_profit=take_profit,
         )
 
         self._signal_queue.append(signal)
@@ -600,6 +613,12 @@ class CibyHedgedDoublingGridStrategy:
 
         self._doubled_active = True
 
+        tp_distance = 2 * self._spacing
+        if self._doubled_side == "long":
+            doubled_tp = round(level + tp_distance, 5)
+        else:
+            doubled_tp = round(level - tp_distance, 5)
+
         doubled_signal = Signal(
             symbol=self._symbol,
             signal_type=signal_type,
@@ -611,13 +630,16 @@ class CibyHedgedDoublingGridStrategy:
                 "order_type": "MARKET",
             },
             stop_loss=None,
-            take_profit=None,
+            take_profit=doubled_tp,
         )
         self._signal_queue.append(doubled_signal)
+        self._doubled_has_broker_tp = True
 
     def _check_take_profit(self, current_price: float) -> bool:
         """Check if price has broken 2 levels beyond the doubled level."""
         if self._doubled_level is None or not self._doubled_active:
+            return False
+        if self._doubled_has_broker_tp:
             return False
 
         target_distance = 2 * self._spacing
@@ -661,6 +683,7 @@ class CibyHedgedDoublingGridStrategy:
         self._doubled_grid_key = ""
         self._doubled_active = False
         self._doubled_trailing_stop_set = False
+        self._doubled_has_broker_tp = False
         self._level_trigger_counts = {}
         self._session_paused = False
         self._session_realized_pnl = 0.0
