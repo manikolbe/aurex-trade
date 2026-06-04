@@ -335,9 +335,12 @@ class OANDABrokerAdapter:
         else:
             # closeReason missing — infer from attached order states
             tp_order = trade.get("takeProfitOrder", {})
+            ts_order = trade.get("trailingStopLossOrder", {})
             sl_order = trade.get("stopLossOrder", {})
             if tp_order.get("state") == "FILLED":
                 reason = "TAKE_PROFIT"
+            elif ts_order.get("state") == "FILLED":
+                reason = "TRAILING_STOP"
             elif sl_order.get("state") == "FILLED":
                 reason = "STOP_LOSS"
             else:
