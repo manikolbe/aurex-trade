@@ -579,7 +579,7 @@
     html += renderDailyLossGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit);
 
     // Grid levels table — show active levels + 3 empty on each side
-    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
+    html += '<table class="table table-xs w-full mt-3 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
 
     var levels = state.grid_levels;
     // Find indices of active/non-waiting levels
@@ -708,7 +708,7 @@
     html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
 
     // Grid levels table
-    html += '<table class="table table-xs w-full mt-3"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
+    html += '<table class="table table-xs w-full mt-3 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
 
     var levels = state.grid_levels;
     var foundAnchor = false;
@@ -751,6 +751,7 @@
         buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
         if (lv.buy.tp) buyCell += '<span class="badge badge-info badge-xs ml-1">TP ' + lv.buy.tp.toFixed(0) + '</span>';
         buyCell += '<span class="text-xs text-base-content/40 ml-1">' + (lv.buy.units || 2) + 'u</span>';
+        if (lv.buy.order_id) buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.order_id + '</span>';
       } else {
         buyCell = '<span class="text-base-content/30">—</span>';
       }
@@ -763,6 +764,7 @@
         sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
         if (lv.sell.tp) sellCell += '<span class="badge badge-info badge-xs ml-1">TP ' + lv.sell.tp.toFixed(0) + '</span>';
         sellCell += '<span class="text-xs text-base-content/40 ml-1">' + (lv.sell.units || 2) + 'u</span>';
+        if (lv.sell.order_id) sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.order_id + '</span>';
       } else {
         sellCell = '<span class="text-base-content/30">—</span>';
       }
