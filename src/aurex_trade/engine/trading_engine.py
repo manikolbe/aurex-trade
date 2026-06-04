@@ -305,6 +305,8 @@ class TradingEngine:
         grid_levels = result.get("grid_levels")
         if isinstance(grid_levels, list):
             grid_units = getattr(self._strategy, "_grid_units", None)
+            if grid_units is None:
+                grid_units = getattr(self._strategy, "_units", None)
             for level_info in grid_levels:
                 if not isinstance(level_info, dict):
                     continue
@@ -328,6 +330,16 @@ class TradingEngine:
                     # Add units
                     if grid_units is not None:
                         side_info["units"] = float(grid_units)
+
+                # Enrich doubled position info with broker details
+                doubled_info = level_info.get("doubled")
+                if isinstance(doubled_info, dict):
+                    doubled_key = f"{level_str}_doubled"
+                    doubled_trade_id = self._grid_trade_map.get(doubled_key)
+                    if doubled_trade_id:
+                        doubled_info["ticket"] = doubled_trade_id
+                    doubled_units = float(grid_units) * 2 if grid_units else 0.0
+                    doubled_info["units"] = doubled_units
 
         return result
 

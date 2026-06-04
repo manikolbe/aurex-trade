@@ -855,13 +855,29 @@
         sellCell = '<span class="text-base-content/30">—</span>';
       }
 
-      // Doubled position badge on the relevant side
+      // Doubled position details on the relevant side
       if (lv.doubled && lv.doubled.side === 'long') {
-        buyCell += '<br><span class="badge badge-warning badge-xs">Doubled — trailing</span>';
+        buyCell += '<br><hr class="border-base-content/10 my-1">';
+        buyCell += '<span class="text-warning font-semibold">↑ Doubled</span> <span class="text-[10px] text-base-content/30">' + (lv.doubled.units || 4) + 'u</span>';
+        if (lv.doubled.fill) buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.doubled.fill.toFixed(2) + '</span>';
+        if (lv.doubled.fill && curPrice) {
+          var dPnl = (curPrice - lv.doubled.fill) * (lv.doubled.units || 4);
+          var dColor = dPnl >= 0 ? 'text-success' : 'text-error';
+          buyCell += '<br><span class="text-xs font-mono ' + dColor + '">' + (dPnl >= 0 ? '+' : '') + '$' + dPnl.toFixed(2) + '</span>';
+        }
         buyCell += '<br><span class="text-xs text-warning">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
+        if (lv.doubled.ticket) buyCell += ' <span class="text-[10px] text-base-content/20">#' + lv.doubled.ticket + '</span>';
       } else if (lv.doubled && lv.doubled.side === 'short') {
-        sellCell += '<br><span class="badge badge-warning badge-xs">Doubled — trailing</span>';
+        sellCell += '<br><hr class="border-base-content/10 my-1">';
+        sellCell += '<span class="text-warning font-semibold">↓ Doubled</span> <span class="text-[10px] text-base-content/30">' + (lv.doubled.units || 4) + 'u</span>';
+        if (lv.doubled.fill) sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.doubled.fill.toFixed(2) + '</span>';
+        if (lv.doubled.fill && curPrice) {
+          var dPnl = (lv.doubled.fill - curPrice) * (lv.doubled.units || 4);
+          var dColor = dPnl >= 0 ? 'text-success' : 'text-error';
+          sellCell += '<br><span class="text-xs font-mono ' + dColor + '">' + (dPnl >= 0 ? '+' : '') + '$' + dPnl.toFixed(2) + '</span>';
+        }
         sellCell += '<br><span class="text-xs text-warning">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
+        if (lv.doubled.ticket) sellCell += ' <span class="text-[10px] text-base-content/20">#' + lv.doubled.ticket + '</span>';
       }
 
       // Zone label inline with price

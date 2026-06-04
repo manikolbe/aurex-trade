@@ -436,10 +436,12 @@ class CibyHedgedDoublingGridStrategy:
             is_doubled = level == self._doubled_level
             doubled_info: dict[str, object] | None = None
             if is_doubled and self._doubled_active:
+                doubled_fill = self._filled_entry_prices.get(level, {}).get("doubled", 0.0)
                 doubled_info = {
                     "side": self._doubled_side,
                     "trailing_stop_distance": self._trailing_stop_distance,
                     "grid_key": doubled_key,
+                    "fill": doubled_fill,
                 }
 
             tp_distance = 2 * self._spacing
