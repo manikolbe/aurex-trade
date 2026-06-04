@@ -104,11 +104,11 @@ class CibyHedgedDoublingGridStrategy:
             description=(
                 "A breakout-capture strategy that places hedged pairs (buy + sell) at "
                 "grid levels with NO stop loss. Hedged pairs are self-cancelling and "
-                "exist to mark that price visited a level. At outer levels, extra units "
-                "are placed on the reversal side with a trailing stop — this is the only "
-                "source of profit. Does nothing in sideways markets, captures big "
-                "directional moves, never bleeds from whipsaw. Works best on volatile "
-                "instruments like gold (XAU/USD)."
+                "exist to mark that price visited a level. At outer levels, double units "
+                "are placed on the breakout side with a deferred trailing stop — this is "
+                "the only source of profit. Does nothing in sideways markets, captures "
+                "big directional moves, never bleeds from whipsaw. Works best on "
+                "volatile instruments like gold (XAU/USD)."
             ),
             params=(
                 ParamMeta(
@@ -128,8 +128,8 @@ class CibyHedgedDoublingGridStrategy:
                     label="Units per Level",
                     tooltip=(
                         "Position size for each side of a hedged pair. At outer levels, "
-                        "the doubled position uses the same unit size (extra units added "
-                        "on top of the hedged pair)."
+                        "the doubled position uses 2× this size (e.g. 2u hedges → 4u "
+                        "doubled) to capture the breakout with more weight."
                     ),
                     default=2.0,
                     min_value=1.0,
@@ -140,8 +140,9 @@ class CibyHedgedDoublingGridStrategy:
                     label="Trailing Stop Distance ($)",
                     tooltip=(
                         "Trail distance on the doubled position. The trailing stop "
-                        "activates immediately at placement and trails at this distance. "
-                        "OANDA manages the trail server-side."
+                        "activates once the position is in profit by 1× grid spacing, "
+                        "then trails at this distance. OANDA manages the trail "
+                        "server-side."
                     ),
                     default=20.0,
                     min_value=1.0,
