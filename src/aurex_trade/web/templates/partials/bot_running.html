@@ -367,7 +367,8 @@
             var endTime = toTimeLabel(s.ended_at);
             var pnlClass = s.realized_pnl >= 0 ? 'text-success' : 'text-error';
             var pnlStr = s.realized_pnl >= 0 ? '+$' + s.realized_pnl.toFixed(2) : '-$' + Math.abs(s.realized_pnl).toFixed(2);
-            var reasonLabel = s.reason.replace(/_/g, ' ');
+            var reasonMap = {'doubled_tp': 'TP hit — breakout captured', 'doubled_ts': 'Trailing stop hit', 'take_profit': 'TP hit — breakout captured', 'session_loss_limit': 'Loss limit reached', 'whipsaw_pause': 'Whipsaw — paused', 'doubled_closed': 'Doubled position closed'};
+            var reasonLabel = reasonMap[s.reason] || s.reason.replace(/_/g, ' ');
             var badge = s.realized_pnl >= 0 ? 'badge-success' : 'badge-error';
             shtml += '<div class="flex items-center justify-between border border-base-300 rounded-lg px-3 py-2 text-sm">';
             shtml += '<div class="flex items-center gap-2">';
@@ -754,7 +755,8 @@
         var pnlClass = sess.pnl >= 0 ? 'text-success' : 'text-error';
         html += '<tr>';
         html += '<td>' + sess.session + '</td>';
-        html += '<td class="text-xs">' + sess.reason.replace(/_/g, ' ') + '</td>';
+        var sessReasonMap = {'doubled_tp': 'TP hit — breakout captured', 'doubled_ts': 'Trailing stop hit', 'take_profit': 'TP hit — breakout captured', 'session_loss_limit': 'Loss limit reached', 'whipsaw_pause': 'Whipsaw — paused', 'doubled_closed': 'Doubled position closed'};
+        html += '<td class="text-xs">' + (sessReasonMap[sess.reason] || sess.reason.replace(/_/g, ' ')) + '</td>';
         html += '<td class="font-mono ' + pnlClass + '">' + (sess.pnl >= 0 ? '+' : '') + '$' + sess.pnl.toFixed(2) + '</td>';
         html += '</tr>';
       }

@@ -277,14 +277,21 @@ class CibyHedgedDoublingGridStrategy:
         if "long" in fills and "short" in fills and self._doubled_level is None:
             self._check_doubling_trigger(level)
 
-    def report_trade_closed(self, grid_level_key: str, realized_pnl: float) -> None:
+    def report_trade_closed(
+        self, grid_level_key: str, realized_pnl: float, close_side: str = ""
+    ) -> None:
         """Called by engine when a broker-side closure is detected."""
         self._session_realized_pnl += realized_pnl
 
-        # If the doubled position closed (trailing stop hit), close all and restart
+        # If the doubled position closed, close all and restart
         if grid_level_key == self._doubled_grid_key:
             self._doubled_active = False
-            self._close_reason = "doubled_closed"
+            if "tp" in close_side:
+                self._close_reason = "doubled_tp"
+            elif "ts" in close_side:
+                self._close_reason = "doubled_ts"
+            else:
+                self._close_reason = "doubled_closed"
             self._close_all_pending = True
             return
 

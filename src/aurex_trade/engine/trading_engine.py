@@ -920,10 +920,10 @@ class TradingEngine:
             if realized_pnl != 0.0:
                 self._trade_pnls.append(realized_pnl)
 
-            # Report trade closure to strategy (for P&L tracking)
+            # Report trade closure to strategy (for P&L tracking + reason)
             report_closed = getattr(self._strategy, "report_trade_closed", None)
             if report_closed is not None:
-                report_closed(grid_key, realized_pnl)
+                report_closed(grid_key, realized_pnl, side)
 
             # Release the grid level back to 'waiting' (legacy float-key strategies)
             release = getattr(self._strategy, "release_level", None)
