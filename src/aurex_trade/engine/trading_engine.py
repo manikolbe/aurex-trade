@@ -343,6 +343,8 @@ class TradingEngine:
 
         # Extract stop_distance from strategy if available
         strategy_stop = getattr(self._strategy, "_stop_distance", None)
+        if strategy_stop is None:
+            strategy_stop = getattr(self._strategy, "_spacing", None)
         if strategy_stop is not None:
             stop_distance = float(strategy_stop)
 
@@ -350,6 +352,8 @@ class TradingEngine:
 
         # Check if strategy uses fixed units (hedged grid pattern)
         grid_units = getattr(self._strategy, "_grid_units", None)
+        if grid_units is None:
+            grid_units = getattr(self._strategy, "_units", None)
         session_loss_limit = getattr(self._strategy, "_session_loss_limit", None)
         daily_loss_limit_attr = getattr(self._strategy, "_daily_loss_limit", None)
 
