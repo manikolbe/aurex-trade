@@ -176,11 +176,12 @@
     var sellColors = new Array(labels.length).fill('hsl(0, 70%, 55%)');
     var closeTp = new Array(labels.length).fill(null);
     var closeSl = new Array(labels.length).fill(null);
+    var closeTs = new Array(labels.length).fill(null);
 
     // Collect closed trade IDs to fade their open markers
     var closedIds = {};
     tradeMarkers.forEach(function(t) {
-      if ((t.side === 'close_tp' || t.side === 'close_sl') && t.broker_trade_id) {
+      if (('close_' === t.side.substring(0, 6)) && t.broker_trade_id) {
         closedIds[t.broker_trade_id] = true;
       }
     });
@@ -210,6 +211,8 @@
         }
       } else if (t.side === 'close_tp') {
         closeTp[idx] = t.price;
+      } else if (t.side === 'close_ts') {
+        closeTs[idx] = t.price;
       } else if (t.side === 'close_sl') {
         closeSl[idx] = t.price;
       }
@@ -247,6 +250,17 @@
         pointStyle: 'star',
         pointRadius: 9,
         pointHoverRadius: 12,
+        showLine: false,
+        yAxisID: 'y1'
+      },
+      {
+        label: 'Trailing Stop Hit',
+        data: closeTs,
+        borderColor: 'hsl(35, 90%, 55%)',
+        backgroundColor: 'hsl(35, 90%, 55%)',
+        pointStyle: 'rect',
+        pointRadius: 7,
+        pointHoverRadius: 10,
         showLine: false,
         yAxisID: 'y1'
       },
@@ -331,6 +345,7 @@
             var color = 'text-base-content/70';
             if (e.event === 'trade') color = 'text-info';
             else if (e.event === 'close_tp') color = 'text-success';
+            else if (e.event === 'close_ts') color = 'text-warning';
             else if (e.event === 'close_sl') color = 'text-error';
             else if (e.event === 'session_end') color = 'text-accent font-semibold';
             else if (e.event === 'rejected') color = 'text-warning';
@@ -385,7 +400,8 @@
             tradeSets[0],
             tradeSets[1],
             tradeSets[2],
-            tradeSets[3]
+            tradeSets[3],
+            tradeSets[4]
           ];
           datasets[0].data = equityValues;
           datasets[1].data = priceValues;
@@ -420,7 +436,8 @@
                 tradeSets[0],
                 tradeSets[1],
                 tradeSets[2],
-                tradeSets[3]
+                tradeSets[3],
+                tradeSets[4]
           ];
           chart = new Chart(canvas.getContext('2d'), {
             type: 'line',
@@ -454,7 +471,8 @@
                           return s;
                         }},
                         4: {side: 'close_tp', fmt: function(m) { return 'TP @ ' + m.price.toFixed(2); }},
-                        5: {side: 'close_sl', fmt: function(m) { return 'SL @ ' + m.price.toFixed(2); }}
+                        5: {side: 'close_ts', fmt: function(m) { return 'TS @ ' + m.price.toFixed(2); }},
+                        6: {side: 'close_sl', fmt: function(m) { return 'SL @ ' + m.price.toFixed(2); }}
                       };
                       var meta = markerMeta[idx];
                       if (meta && ctx.raw !== null) {

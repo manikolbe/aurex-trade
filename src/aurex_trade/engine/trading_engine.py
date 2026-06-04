@@ -899,7 +899,12 @@ class TradingEngine:
                 details = self._broker.get_closed_trade_details(broker_id)
                 if details:
                     close_reason = details.close_reason
-                    side = "close_tp" if "TAKE_PROFIT" in close_reason else "close_sl"
+                    if "TAKE_PROFIT" in close_reason:
+                        side = "close_tp"
+                    elif "TRAILING_STOP" in close_reason:
+                        side = "close_ts"
+                    else:
+                        side = "close_sl"
                     close_price = details.close_price
                     realized_pnl = details.realized_pnl
             except Exception:
@@ -939,7 +944,7 @@ class TradingEngine:
                 )
             )
 
-            close_label = "TP" if "tp" in side else "SL"
+            close_label = "TP" if "tp" in side else ("TS" if "ts" in side else "SL")
             pnl_str = (
                 f"+${realized_pnl:.2f}" if realized_pnl >= 0
                 else f"-${abs(realized_pnl):.2f}"
