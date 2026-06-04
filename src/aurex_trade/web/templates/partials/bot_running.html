@@ -75,10 +75,10 @@
             <button type="submit" class="btn btn-warning btn-sm w-full">Pause Trading</button>
             {% endif %}
           </form>
-          <form hx-post="/htmx/bot/stop" hx-target="#bot-content" hx-swap="innerHTML" hx-sync="#bot-content:abort">
-            <button type="submit" class="btn btn-error btn-sm w-full"
-                    hx-confirm="Stop the trading bot?">Stop Bot</button>
-          </form>
+          <button type="button" class="btn btn-error btn-sm w-full"
+                  hx-post="/htmx/bot/stop" hx-target="#bot-content" hx-swap="innerHTML"
+                  hx-sync="#bot-content:abort"
+                  hx-confirm="Stop the trading bot? This will close all positions.">Stop Bot</button>
         </div>
       </div>
     </div>
