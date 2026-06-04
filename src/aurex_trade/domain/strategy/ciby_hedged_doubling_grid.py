@@ -5,7 +5,6 @@ from whipsaw. Hedged pairs at each level have NO stop loss (self-cancelling). Pr
 comes exclusively from the doubled position at outer levels with a trailing stop.
 """
 
-import math
 from collections import deque
 from uuid import uuid4
 
@@ -483,29 +482,20 @@ class CibyHedgedDoublingGridStrategy:
     # --- Private helpers ---
 
     def _initialize_grid(self, bar: BarData) -> None:
-        """Set anchor, compute 4 grid levels at round multiples, and queue limits."""
+        """Set anchor, compute 4 grid levels at exact spacing from anchor."""
         self._symbol = bar.symbol
         self._anchor_price = bar.close
         anchor = bar.close
         spacing = self._spacing
 
-        # Levels at round multiples of spacing (same approach as v1)
-        first_above = math.ceil(anchor / spacing) * spacing
-        first_below = math.floor(anchor / spacing) * spacing
-
-        # If anchor is exactly on a grid line, skip it
-        if first_above == first_below:
-            first_above = round(first_above + spacing, 2)
-            first_below = round(first_below - spacing, 2)
-
         # 2 levels above (ascending), 2 levels below (descending)
         self._levels_above = [
-            round(first_above, 2),
-            round(first_above + spacing, 2),
+            round(anchor + spacing, 2),
+            round(anchor + 2 * spacing, 2),
         ]
         self._levels_below = [
-            round(first_below, 2),
-            round(first_below - spacing, 2),
+            round(anchor - spacing, 2),
+            round(anchor - 2 * spacing, 2),
         ]
 
         # Place ONE limit per level (engine places opposite on fill)
