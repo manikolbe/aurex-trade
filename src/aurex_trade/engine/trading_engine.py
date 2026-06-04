@@ -253,16 +253,15 @@ class TradingEngine:
     def stop(self) -> None:
         """Signal the engine to stop after the current cycle."""
         self._running = False
-        # Cancel any pending limit orders at the broker
-        if self._pending_order_map:
-            try:
-                cancelled = self._broker.cancel_all_orders(self._symbol)
-                if cancelled:
-                    self._log.info("pending_orders_cancelled_on_stop", count=cancelled)
-            except Exception:
-                self._log.exception("cancel_pending_on_stop_failed")
-            self._pending_order_map.clear()
-            self._pending_order_meta.clear()
+        # Always cancel pending limit orders at the broker (broker is authoritative)
+        try:
+            cancelled = self._broker.cancel_all_orders(self._symbol)
+            if cancelled:
+                self._log.info("pending_orders_cancelled_on_stop", count=cancelled)
+        except Exception:
+            self._log.exception("cancel_pending_on_stop_failed")
+        self._pending_order_map.clear()
+        self._pending_order_meta.clear()
         self._log.info("stop_requested")
 
     @property
