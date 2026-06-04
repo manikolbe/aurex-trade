@@ -27,7 +27,7 @@
             <h3 class="text-xs font-semibold text-base-content/70 mb-1">General</h3>
             <div class="flex justify-between">
               <span class="text-base-content/60">Strategy</span>
-              <span class="font-mono">{{ strategy_name }}</span>
+              <span class="font-mono">{{ strategy_name.replace('_', ' ').title() }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-base-content/60">Symbol</span>
@@ -41,7 +41,7 @@
             {% for key, value in strategy_params.items() %}
             <div class="flex justify-between">
               <span class="text-base-content/60">{{ key.replace('_', ' ').title() }}</span>
-              <span class="font-mono">{{ value }}</span>
+              <span class="font-mono">{% if key in ('spacing', 'trailing_stop_distance', 'session_loss_limit') %}${% endif %}{{ value }}{% if key == 'units' %}u{% endif %}</span>
             </div>
             {% endfor %}
           </div>
@@ -99,11 +99,22 @@
       </div>
     </div>
 
+    <div id="bot-state-banner" class="col-span-1 md:col-span-2" style="display:none;">
+      <div class="flex items-center gap-4 px-4 py-3 rounded-lg bg-base-200">
+        <div id="banner-state" class="font-bold text-lg"></div>
+        <div class="flex-1"></div>
+        <div id="banner-metrics" class="flex gap-6 text-sm font-mono"></div>
+      </div>
+    </div>
+
     <div id="bot-strategy-panel" class="card bg-base-100 shadow-md col-span-1 md:col-span-2" style="display:none;">
       <div class="card-body">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div id="bot-grid-levels">
-            <h2 class="card-title text-lg mb-3">Grid Levels</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div id="bot-grid-levels" class="lg:col-span-2">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="card-title text-lg">Grid Levels</h2>
+              <span id="bot-grid-updated" class="text-xs text-base-content/30 font-mono"></span>
+            </div>
             <div id="bot-grid-content"></div>
           </div>
           <div id="bot-risk-summary">
@@ -253,6 +264,53 @@
     ];
   }
 
+  function buildGridAnnotations() {
+    var grid = window.__aurexGridLevels;
+    if (!grid) return {};
+    var annotations = {};
+    annotations['anchor'] = {
+      type: 'line',
+      yMin: grid.anchor,
+      yMax: grid.anchor,
+      yScaleID: 'y1',
+      borderColor: 'hsla(40, 80%, 55%, 0.6)',
+      borderWidth: 1.5,
+      borderDash: [6, 3],
+      label: {
+        content: 'Anchor',
+        position: 'end',
+        backgroundColor: 'transparent',
+        color: 'hsla(40, 80%, 55%, 0.8)',
+        font: { size: 10 },
+        display: true
+      }
+    };
+    if (!grid.levels) return annotations;
+    for (var i = 0; i < grid.levels.length; i++) {
+      var lv = grid.levels[i];
+      var above = lv.price > grid.anchor;
+      var arrow = above ? '↑' : '↓';
+      var zoneLabel = lv.is_outer ? 'Outer' : 'Inner';
+      annotations['level_' + i] = {
+        type: 'line',
+        yMin: lv.price,
+        yMax: lv.price,
+        yScaleID: 'y1',
+        borderColor: 'hsla(220, 10%, 60%, 0.3)',
+        borderWidth: 1,
+        borderDash: [4, 4],
+        label: {
+          content: zoneLabel + ' ' + arrow,
+          position: 'end',
+          backgroundColor: 'transparent',
+          color: 'hsla(220, 10%, 60%, 0.5)',
+          font: { size: 10 },
+          display: true
+        }
+      };
+    }
+    return annotations;
+  }
 
   function updateEquityChart() {
     fetch('/api/bot/equity')
@@ -333,6 +391,7 @@
           datasets[1].data = priceValues;
           chart.data.labels = labels;
           chart.data.datasets = datasets;
+          chart.options.plugins.annotation = { annotations: buildGridAnnotations() };
           chart.update('none');
         } else {
           var baseDatasets = [
@@ -374,6 +433,7 @@
               animation: false,
               interaction: { mode: 'nearest', intersect: true },
               plugins: {
+                annotation: { annotations: buildGridAnnotations() },
                 legend: { display: true, labels: { color: '#a6adbb', usePointStyle: true } },
                 title: { display: false },
                 tooltip: {
@@ -550,7 +610,11 @@
     html += '<span>' + label + '</span>';
     html += '<span class="font-mono ' + pnlClass + '">' + (current >= 0 ? '+' : '') + '$' + current.toFixed(2) + '</span>';
     html += '</div>';
-    html += '<div class="w-full h-3 bg-error/20 rounded-full relative overflow-hidden">';
+    html += '<div class="w-full h-3 bg-base-300 rounded-full relative overflow-hidden">';
+    var lostPct = Math.max(0, ((-current) / lossLimit) * 100);
+    if (lostPct > 0) {
+      html += '<div class="absolute right-0 top-0 h-full bg-error/40 rounded-l" style="width:' + lostPct.toFixed(1) + '%"></div>';
+    }
     html += '<div class="absolute top-0 h-full w-1 ' + barColor + ' rounded" style="left:' + pct.toFixed(1) + '%"></div>';
     html += '</div>';
     html += '<div class="flex justify-between text-xs text-base-content/40 mt-0.5">';
@@ -707,13 +771,34 @@
     // Session P&L gauge (loss-limit only, no profit target)
     html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
 
+    // Strategy note
+    html += '<p class="text-xs text-base-content/40 mb-2 italic">Hedge markers exit at TP only — no stop loss</p>';
+
     // Grid levels table
-    html += '<table class="table table-xs w-full mt-3 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
+    html += '<table class="table table-xs w-full mt-3 [&_td]:py-2.5 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
 
     var levels = state.grid_levels;
     var foundAnchor = false;
+    // Track zone separators inserted
+    var insertedOuterAbove = false;
+    var insertedInnerAbove = false;
+    var insertedInnerBelow = false;
+    var insertedOuterBelow = false;
+
     for (var i = 0; i < levels.length; i++) {
       var lv = levels[i];
+
+      // Zone separator rows (levels sorted price descending)
+      if (lv.price >= state.anchor_price) {
+        // Above anchor
+        if (lv.is_outer && !insertedOuterAbove) {
+          insertedOuterAbove = true;
+          html += '<tr><td colspan="3" class="text-base-content/40 uppercase text-xs tracking-wider py-1">OUTER ABOVE</td></tr>';
+        } else if (!lv.is_outer && !insertedInnerAbove) {
+          insertedInnerAbove = true;
+          html += '<tr><td colspan="3" class="text-base-content/40 uppercase text-xs tracking-wider py-1">INNER ABOVE</td></tr>';
+        }
+      }
 
       // Insert anchor separator
       if (!foundAnchor && lv.price < state.anchor_price) {
@@ -722,12 +807,25 @@
         html += '— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
       }
 
+      if (lv.price < state.anchor_price) {
+        // Below anchor
+        if (!lv.is_outer && !insertedInnerBelow) {
+          insertedInnerBelow = true;
+          html += '<tr><td colspan="3" class="text-base-content/40 uppercase text-xs tracking-wider py-1">INNER BELOW</td></tr>';
+        } else if (lv.is_outer && !insertedOuterBelow) {
+          insertedOuterBelow = true;
+          html += '<tr><td colspan="3" class="text-base-content/40 uppercase text-xs tracking-wider py-1">OUTER BELOW</td></tr>';
+        }
+      }
+
       var buyCell, sellCell;
       var curPrice = state.current_price || 0;
 
       // Helper to render one side cell
-      function renderSideCell(side, sideColor, fillPrice, units, orderType, ticket, tp) {
-        var cell = '<span class="' + sideColor + '">● Active</span>';
+      function renderSideCell(side, sideColor, fillPrice, units, orderType, ticket, tp, hasDoubled) {
+        var arrow = sideColor === 'text-success' ? '↑' : '↓';
+        var label = hasDoubled ? ' Doubled active' : ' Hedge active';
+        var cell = '<span class="' + sideColor + '">' + arrow + label + '</span>';
         var typeBadge = orderType === 'limit' ? '<span class="badge badge-outline badge-xs">L</span>' : '<span class="badge badge-outline badge-xs">M</span>';
         cell += ' ' + typeBadge;
         if (fillPrice) cell += '<br><span class="text-xs text-base-content/50">@' + fillPrice.toFixed(2) + '</span>';
@@ -736,55 +834,47 @@
         var pnlColor = pnl >= 0 ? 'text-success' : 'text-error';
         var pnlSign = pnl >= 0 ? '+' : '';
         cell += '<br><span class="text-xs font-mono ' + pnlColor + '">' + pnlSign + '$' + pnl.toFixed(2) + '</span>';
-        cell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
         if (tp) cell += '<span class="badge badge-info badge-xs ml-1">TP ' + tp.toFixed(0) + '</span>';
-        cell += '<span class="text-xs text-base-content/40 ml-1">' + units + 'u</span>';
-        if (ticket) cell += '<span class="text-xs text-base-content/40 ml-1">#' + ticket + '</span>';
+        cell += '<span class="text-xs text-base-content/20 ml-1">' + units + 'u</span>';
+        if (ticket) cell += '<span class="text-[10px] text-base-content/20 ml-1">#' + ticket + '</span>';
         return cell;
       }
 
       // Buy cell
       if (lv.buy.status === 'active' && lv.buy.fill) {
-        buyCell = renderSideCell('buy', 'text-success', lv.buy.fill, lv.buy.units || 2, lv.buy.order_type || '', lv.buy.ticket || '', lv.buy.tp || 0);
+        buyCell = renderSideCell('buy', 'text-success', lv.buy.fill, lv.buy.units || 2, lv.buy.order_type || '', lv.buy.ticket || '', lv.buy.tp || 0, !!(lv.doubled && lv.doubled.side === 'long'));
       } else if (lv.buy.status === 'placed') {
-        buyCell = '<span class="text-info">◎ Placed</span> <span class="badge badge-outline badge-xs">L</span>';
-        buyCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        buyCell = '<span class="text-info/70">↑ Hedge placed</span> <span class="badge badge-outline badge-xs">L</span>';
         if (lv.buy.tp) buyCell += '<span class="badge badge-info badge-xs ml-1">TP ' + lv.buy.tp.toFixed(0) + '</span>';
-        buyCell += '<span class="text-xs text-base-content/40 ml-1">' + (lv.buy.units || 2) + 'u</span>';
-        if (lv.buy.order_id) buyCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.buy.order_id + '</span>';
+        buyCell += '<span class="text-xs text-base-content/20 ml-1">' + (lv.buy.units || 2) + 'u</span>';
+        if (lv.buy.order_id) buyCell += '<span class="text-[10px] text-base-content/20 ml-1">#' + lv.buy.order_id + '</span>';
       } else {
         buyCell = '<span class="text-base-content/30">—</span>';
       }
 
       // Sell cell
       if (lv.sell.status === 'active' && lv.sell.fill) {
-        sellCell = renderSideCell('sell', 'text-error', lv.sell.fill, lv.sell.units || 2, lv.sell.order_type || '', lv.sell.ticket || '', lv.sell.tp || 0);
+        sellCell = renderSideCell('sell', 'text-error', lv.sell.fill, lv.sell.units || 2, lv.sell.order_type || '', lv.sell.ticket || '', lv.sell.tp || 0, !!(lv.doubled && lv.doubled.side === 'short'));
       } else if (lv.sell.status === 'placed') {
-        sellCell = '<span class="text-info">◎ Placed</span> <span class="badge badge-outline badge-xs">L</span>';
-        sellCell += '<br><span class="badge badge-ghost badge-xs">No SL</span>';
+        sellCell = '<span class="text-info/70">↓ Hedge placed</span> <span class="badge badge-outline badge-xs">L</span>';
         if (lv.sell.tp) sellCell += '<span class="badge badge-info badge-xs ml-1">TP ' + lv.sell.tp.toFixed(0) + '</span>';
-        sellCell += '<span class="text-xs text-base-content/40 ml-1">' + (lv.sell.units || 2) + 'u</span>';
-        if (lv.sell.order_id) sellCell += '<span class="text-xs text-base-content/40 ml-1">#' + lv.sell.order_id + '</span>';
+        sellCell += '<span class="text-xs text-base-content/20 ml-1">' + (lv.sell.units || 2) + 'u</span>';
+        if (lv.sell.order_id) sellCell += '<span class="text-[10px] text-base-content/20 ml-1">#' + lv.sell.order_id + '</span>';
       } else {
         sellCell = '<span class="text-base-content/30">—</span>';
       }
 
       // Doubled position badge on the relevant side
       if (lv.doubled && lv.doubled.side === 'long') {
-        buyCell += '<br><span class="badge badge-warning badge-xs">[DOUBLED]</span>';
-        buyCell += '<br><span class="text-xs text-info">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
+        buyCell += '<br><span class="badge badge-warning badge-xs">Doubled — trailing</span>';
+        buyCell += '<br><span class="text-xs text-warning">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
       } else if (lv.doubled && lv.doubled.side === 'short') {
-        sellCell += '<br><span class="badge badge-warning badge-xs">[DOUBLED]</span>';
-        sellCell += '<br><span class="text-xs text-info">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
+        sellCell += '<br><span class="badge badge-warning badge-xs">Doubled — trailing</span>';
+        sellCell += '<br><span class="text-xs text-warning">TS trail $' + lv.doubled.trailing_stop_distance.toFixed(0) + '</span>';
       }
 
-      // Level label with inner/outer badge
+      // Level label (no inner/outer badge — zone headers handle it)
       var levelLabel = lv.price.toFixed(2);
-      if (lv.is_outer) {
-        levelLabel += ' <span class="badge badge-xs badge-primary">outer</span>';
-      } else {
-        levelLabel += ' <span class="badge badge-xs badge-ghost">inner</span>';
-      }
 
       var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : 'opacity-60';
       html += '<tr class="' + rowClass + '">';
@@ -817,28 +907,120 @@
     var html = '<div class="grid grid-cols-1 gap-3">';
     var unitsLabel = risk.units_per_trade;
     if (risk.risk_enabled) unitsLabel += ' <span class="text-base-content/40">(max ' + risk.max_position_size + ')</span>';
-    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Units per trade</span><span class="font-mono">' + unitsLabel + '</span></div>';
-    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Stop distance</span><span class="font-mono">$' + risk.stop_distance + '</span></div>';
-    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Worst case loss</span><span class="font-mono text-error">$' + risk.worst_case_loss.toLocaleString() + '</span></div>';
-    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Drawdown limit</span><span class="font-mono">$' + risk.drawdown_limit.toLocaleString() + '</span></div>';
-    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Headroom</span><span class="font-mono ' + headroomClass + '">$' + risk.headroom.toLocaleString() + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Trade size</span><span class="font-mono">' + unitsLabel + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Grid spacing</span><span class="font-mono">$' + risk.stop_distance + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60"><span class="tooltip tooltip-left cursor-help" data-tip="Maximum theoretical exposure if all levels trigger simultaneously">Worst-case exposure</span></span><span class="font-mono text-error">$' + risk.worst_case_loss.toLocaleString() + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Session loss cap</span><span class="font-mono">$' + risk.drawdown_limit.toLocaleString() + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-base-content/60">Remaining headroom</span><span class="font-mono ' + headroomClass + '">$' + risk.headroom.toLocaleString() + '</span></div>';
     html += '</div>';
     riskContent.innerHTML = html;
+  }
+
+  function renderStateBanner(state) {
+    var banner = document.getElementById('bot-state-banner');
+    var bannerState = document.getElementById('banner-state');
+    var bannerMetrics = document.getElementById('banner-metrics');
+    if (!banner || !bannerState || !bannerMetrics) return;
+
+    if (!state) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    // Derive state label and badge class
+    var label = '';
+    var badgeClass = '';
+    if (state.session_paused && state.whipsaw_count >= state.whipsaw_limit) {
+      label = 'Session Paused — Whipsaw';
+      badgeClass = 'badge-warning';
+    } else if (state.session_paused && state.session_pnl <= -state.session_loss_limit) {
+      label = 'Session Paused — Loss Limit';
+      badgeClass = 'badge-error';
+    } else if (state.doubled_active) {
+      label = 'Doubled Active — Trailing';
+      badgeClass = 'badge-warning';
+    } else {
+      // Check if any grid level has active/placed status
+      var gridActive = false;
+      var levels = state.grid_levels || [];
+      for (var i = 0; i < levels.length; i++) {
+        var lv = levels[i];
+        if (lv.buy && (lv.buy.status === 'active' || lv.buy.status === 'placed')) { gridActive = true; break; }
+        if (lv.sell && (lv.sell.status === 'active' || lv.sell.status === 'placed')) { gridActive = true; break; }
+      }
+      if (gridActive) {
+        label = 'Grid Active';
+        badgeClass = 'badge-info';
+      } else {
+        label = 'Waiting for Fill';
+        badgeClass = 'badge-ghost';
+      }
+    }
+
+    bannerState.innerHTML = '<span class="badge ' + badgeClass + ' badge-lg">' + label + '</span>';
+
+    // Metrics: current price, anchor, distance, nearest level
+    var curPrice = state.current_price || 0;
+    var anchor = state.anchor_price || 0;
+    var distance = curPrice - anchor;
+    var distStr = (distance >= 0 ? '+' : '') + distance.toFixed(2);
+
+    // Find nearest level
+    var nearestLabel = '—';
+    levels = state.grid_levels || [];
+    if (levels.length > 0 && curPrice > 0) {
+      var minDist = Infinity;
+      var nearestLv = null;
+      for (var i = 0; i < levels.length; i++) {
+        var d = Math.abs(levels[i].price - curPrice);
+        if (d < minDist) {
+          minDist = d;
+          nearestLv = levels[i];
+        }
+      }
+      if (nearestLv) {
+        var posLabel = nearestLv.price >= anchor ? 'Above' : 'Below';
+        var zoneLabel = nearestLv.is_outer ? 'Outer' : 'Inner';
+        nearestLabel = zoneLabel + ' ' + posLabel;
+      }
+    }
+
+    bannerMetrics.innerHTML =
+      '<span>Price: ' + curPrice.toFixed(2) + '</span>' +
+      '<span>Anchor: ' + anchor.toFixed(2) + '</span>' +
+      '<span>Dist: ' + distStr + '</span>' +
+      '<span>Nearest: ' + nearestLabel + '</span>';
+
+    banner.style.display = '';
   }
 
   function updateStrategyState() {
     fetch('/api/bot/strategy-state')
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(data) {
-        if (!data) { panel.style.display = 'none'; return; }
+        if (!data) { panel.style.display = 'none'; renderStateBanner(null); return; }
 
         var hasContent = data.strategy_state || data.risk_summary;
         panel.style.display = hasContent ? '' : 'none';
 
+        var now = new Date();
+        var timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
+        var updatedEl = document.getElementById('bot-grid-updated');
+        if (updatedEl) updatedEl.textContent = 'Updated ' + timeStr;
+
         if (data.strategy_state) {
           renderGridLevels(data.strategy_state);
+          renderStateBanner(data.strategy_state);
         }
         renderRiskSummary(data.risk_summary);
+        if (data.strategy_state && data.strategy_state.anchor_price) {
+          window.__aurexGridLevels = {
+            anchor: data.strategy_state.anchor_price,
+            levels: (data.strategy_state.grid_levels || []).map(function(lv) {
+              return { price: lv.price, is_outer: lv.is_outer };
+            })
+          };
+        }
       })
       .catch(function() {});
   }
