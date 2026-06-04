@@ -322,8 +322,12 @@ class OANDABrokerAdapter:
 
         close_reason = trade.get("closeReason") or ""
         # Map OANDA close reasons to simplified labels
+        # Check TRAILING_STOP before STOP_LOSS (OANDA uses "TRAILING_STOP_LOSS_ORDER"
+        # which also contains "STOP_LOSS")
         if "TAKE_PROFIT" in close_reason:
             reason = "TAKE_PROFIT"
+        elif "TRAILING_STOP" in close_reason:
+            reason = "TRAILING_STOP"
         elif "STOP_LOSS" in close_reason:
             reason = "STOP_LOSS"
         elif close_reason:
