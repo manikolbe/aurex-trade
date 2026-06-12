@@ -191,6 +191,48 @@ class TestWindowSlides:
         assert "4135.00_long" in new_keys
         assert "4135.00_short" in new_keys
 
+    def test_trailing_resting_level_retracted_when_window_moves(self) -> None:
+        """A purely-resting level outside the window is cancelled, not left behind."""
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        # Opening (price at anchor, direction up): 2 above (4115, 4125) + 1 below.
+        assert 4125.0 in strategy._placed
+        # Price advances up past 4125 toward 4135: window becomes 4135/4145 above.
+        # 4115 (now 2 levels behind the up-side window) should be retracted.
+        _drain_all(strategy, [_bar(4136.0)])
+        assert 4115.0 not in strategy._placed
+        to_close = strategy.get_levels_to_close()
+        assert "4115.00_long" in to_close
+        assert "4115.00_short" in to_close
+
+    def test_anchor_flip_retracts_far_side(self) -> None:
+        """Mirrors the live case: a dip below anchor flips the window; far level drops.
+
+        Opening at the anchor places 2 above (4115, 4125). A tick just below the
+        anchor flips direction to down (2 below / 1 above), so the 2nd level above
+        (4125) falls outside the window and is retracted while still only resting.
+        """
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        assert 4125.0 in strategy._placed
+        # Tick just below the anchor — direction flips down.
+        _drain_all(strategy, [_bar(4099.5)])
+        assert 4125.0 not in strategy._placed
+        to_close = strategy.get_levels_to_close()
+        assert "4125.00_long" in to_close
+        assert "4125.00_short" in to_close
+
+    def test_active_level_not_retracted_by_window(self) -> None:
+        """A level holding an active trade is left to the margin trim, not retracted."""
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        # 4115 fills (becomes active), then price runs far above it.
+        strategy.report_fill("4115.00_long", 4115.90)
+        strategy.report_fill("4115.00_short", 4115.00)
+        _drain_all(strategy, [_bar(4146.0)])
+        # 4115 is active, so window retraction must NOT cancel it here.
+        assert "long" in strategy._filled.get(4115.0, set())
+
 
 class TestRefillMissingSide:
     def test_only_missing_side_replaced_on_revisit(self) -> None:

@@ -426,13 +426,15 @@ class CibySlidingGridStrategy:
         return 1 if self._current_price >= self._anchor_price else -1
 
     def _maintain_grid(self) -> None:
-        """Keep resting orders staged ahead of price, then trim active levels.
+        """Slide the resting-order window with price: retract behind, place ahead.
 
         Placement follows price directionally: the side price is moving into keeps
         ``max_levels_ahead`` unfilled levels resting, the trailing side keeps
         ``max_levels_behind``. As price moves the window follows, so an order is
-        always waiting where price is headed. Retired levels (trimmed for margin)
-        are never re-placed.
+        always waiting where price is headed. Resting (unfilled) levels that fall
+        outside the window are cancelled so the footprint does not grow without
+        bound; they re-place if price brings them back in. Retired levels (trimmed
+        for margin) are never re-placed.
         """
         if self._anchor_price is None:
             return
@@ -448,6 +450,8 @@ class CibySlidingGridStrategy:
         below = [lv for lv in reversed(self._levels) if lv < price][:n_below]
         window = set(above) | set(below)
 
+        self._retract_stale_placed(window)
+
         for level in sorted(window):
             if level in self._retired:
                 continue
@@ -457,6 +461,29 @@ class CibySlidingGridStrategy:
                 if side in self._placed.get(level, set()):
                     continue
                 self._queue_side(level, side)
+
+    def _retract_stale_placed(self, window: set[float]) -> None:
+        """Cancel purely-resting levels that have fallen outside the window.
+
+        Only levels with no filled side are retracted — a level holding an active
+        trade is governed by the margin trim instead. The anchor is never
+        retracted. Retracted levels are NOT marked retired: if price returns and
+        the level re-enters the window, it is placed again (the window slides
+        rather than leaving a permanent gap).
+        """
+        anchor = round(self._anchor_price, 2) if self._anchor_price is not None else None
+        for level in list(self._placed):
+            if level in window or level == anchor:
+                continue
+            if self._filled.get(level):
+                continue  # has an active side — leave it to _trim_active_levels
+            sides = self._placed.get(level, set())
+            if not sides:
+                continue
+            for side in list(sides):
+                self._pending_close.add(f"{level:.2f}_{side}")
+            self._placed.pop(level, None)
+            self._fill_prices.pop(level, None)
 
     def _trim_active_levels(self) -> None:
         """Retire active levels beyond the per-side caps to free margin.
