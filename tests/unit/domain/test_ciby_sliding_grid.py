@@ -385,3 +385,21 @@ class TestDisplayState:
     def test_no_state_before_anchor(self) -> None:
         strategy = _new()
         assert strategy.get_display_state() is None
+
+    def test_per_level_units_anchor_vs_grid(self) -> None:
+        """Display state reports anchor_units at the anchor, grid_units elsewhere.
+
+        Guards the engine-enrichment bug where every level was overwritten with
+        a flat grid_units, hiding the smaller anchor size in the UI.
+        """
+        strategy = _new()  # anchor_units=10, grid_units=20
+        _drain_all(strategy, [_bar(4100.0)])
+        state = strategy.get_display_state()
+        assert state is not None
+        by_price = {lv["price"]: lv for lv in state["grid_levels"]}  # type: ignore[index]
+        # Anchor level shows anchor_units on both sides.
+        assert by_price[4100.0]["buy"]["units"] == 10.0
+        assert by_price[4100.0]["sell"]["units"] == 10.0
+        # A non-anchor level shows grid_units.
+        assert by_price[4115.0]["buy"]["units"] == 20.0
+        assert by_price[4115.0]["sell"]["units"] == 20.0

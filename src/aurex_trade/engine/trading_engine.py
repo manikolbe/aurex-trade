@@ -327,8 +327,10 @@ class TradingEngine:
                     order_id = self._pending_order_map.get(grid_key)
                     if order_id:
                         side_info["order_id"] = order_id
-                    # Add units
-                    if grid_units is not None:
+                    # Backfill units only if the strategy didn't already provide
+                    # a per-level value. Strategies with non-uniform sizing (e.g.
+                    # a smaller anchor) set "units" themselves — don't clobber it.
+                    if "units" not in side_info and grid_units is not None:
                         side_info["units"] = float(grid_units)
 
                 # Enrich doubled position info with broker details
