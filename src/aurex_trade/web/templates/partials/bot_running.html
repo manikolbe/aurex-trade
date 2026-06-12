@@ -112,6 +112,9 @@
               </div>
               <span id="bot-grid-updated" class="text-xs text-base-content/30 font-mono"></span>
             </div>
+            <!-- Sticky live-price ticker: stays pinned to the top while the grid
+                 scrolls, so the current price is always visible on mobile. -->
+            <div id="bot-price-ticker" class="sticky top-0 z-10 bg-base-100/95 backdrop-blur py-2 mb-2 border-b border-base-content/10 empty:hidden"></div>
             <div id="bot-grid-content"></div>
           </div>
           <div id="bot-risk-summary">
@@ -796,9 +799,7 @@
 
     // Session P&L gauge (loss-limit only, no profit target)
     html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
-
-    // Strategy note
-    html += '<div id="grid-price-ticker" class="mb-3"></div>';
+    // Live price now shown by the sticky #bot-price-ticker in the card header.
 
     // Grid levels table — 3 columns, zone label inside price cell
     html += '<table class="table table-xs w-full mt-3 [&_td]:py-2.5 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
@@ -934,7 +935,10 @@
 
   function renderStateBanner(state) {
     var bannerState = document.getElementById('banner-state');
-    var ticker = document.getElementById('grid-price-ticker');
+    // Prefer the sticky header ticker (always present); fall back to the inline
+    // one some renderers embed in their content.
+    var ticker = document.getElementById('bot-price-ticker')
+      || document.getElementById('grid-price-ticker');
     if (!bannerState) return;
 
     if (!state) {
@@ -1003,9 +1007,14 @@
         }
       }
       if (nearestLv) {
-        var posLabel = nearestLv.price >= anchor ? 'Above' : 'Below';
-        var zoneLabel = nearestLv.is_outer ? 'Outer' : 'Inner';
-        nearestLabel = zoneLabel + ' ' + posLabel;
+        var posLabel = nearestLv.price >= anchor ? 'above' : 'below';
+        // Doubling grid distinguishes inner/outer; other grids just show the
+        // nearest level price and which side of the anchor it sits.
+        if (typeof nearestLv.is_outer === 'boolean') {
+          nearestLabel = (nearestLv.is_outer ? 'Outer ' : 'Inner ') + (posLabel === 'above' ? 'Above' : 'Below');
+        } else {
+          nearestLabel = nearestLv.price.toFixed(2) + ' (' + posLabel + ' anchor)';
+        }
       }
     }
 
