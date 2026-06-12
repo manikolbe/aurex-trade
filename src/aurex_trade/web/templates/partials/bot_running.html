@@ -689,15 +689,9 @@
     var startIdx = Math.max(0, firstActive - 3);
     var endIdx = Math.min(levels.length - 1, lastActive + 3);
 
-    var foundAnchor = false;
     for (var i = startIdx; i <= endIdx; i++) {
       var lv = levels[i];
-
-      // Insert anchor separator
-      if (!foundAnchor && lv.price < state.anchor_price) {
-        foundAnchor = true;
-        html += '<tr class="border-t-2 border-base-content/20"><td class="font-mono text-xs text-base-content/50" colspan="3">— anchor: ' + state.anchor_price.toFixed(2) + ' —</td></tr>';
-      }
+      var isAnchor = Math.abs(lv.price - state.anchor_price) < 0.005;
 
       var curPrice = state.current_price || 0;
       var buyCell, sellCell;
@@ -747,8 +741,11 @@
       }
 
       var rowClass = (lv.status === 'active' || lv.status === 'placed') ? '' : (lv.status === 'waiting' ? 'opacity-60' : 'opacity-40');
+      if (isAnchor) rowClass += ' bg-warning/10 border-y border-warning/40';
+      var priceCell = lv.price.toFixed(2);
+      if (isAnchor) priceCell += ' <span class="badge badge-warning badge-xs align-middle">ANCHOR</span>';
       html += '<tr class="' + rowClass + '">';
-      html += '<td class="font-mono text-sm">' + lv.price.toFixed(2) + '</td>';
+      html += '<td class="font-mono text-sm">' + priceCell + '</td>';
       html += '<td class="text-sm">' + buyCell + '</td>';
       html += '<td class="text-sm">' + sellCell + '</td>';
       html += '</tr>';
