@@ -465,13 +465,19 @@ class OANDABrokerAdapter:
         )
 
     def get_pending_orders(self, symbol: str) -> list[PendingOrder]:
-        """Return all pending (unfilled) limit orders for a symbol."""
+        """Return all pending (unfilled) entry orders (LIMIT or STOP) for a symbol.
+
+        Grid strategies rest both LIMIT and STOP entry orders. Both must be
+        reported here — otherwise the engine's fill detection sees a resting STOP
+        "disappear" from the pending list and wrongly treats it as cancelled,
+        causing a place/cancel churn loop.
+        """
         data = self._connection.get(f"/v3/accounts/{self._account_id}/pendingOrders")
         orders: list[PendingOrder] = []
         for o in data.get("orders", []):
             if o.get("instrument") != symbol:
                 continue
-            if o.get("type") != "LIMIT":
+            if o.get("type") not in ("LIMIT", "STOP"):
                 continue
             units = float(o["units"])
             side = OrderSide.BUY if units > 0 else OrderSide.SELL

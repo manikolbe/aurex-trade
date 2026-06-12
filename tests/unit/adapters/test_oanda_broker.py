@@ -424,6 +424,56 @@ class TestGetOpenTrades:
         self.conn.get.assert_called_once_with("/v3/accounts/101-001-123/openTrades")
 
 
+class TestGetPendingOrders:
+    def setup_method(self) -> None:
+        self.conn = MagicMock(spec=OANDAConnection)
+        self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
+
+    def test_includes_both_limit_and_stop_orders(self) -> None:
+        """Grid strategies rest LIMIT and STOP entries — both must be reported.
+
+        Regression: excluding STOP made resting stops look 'cancelled' to the
+        engine's fill detection, causing a place/cancel churn loop in production.
+        """
+        self.conn.get.return_value = {
+            "orders": [
+                {"id": "201", "instrument": "XAU_USD", "type": "LIMIT",
+                 "units": "2", "price": "4200.0"},
+                {"id": "202", "instrument": "XAU_USD", "type": "STOP",
+                 "units": "2", "price": "4232.56"},
+                {"id": "203", "instrument": "XAU_USD", "type": "STOP",
+                 "units": "-2", "price": "4180.0"},
+            ]
+        }
+        pending = self.adapter.get_pending_orders("XAU_USD")
+
+        assert {p.broker_order_id for p in pending} == {"201", "202", "203"}
+        stop_buy = next(p for p in pending if p.broker_order_id == "202")
+        assert stop_buy.side == OrderSide.BUY
+        assert stop_buy.limit_price == 4232.56
+        stop_sell = next(p for p in pending if p.broker_order_id == "203")
+        assert stop_sell.side == OrderSide.SELL
+
+    def test_excludes_other_order_types_and_instruments(self) -> None:
+        self.conn.get.return_value = {
+            "orders": [
+                {"id": "301", "instrument": "XAU_USD", "type": "TAKE_PROFIT",
+                 "units": "2", "price": "4300.0"},
+                {"id": "302", "instrument": "EUR_USD", "type": "LIMIT",
+                 "units": "1000", "price": "1.08"},
+                {"id": "303", "instrument": "XAU_USD", "type": "LIMIT",
+                 "units": "2", "price": "4200.0"},
+            ]
+        }
+        pending = self.adapter.get_pending_orders("XAU_USD")
+        assert {p.broker_order_id for p in pending} == {"303"}
+
+    def test_calls_correct_endpoint(self) -> None:
+        self.conn.get.return_value = {"orders": []}
+        self.adapter.get_pending_orders("XAU_USD")
+        self.conn.get.assert_called_once_with("/v3/accounts/101-001-123/pendingOrders")
+
+
 class TestGetClosedTradeDetails:
     def setup_method(self) -> None:
         self.conn = MagicMock(spec=OANDAConnection)
