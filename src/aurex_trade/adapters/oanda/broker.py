@@ -406,61 +406,73 @@ class OANDABrokerAdapter:
             )
         return trades
 
+    # How far back (in transactions) to scan for the closing fill of a trade.
+    # The fast-poll runs every few seconds, so closures are found well within
+    # this window; it bounds the request without paginating the whole history.
+    _CLOSE_LOOKBACK_TXNS: int = 200
+
     def get_closed_trade_details(self, broker_trade_id: str) -> ClosedTradeInfo | None:
-        """Query OANDA for details of a closed trade."""
-        data = self._connection.get(
-            f"/v3/accounts/{self._account_id}/trades/{broker_trade_id}",
-        )
-        trade = data.get("trade")
-        if trade is None or trade.get("state") != "CLOSED":
-            log.info(
-                "oanda_trade_not_closed",
-                broker_trade_id=broker_trade_id,
-                state=trade.get("state") if trade else "missing",
-                keys=list(trade.keys()) if trade else [],
+        """Find the closing fill for a trade via the transactions feed.
+
+        ``GET /trades/{id}`` does not reliably resolve a just-closed trade (it
+        returns 404), so the authoritative source is the ORDER_FILL transaction
+        that closed it: it carries the realized P&L (incl. slippage), the exit
+        price, and the close reason, keyed by tradeID under ``tradesClosed``.
+        """
+        # Bound the scan to the most recent transactions.
+        try:
+            summary = self._connection.get(
+                f"/v3/accounts/{self._account_id}/summary"
             )
+            last_txn_id = int(summary["account"]["lastTransactionID"])
+        except Exception:
+            log.warning("oanda_last_txn_id_unavailable", broker_trade_id=broker_trade_id)
             return None
 
-        log.info(
-            "oanda_closed_trade_raw",
-            broker_trade_id=broker_trade_id,
-            keys=list(trade.keys()),
-            state=trade.get("state"),
-            average_close_price=trade.get("averageClosePrice"),
-            realized_pl=trade.get("realizedPL"),
-            close_reason=trade.get("closeReason"),
+        since_id = max(1, last_txn_id - self._CLOSE_LOOKBACK_TXNS)
+        data = self._connection.get(
+            f"/v3/accounts/{self._account_id}/transactions/sinceid",
+            params={"id": str(since_id), "type": "ORDER_FILL"},
         )
 
-        close_reason = trade.get("closeReason") or ""
-        # Map OANDA close reasons to simplified labels
-        # Check TRAILING_STOP before STOP_LOSS (OANDA uses "TRAILING_STOP_LOSS_ORDER"
-        # which also contains "STOP_LOSS")
-        if "TAKE_PROFIT" in close_reason:
-            reason = "TAKE_PROFIT"
-        elif "TRAILING_STOP" in close_reason:
-            reason = "TRAILING_STOP"
-        elif "STOP_LOSS" in close_reason:
-            reason = "STOP_LOSS"
-        elif close_reason:
-            reason = close_reason
-        else:
-            # closeReason missing — infer from attached order states
-            tp_order = trade.get("takeProfitOrder", {})
-            ts_order = trade.get("trailingStopLossOrder", {})
-            sl_order = trade.get("stopLossOrder", {})
-            if tp_order.get("state") == "FILLED":
-                reason = "TAKE_PROFIT"
-            elif ts_order.get("state") == "FILLED":
-                reason = "TRAILING_STOP"
-            elif sl_order.get("state") == "FILLED":
-                reason = "STOP_LOSS"
-            else:
-                reason = "UNKNOWN"
+        # Find the fill that closed this trade (most recent match wins).
+        match: dict[str, object] | None = None
+        closed_entry: dict[str, object] | None = None
+        for txn in data.get("transactions", []):
+            for entry in txn.get("tradesClosed", []) or []:
+                if entry.get("tradeID") == broker_trade_id:
+                    match = txn
+                    closed_entry = entry
+        if match is None or closed_entry is None:
+            log.info("oanda_closing_fill_not_found", broker_trade_id=broker_trade_id)
+            return None
 
+        # Map the closing order reason to a simplified label. Check TRAILING
+        # before STOP (OANDA's "TRAILING_STOP_LOSS_ORDER" also contains "STOP").
+        fill_reason = str(match.get("reason", ""))
+        if "TAKE_PROFIT" in fill_reason:
+            reason = "TAKE_PROFIT"
+        elif "TRAILING_STOP" in fill_reason:
+            reason = "TRAILING_STOP"
+        elif "STOP_LOSS" in fill_reason:
+            reason = "STOP_LOSS"
+        else:
+            reason = fill_reason or "UNKNOWN"
+
+        realized_pnl = float(str(closed_entry.get("realizedPL", match.get("pl", "0.0"))))
+        close_price = float(str(closed_entry.get("price", match.get("price", "0.0"))))
+
+        log.info(
+            "oanda_closing_fill_found",
+            broker_trade_id=broker_trade_id,
+            realized_pnl=realized_pnl,
+            close_price=close_price,
+            close_reason=reason,
+        )
         return ClosedTradeInfo(
             broker_trade_id=broker_trade_id,
-            close_price=float(trade.get("averageClosePrice", 0.0)),
-            realized_pnl=float(trade.get("realizedPL", 0.0)),
+            close_price=close_price,
+            realized_pnl=realized_pnl,
             close_reason=reason,
         )
 

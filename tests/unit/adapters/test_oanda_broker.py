@@ -475,57 +475,71 @@ class TestGetPendingOrders:
 
 
 class TestGetClosedTradeDetails:
+    """Closed-trade details come from the ORDER_FILL transaction that closed the
+    trade (GET /trades/{id} 404s for just-closed trades). The adapter first reads
+    the account summary for lastTransactionID, then scans /transactions/sinceid.
+    """
+
     def setup_method(self) -> None:
         self.conn = MagicMock(spec=OANDAConnection)
         self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
 
-    def test_returns_details_for_closed_trade(self) -> None:
-        self.conn.get.return_value = {
-            "trade": {
-                "id": "100",
-                "state": "CLOSED",
-                "closeReason": "TAKE_PROFIT_ORDER",
-                "averageClosePrice": "2080.50",
-                "realizedPL": "150.25",
-            }
-        }
-        details = self.adapter.get_closed_trade_details("100")
+    def _wire(self, last_txn_id: str, transactions: list) -> None:  # type: ignore[type-arg]
+        """Make conn.get return the summary then the transactions feed."""
+        def _get(path: str, params: dict | None = None) -> dict:  # type: ignore[type-arg]
+            if path.endswith("/summary"):
+                return {"account": {"lastTransactionID": last_txn_id}}
+            if "transactions/sinceid" in path:
+                return {"transactions": transactions}
+            return {}
+        self.conn.get.side_effect = _get
 
+    def test_stop_loss_close_reports_realized_pnl(self) -> None:
+        self._wire("2728", [
+            {"type": "ORDER_FILL", "id": "2699", "reason": "STOP_LOSS_ORDER",
+             "price": "4231.920", "pl": "-4.6900",
+             "tradesClosed": [{"tradeID": "2673", "realizedPL": "-4.6900",
+                               "price": "4231.920"}]},
+        ])
+        details = self.adapter.get_closed_trade_details("2673")
         assert details is not None
-        assert details.broker_trade_id == "100"
-        assert details.close_price == 2080.50
-        assert details.realized_pnl == 150.25
-        assert details.close_reason == "TAKE_PROFIT"
-
-    def test_stop_loss_reason(self) -> None:
-        self.conn.get.return_value = {
-            "trade": {
-                "id": "101",
-                "state": "CLOSED",
-                "closeReason": "STOP_LOSS_ORDER",
-                "averageClosePrice": "2020.00",
-                "realizedPL": "-90.00",
-            }
-        }
-        details = self.adapter.get_closed_trade_details("101")
-
-        assert details is not None
+        assert details.broker_trade_id == "2673"
         assert details.close_reason == "STOP_LOSS"
-        assert details.realized_pnl == -90.0
+        assert details.realized_pnl == -4.69
+        assert details.close_price == 4231.92
 
-    def test_returns_none_for_open_trade(self) -> None:
-        self.conn.get.return_value = {
-            "trade": {
-                "id": "102",
-                "state": "OPEN",
-                "currentUnits": "5",
-                "price": "2050.00",
-            }
-        }
-        details = self.adapter.get_closed_trade_details("102")
-        assert details is None
+    def test_take_profit_close_reason(self) -> None:
+        self._wire("3000", [
+            {"type": "ORDER_FILL", "id": "2999", "reason": "TAKE_PROFIT_ORDER",
+             "price": "2080.50", "pl": "150.25",
+             "tradesClosed": [{"tradeID": "500", "realizedPL": "150.25",
+                               "price": "2080.50"}]},
+        ])
+        details = self.adapter.get_closed_trade_details("500")
+        assert details is not None
+        assert details.close_reason == "TAKE_PROFIT"
+        assert details.realized_pnl == 150.25
 
-    def test_returns_none_when_no_trade(self) -> None:
-        self.conn.get.return_value = {}
-        details = self.adapter.get_closed_trade_details("999")
-        assert details is None
+    def test_trailing_stop_checked_before_stop_loss(self) -> None:
+        # OANDA's TRAILING_STOP_LOSS_ORDER also contains "STOP_LOSS".
+        self._wire("3000", [
+            {"type": "ORDER_FILL", "id": "2999", "reason": "TRAILING_STOP_LOSS_ORDER",
+             "price": "2090.00", "pl": "12.00",
+             "tradesClosed": [{"tradeID": "501", "realizedPL": "12.00",
+                               "price": "2090.00"}]},
+        ])
+        details = self.adapter.get_closed_trade_details("501")
+        assert details is not None
+        assert details.close_reason == "TRAILING_STOP"
+
+    def test_returns_none_when_no_matching_fill(self) -> None:
+        self._wire("3000", [
+            {"type": "ORDER_FILL", "id": "2999", "reason": "STOP_LOSS_ORDER",
+             "tradesClosed": [{"tradeID": "999", "realizedPL": "-1.0"}]},
+        ])
+        # We ask for a trade not present in any tradesClosed.
+        assert self.adapter.get_closed_trade_details("123") is None
+
+    def test_returns_none_when_summary_unavailable(self) -> None:
+        self.conn.get.side_effect = OANDAAPIError(500, "boom")
+        assert self.adapter.get_closed_trade_details("2673") is None
