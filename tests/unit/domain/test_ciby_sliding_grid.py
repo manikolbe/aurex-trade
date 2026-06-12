@@ -386,6 +386,40 @@ class TestDisplayState:
         strategy = _new()
         assert strategy.get_display_state() is None
 
+    def test_order_type_in_display_state(self) -> None:
+        """Each side reports its entry order type (limit/stop/market) for the UI."""
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])  # anchor 4100, price at anchor
+        state = strategy.get_display_state()
+        assert state is not None
+        by_price = {lv["price"]: lv for lv in state["grid_levels"]}  # type: ignore[index]
+        # Anchor pair entered at market.
+        assert by_price[4100.0]["buy"]["order_type"] == "market"
+        assert by_price[4100.0]["sell"]["order_type"] == "market"
+        # Level above price: buy is a STOP (breakout side), sell is a LIMIT.
+        assert by_price[4115.0]["buy"]["order_type"] == "stop"
+        assert by_price[4115.0]["sell"]["order_type"] == "limit"
+        # Level below price: buy is a LIMIT, sell is a STOP.
+        assert by_price[4085.0]["buy"]["order_type"] == "limit"
+        assert by_price[4085.0]["sell"]["order_type"] == "stop"
+
+    def test_filled_level_keeps_entry_order_type(self) -> None:
+        """A filled side shows how it was ENTERED, not a recompute from price.
+
+        4115 buy entered as a STOP (above price at placement). After price rises
+        through it and it fills, the display must still say 'stop', not flip to
+        'limit' just because price is now above it.
+        """
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.report_fill("4115.00_long", 4115.90)  # the buy STOP fills
+        _drain_all(strategy, [_bar(4118.0)])  # price now above 4115
+        state = strategy.get_display_state()
+        assert state is not None
+        by_price = {lv["price"]: lv for lv in state["grid_levels"]}  # type: ignore[index]
+        assert by_price[4115.0]["buy"]["status"] == "active"
+        assert by_price[4115.0]["buy"]["order_type"] == "stop"
+
     def test_per_level_units_anchor_vs_grid(self) -> None:
         """Display state reports anchor_units at the anchor, grid_units elsewhere.
 

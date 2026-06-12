@@ -641,6 +641,16 @@
     return html;
   }
 
+  function orderTypeBadge(orderType) {
+    // L = limit, S = stop, M = market. Returns '' when type is unknown.
+    if (!orderType) return '';
+    var ot = String(orderType).toLowerCase();
+    var letter = ot === 'limit' ? 'L' : (ot === 'stop' ? 'S' : (ot === 'market' ? 'M' : ''));
+    if (!letter) return '';
+    var tip = ot.charAt(0).toUpperCase() + ot.slice(1);
+    return ' <span class="badge badge-outline badge-xs" title="' + tip + ' order">' + letter + '</span>';
+  }
+
   function renderPairedGrid(state) {
     var html = '';
 
@@ -696,7 +706,7 @@
         var buyPnl = (curPrice - lv.buy.fill) * (lv.buy.units || 1);
         var buyColor = buyPnl >= 0 ? 'text-success' : 'text-error';
         var buySign = buyPnl >= 0 ? '+' : '';
-        buyCell = '<span class="' + buyColor + '">● Active</span>';
+        buyCell = '<span class="' + buyColor + '">● Active</span>' + orderTypeBadge(lv.buy.order_type);
         buyCell += '<br><span class="text-xs text-base-content/50">@' + lv.buy.fill.toFixed(2) + ' SL ' + lv.buy.sl.toFixed(2) + '</span>';
         var buyMeta = '<span class="text-xs font-mono ' + buyColor + '">' + buySign + '$' + buyPnl.toFixed(2) + '</span>';
         if (lv.buy.units) buyMeta += '<span class="text-xs text-base-content/40 ml-1">' + lv.buy.units + 'u</span>';
@@ -705,6 +715,7 @@
       } else {
         buyCell = statusIcon(lv.buy.status, 'success');
         if (lv.buy.status === 'placed') {
+          buyCell += orderTypeBadge(lv.buy.order_type);
           if (lv.buy.sl) buyCell += '<br><span class="text-xs text-base-content/50">SL ' + lv.buy.sl.toFixed(2) + '</span>';
           var buyPlacedMeta = [];
           if (lv.buy.units) buyPlacedMeta.push(lv.buy.units + 'u');
@@ -717,7 +728,7 @@
         var sellPnl = (lv.sell.fill - curPrice) * (lv.sell.units || 1);
         var sellColor = sellPnl >= 0 ? 'text-success' : 'text-error';
         var sellSign = sellPnl >= 0 ? '+' : '';
-        sellCell = '<span class="' + sellColor + '">● Active</span>';
+        sellCell = '<span class="' + sellColor + '">● Active</span>' + orderTypeBadge(lv.sell.order_type);
         sellCell += '<br><span class="text-xs text-base-content/50">@' + lv.sell.fill.toFixed(2) + ' SL ' + lv.sell.sl.toFixed(2) + '</span>';
         var sellMeta = '<span class="text-xs font-mono ' + sellColor + '">' + sellSign + '$' + sellPnl.toFixed(2) + '</span>';
         if (lv.sell.units) sellMeta += '<span class="text-xs text-base-content/40 ml-1">' + lv.sell.units + 'u</span>';
@@ -726,6 +737,7 @@
       } else {
         sellCell = statusIcon(lv.sell.status, 'error');
         if (lv.sell.status === 'placed') {
+          sellCell += orderTypeBadge(lv.sell.order_type);
           if (lv.sell.sl) sellCell += '<br><span class="text-xs text-base-content/50">SL ' + lv.sell.sl.toFixed(2) + '</span>';
           var sellPlacedMeta = [];
           if (lv.sell.units) sellPlacedMeta.push(lv.sell.units + 'u');

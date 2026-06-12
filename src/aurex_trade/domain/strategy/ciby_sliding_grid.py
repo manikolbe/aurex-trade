@@ -90,6 +90,9 @@ class CibySlidingGridStrategy:
         self._filled: dict[float, set[str]] = {}  # level → sides with active trades
         self._stopped: dict[float, set[str]] = {}  # level → sides closed (SL hit)
         self._fill_prices: dict[float, dict[str, float]] = {}  # level → {side: price}
+        # Order type each side was entered as (MARKET/LIMIT/STOP), kept for display
+        # so a filled level shows how it was actually placed, not a recompute.
+        self._order_types: dict[str, str] = {}  # grid_key → order type
 
         # Margin management: levels the strategy has decided to retire (trim) to
         # stay within the active-level caps. _pending_close holds grid keys handed
@@ -387,6 +390,19 @@ class CibySlidingGridStrategy:
             return self._anchor_units
         return self._grid_units
 
+    def _order_type_for(self, level: float, side: str) -> str:
+        """The order type used to enter a side: MARKET at the anchor, else the
+        resting type chosen so the order sits at its exact price without filling
+        early — above the market a buy is a STOP and a sell a LIMIT; below it a
+        buy is a LIMIT and a sell a STOP.
+        """
+        if self._anchor_price is not None and level == round(self._anchor_price, 2):
+            return "MARKET"
+        above_price = self._side_entry(level, side) > self._current_price
+        if side == "long":
+            return "STOP" if above_price else "LIMIT"
+        return "LIMIT" if above_price else "STOP"
+
     def _side_entry(self, level: float, side: str) -> float:
         """Resting entry price for a side: sell at the level, buy offset above it."""
         if side == "long":
@@ -548,16 +564,14 @@ class CibySlidingGridStrategy:
             distance = entry - self._current_price
             if abs(distance) < self._MIN_RESTING_DISTANCE:
                 return  # Too close — would fill immediately or be rejected
-            if side == "long":
-                order_type = "STOP" if distance > 0 else "LIMIT"
-            else:
-                order_type = "LIMIT" if distance > 0 else "STOP"
+            order_type = self._order_type_for(level, side)
             limit_price = entry
 
         self._placed.setdefault(level, set()).add(side)
         self._fill_prices.setdefault(level, {})
 
         grid_key = f"{level:.2f}_{side}"
+        self._order_types[grid_key] = order_type  # remember how it was entered
         units = self._units_for(level)
 
         metadata: dict[str, str] = {
@@ -697,6 +711,7 @@ class CibySlidingGridStrategy:
         self._filled = {}
         self._stopped = {}
         self._fill_prices = {}
+        self._order_types = {}
         self._pending_close = set()
         self._retired = set()
         self._session_realized_pnl = 0.0
@@ -768,11 +783,16 @@ class CibySlidingGridStrategy:
             else:
                 status = "none"
             sl = self._side_stop_loss(level, side)
+            # Prefer the type the side was actually entered as (stable once
+            # placed/filled); fall back to the computed type for waiting levels.
+            grid_key = f"{level:.2f}_{side}"
+            order_type = self._order_types.get(grid_key) or self._order_type_for(level, side)
             return {
                 "status": status,
                 "fill": fills.get(side, 0.0),
                 "sl": sl if sl is not None else 0.0,
                 "units": self._units_for(level),
+                "order_type": order_type.lower(),
             }
 
         if filled:
