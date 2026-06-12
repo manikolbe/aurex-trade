@@ -153,6 +153,124 @@ class TestProcessBarLimitFills:
         assert len(broker.get_pending_orders("XAU_USD")) == 1
 
 
+class TestProcessBarStopFills:
+    """STOP entry orders fill on a breakout move (mirror of limit direction)."""
+
+    def test_stop_order_creates_pending(self) -> None:
+        broker = SimulatedBrokerAdapter(initial_capital=10000.0, grid_mode=True)
+        broker.set_current_bar(_bar(close=4100.0))
+
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,  # trigger above the market
+            stop_loss=4099.90,
+        )
+        trade = broker.place_order(order)
+
+        assert trade.broker_trade_id != ""
+        assert len(broker.get_pending_orders("XAU_USD")) == 1
+        assert len(broker.get_open_trades("XAU_USD")) == 0
+
+    def test_buy_stop_fills_when_bar_high_reaches_trigger(self) -> None:
+        broker = SimulatedBrokerAdapter(initial_capital=10000.0, grid_mode=True)
+        broker.set_current_bar(_bar(close=4100.0))
+
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,
+            stop_loss=4099.90,
+        )
+        broker.place_order(order)
+
+        # Price breaks up through the trigger.
+        fill_bar = _bar(close=4116.0, low=4112.0, high=4117.0)
+        broker.set_current_bar(fill_bar)
+        newly_filled, _ = broker.process_bar(fill_bar)
+
+        assert len(newly_filled) == 1
+        assert newly_filled[0].open_price == 4115.90
+        assert newly_filled[0].side == OrderSide.BUY
+
+    def test_sell_stop_fills_when_bar_low_reaches_trigger(self) -> None:
+        broker = SimulatedBrokerAdapter(initial_capital=10000.0, grid_mode=True)
+        broker.set_current_bar(_bar(close=4100.0))
+
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.SELL,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4085.00,  # trigger below the market
+            stop_loss=4101.00,
+        )
+        broker.place_order(order)
+
+        fill_bar = _bar(close=4084.0, low=4083.0, high=4090.0)
+        broker.set_current_bar(fill_bar)
+        newly_filled, _ = broker.process_bar(fill_bar)
+
+        assert len(newly_filled) == 1
+        assert newly_filled[0].open_price == 4085.00
+        assert newly_filled[0].side == OrderSide.SELL
+
+    def test_buy_stop_does_not_fill_when_price_stays_below(self) -> None:
+        broker = SimulatedBrokerAdapter(initial_capital=10000.0, grid_mode=True)
+        broker.set_current_bar(_bar(close=4100.0))
+
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,
+        )
+        broker.place_order(order)
+
+        # High never reaches the trigger — a limit would have filled here, a stop must not.
+        miss_bar = _bar(close=4110.0, low=4108.0, high=4114.0)
+        broker.set_current_bar(miss_bar)
+        newly_filled, _ = broker.process_bar(miss_bar)
+
+        assert len(newly_filled) == 0
+        assert len(broker.get_pending_orders("XAU_USD")) == 1
+
+
+class TestCancelPendingOrder:
+    """Cancelling a single pending order by its broker order ID."""
+
+    def test_cancel_removes_only_that_order(self) -> None:
+        broker = SimulatedBrokerAdapter(initial_capital=10000.0, grid_mode=True)
+        broker.set_current_bar(_bar(close=4100.0))
+
+        o1 = Order(
+            symbol="XAU_USD", side=OrderSide.SELL, order_type=OrderType.LIMIT,
+            quantity=20.0, limit_price=4115.0,
+        )
+        o2 = Order(
+            symbol="XAU_USD", side=OrderSide.BUY, order_type=OrderType.LIMIT,
+            quantity=20.0, limit_price=4085.0,
+        )
+        t1 = broker.place_order(o1)
+        broker.place_order(o2)
+        assert len(broker.get_pending_orders("XAU_USD")) == 2
+
+        assert broker.cancel_pending_order(t1.broker_trade_id) is True
+        remaining = broker.get_pending_orders("XAU_USD")
+        assert len(remaining) == 1
+        assert remaining[0].limit_price == 4085.0
+
+    def test_cancel_unknown_order_returns_false(self) -> None:
+        broker = SimulatedBrokerAdapter(initial_capital=10000.0, grid_mode=True)
+        broker.set_current_bar(_bar(close=4100.0))
+        assert broker.cancel_pending_order("does-not-exist") is False
+
+
 class TestProcessBarStopLoss:
     """Stop-losses should trigger when bar breaches SL price."""
 

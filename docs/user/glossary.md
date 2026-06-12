@@ -6,6 +6,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## A
 
+**Anchor Gap**
+:   In the Ciby Sliding Grid strategy, the distance from the anchor to the first
+    grid level above and below it. It is usually wider than the grid spacing, giving
+    the first hedged pair more room before the evenly-spaced levels begin.
+
 **Anchor Price**
 :   The center price around which a grid is built. When the grid strategy starts,
     it uses the current market price as the anchor and places grid levels at fixed
@@ -139,6 +144,11 @@ Quick definitions of terms you'll encounter in AurexTrade.
 
 ## L
 
+**Limit Order**
+:   A resting order to buy *below* the current price or sell *above* it — that is,
+    at a price more favourable than the market. It waits until the price reaches the
+    chosen level and then fills there.
+
 **Long (Buy)**
 :   Buying an asset because you expect the price to go up. You profit if the price
     rises after you buy.
@@ -255,6 +265,12 @@ Quick definitions of terms you'll encounter in AurexTrade.
 **Spread**
 :   The difference between the buy price and sell price offered by the broker.
     This is a cost you pay on every trade. Measured in pips (price units).
+
+**Stop Order**
+:   A resting order to buy *above* the current price or sell *below* it — the
+    opposite of a limit order. It waits until the price reaches the trigger and then
+    enters. The Ciby Sliding Grid uses stop orders for the breakout side of each pair
+    so the order rests at its exact price instead of filling early.
 
 **Stop-Loss**
 :   A price level at which a trade is automatically closed to limit losses. If you

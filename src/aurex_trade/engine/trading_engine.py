@@ -987,6 +987,48 @@ class TradingEngine:
         newly_added = set(self._grid_trade_map.values()) - trade_ids_before
         self._check_closures(open_trades, skip_trade_ids=newly_added)
         self._check_deferred_trailing_stop(open_trades)
+        self._check_levels_to_close()
+
+    def _check_levels_to_close(self) -> None:
+        """Close grid levels the strategy has marked for trimming (margin mgmt).
+
+        The strategy returns grid keys via get_levels_to_close(). For each, close
+        the open trade if it has one (banking realized P&L, reported back through
+        normal closure detection) and cancel any still-resting order. Margin-freeing
+        trims use the dedicated close endpoint — no counter-order, no extra margin.
+        """
+        get_levels = getattr(self._strategy, "get_levels_to_close", None)
+        if get_levels is None:
+            return
+        keys = get_levels()
+        if not keys:
+            return
+
+        for grid_key in keys:
+            # Cancel a still-resting order at this key, if any.
+            order_id = self._pending_order_map.pop(grid_key, None)
+            if order_id is not None:
+                self._pending_order_meta.pop(grid_key, None)
+                try:
+                    self._broker.cancel_pending_order(order_id)
+                except Exception:
+                    self._log.warning("trim_cancel_pending_failed", grid_level=grid_key)
+
+            # Close an open trade at this key, if any. Its closure (and realized
+            # P&L) is picked up by _check_closures on the next poll, which calls
+            # report_trade_closed; the strategy treats retired levels accordingly.
+            trade_id = self._grid_trade_map.get(grid_key)
+            if trade_id is not None:
+                try:
+                    self._broker.close_trade(trade_id)
+                    self._log.info("level_trimmed", grid_level=grid_key, broker_trade_id=trade_id)
+                    self._event_log.append(EventLogEntry(
+                        timestamp=datetime.now(UTC).isoformat(),
+                        event="trim",
+                        details=f"Level trimmed for margin: {grid_key} (#{trade_id})",
+                    ))
+                except Exception:
+                    self._log.warning("trim_close_trade_failed", grid_level=grid_key)
 
     def _check_deferred_trailing_stop(
         self, open_trades: list[OpenBrokerTrade]
@@ -1270,10 +1312,22 @@ class TradingEngine:
             if self._risk_engine._enabled:
                 quantity = min(quantity, float(self._risk_engine._max_position_size))
 
-        # Determine order type from signal metadata
-        is_limit = sig.metadata.get("order_type") == "LIMIT"
+        # Determine order type from signal metadata. LIMIT and STOP are both
+        # resting entry orders tracked for fill detection; everything else is a
+        # market order. STOP carries its trigger price in the limit_price field.
+        order_type_str = sig.metadata.get("order_type")
+        is_limit = order_type_str == "LIMIT"
+        is_stop = order_type_str == "STOP"
+        is_resting = is_limit or is_stop
         limit_price_str = sig.metadata.get("limit_price")
         limit_price = float(limit_price_str) if limit_price_str else None
+
+        if is_limit:
+            order_type = OrderType.LIMIT
+        elif is_stop:
+            order_type = OrderType.STOP
+        else:
+            order_type = OrderType.MARKET
 
         trailing_stop_str = sig.metadata.get("trailing_stop_distance")
         trailing_stop_distance = float(trailing_stop_str) if trailing_stop_str else None
@@ -1283,14 +1337,14 @@ class TradingEngine:
             symbol=self._symbol,
             side=side,
             quantity=quantity,
-            order_type=OrderType.LIMIT if is_limit else OrderType.MARKET,
+            order_type=order_type,
             limit_price=limit_price,
             stop_loss=sig.stop_loss,
             take_profit=sig.take_profit,
             trailing_stop_distance=trailing_stop_distance,
         )
 
-        if is_limit:
+        if is_resting:
             self._place_limit_order(order, sig)
         else:
             self._place_market_order(order, sig, latest_close)

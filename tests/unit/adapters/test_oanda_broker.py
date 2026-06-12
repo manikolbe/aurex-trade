@@ -5,8 +5,13 @@ from uuid import uuid4
 
 from aurex_trade.adapters.oanda.broker import OANDABrokerAdapter
 from aurex_trade.adapters.oanda.connection import OANDAAPIError, OANDAConnection
-from aurex_trade.domain.enums import OrderSide
+from aurex_trade.domain.enums import OrderSide, OrderType
 from aurex_trade.domain.models import Order
+
+
+def _make_pending_response(order_id: str = "7001") -> dict:  # type: ignore[type-arg]
+    """Build an OANDA response for a resting (pending) entry order."""
+    return {"orderCreateTransaction": {"id": order_id, "type": "STOP_ORDER"}}
 
 
 def _make_fill_response(price: str = "2050.50", units: str = "10") -> dict:  # type: ignore[type-arg]
@@ -114,6 +119,131 @@ class TestPlaceOrder:
             assert False, "Should have raised"  # noqa: B011
         except OANDAAPIError:
             pass
+
+
+class TestPlaceStopOrder:
+    def setup_method(self) -> None:
+        self.conn = MagicMock(spec=OANDAConnection)
+        self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
+
+    def test_sends_stop_order_type(self) -> None:
+        self.conn.post.return_value = _make_pending_response()
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,
+            stop_loss=4099.90,
+        )
+        self.adapter.place_order(order)
+
+        body = self.conn.post.call_args[1]["json"]["order"]
+        assert body["type"] == "STOP"
+        assert body["price"] == "4115.90000"
+        assert body["units"] == "20"
+        assert body["timeInForce"] == "GTC"
+        assert body["stopLossOnFill"] == {"price": "4099.90000"}
+
+    def test_returns_pending_trade_with_order_id(self) -> None:
+        self.conn.post.return_value = _make_pending_response(order_id="7042")
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.SELL,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4085.00,
+        )
+        trade = self.adapter.place_order(order)
+
+        assert trade.broker_trade_id == "7042"
+        assert trade.price == 4085.00  # placement price, not yet filled
+
+    def test_missing_trigger_price_raises(self) -> None:
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=None,
+        )
+        try:
+            self.adapter.place_order(order)
+            assert False, "Should have raised"  # noqa: B011
+        except ValueError:
+            pass
+
+    def test_immediate_fill_returns_filled_trade(self) -> None:
+        """If price is already through the trigger, OANDA fills on placement."""
+        self.conn.post.return_value = {
+            "orderCreateTransaction": {"id": "7100", "type": "STOP_ORDER"},
+            "orderFillTransaction": {
+                "id": "7101",
+                "price": "4116.20",
+                "tradeOpened": {"tradeID": "7101", "units": "20"},
+            },
+        }
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,
+        )
+        trade = self.adapter.place_order(order)
+
+        assert trade.immediately_filled is True
+        assert trade.broker_trade_id == "7101"
+        assert trade.price == 4116.20
+
+    def test_immediate_cancel_raises(self) -> None:
+        """A stop cancelled at placement (e.g. wrong side of market) raises."""
+        self.conn.post.return_value = {
+            "orderCreateTransaction": {"id": "7200", "type": "STOP_ORDER"},
+            "orderCancelTransaction": {"reason": "PRICE_PRECISION_EXCEEDED"},
+        }
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,
+        )
+        try:
+            self.adapter.place_order(order)
+            assert False, "Should have raised"  # noqa: B011
+        except RuntimeError:
+            pass
+
+    def test_rejected_stop_raises(self) -> None:
+        """No orderCreateTransaction at all means OANDA rejected the order."""
+        self.conn.post.return_value = {
+            "orderCancelTransaction": {"reason": "INSUFFICIENT_MARGIN"},
+        }
+        order = Order(
+            symbol="XAU_USD",
+            side=OrderSide.BUY,
+            order_type=OrderType.STOP,
+            quantity=20.0,
+            limit_price=4115.90,
+        )
+        try:
+            self.adapter.place_order(order)
+            assert False, "Should have raised"  # noqa: B011
+        except RuntimeError:
+            pass
+
+    def test_cancel_pending_order_puts_to_cancel_endpoint(self) -> None:
+        self.conn.put.return_value = {}
+        ok = self.adapter.cancel_pending_order("7042")
+        assert ok is True
+        self.conn.put.assert_called_once_with(
+            "/v3/accounts/101-001-123/orders/7042/cancel"
+        )
+
+    def test_cancel_pending_order_returns_false_on_error(self) -> None:
+        self.conn.put.side_effect = OANDAAPIError(404, "Order not found")
+        assert self.adapter.cancel_pending_order("nope") is False
 
 
 class TestStopLossAndTakeProfit:

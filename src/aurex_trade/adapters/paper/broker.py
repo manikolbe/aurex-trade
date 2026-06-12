@@ -123,6 +123,10 @@ class PaperBrokerAdapter:
         """Paper broker has no pending orders to cancel."""
         return 0
 
+    def cancel_pending_order(self, broker_order_id: str) -> bool:
+        """Paper broker has no pending orders to cancel."""
+        return False
+
     # -- Internal --
 
     def _generate_bar(self, symbol: str, index: int) -> BarData:

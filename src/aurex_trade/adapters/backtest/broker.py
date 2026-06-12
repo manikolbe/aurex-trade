@@ -29,7 +29,7 @@ from aurex_trade.domain.models import (
 
 @dataclass
 class _PendingLimitOrder:
-    """Internal tracking for a limit order awaiting fill."""
+    """Internal tracking for a pending entry order (limit or stop) awaiting fill."""
 
     broker_order_id: str
     symbol: str
@@ -39,6 +39,7 @@ class _PendingLimitOrder:
     stop_loss: float | None
     grid_level_key: str
     metadata: dict[str, str]
+    is_stop: bool = False  # True for STOP entry orders, False for LIMIT
 
 
 @dataclass
@@ -93,26 +94,20 @@ class SimulatedBrokerAdapter:
         self._current_bar = bar
 
     def place_order(self, order: Order) -> Trade:
-        """Place an order. LIMIT orders become pending; MARKET orders fill immediately."""
+        """Place an order. LIMIT/STOP become pending; MARKET fills immediately."""
         if self._current_bar is None:
             msg = "No current bar set — call set_current_bar() first"
             raise RuntimeError(msg)
 
-        if order.order_type == OrderType.LIMIT:
-            return self._place_limit_order(order)
+        if order.order_type in (OrderType.LIMIT, OrderType.STOP):
+            return self._place_pending_order(order, is_stop=order.order_type == OrderType.STOP)
 
         return self._fill_market_order(order)
 
-    def _place_limit_order(self, order: Order) -> Trade:
-        """Create a pending limit order (does not fill immediately)."""
+    def _place_pending_order(self, order: Order, *, is_stop: bool) -> Trade:
+        """Create a pending entry order (limit or stop) that does not fill immediately."""
         assert self._current_bar is not None
         broker_order_id = str(uuid4())
-
-        grid_level_key = ""
-        metadata: dict[str, str] = {}
-        if hasattr(order, "signal_id"):
-            # Metadata will be attached by the runner via _pending_order_meta
-            pass
 
         self._pending_orders.append(
             _PendingLimitOrder(
@@ -122,8 +117,9 @@ class SimulatedBrokerAdapter:
                 quantity=order.quantity,
                 limit_price=order.limit_price or 0.0,
                 stop_loss=order.stop_loss,
-                grid_level_key=grid_level_key,
-                metadata=metadata,
+                grid_level_key="",
+                metadata={},
+                is_stop=is_stop,
             )
         )
 
@@ -224,12 +220,22 @@ class SimulatedBrokerAdapter:
             newly_closed.append(closed_info)
             self._open_trades.remove(trade)
 
-        # 2. Check limit fills
+        # 2. Check pending entry fills (limit and stop).
+        # A LIMIT buys below / sells above the market (fills on a favourable move):
+        #   buy fills when low <= price; sell fills when high >= price.
+        # A STOP buys above / sells below the market (fills on a breakout move):
+        #   buy fills when high >= trigger; sell fills when low <= trigger.
         orders_to_fill: list[_PendingLimitOrder] = []
         for pending in self._pending_orders:
-            if (pending.side == OrderSide.BUY and bar.low <= pending.limit_price) or (
-                pending.side == OrderSide.SELL and bar.high >= pending.limit_price
-            ):
+            if pending.is_stop:
+                triggered = (
+                    pending.side == OrderSide.BUY and bar.high >= pending.limit_price
+                ) or (pending.side == OrderSide.SELL and bar.low <= pending.limit_price)
+            else:
+                triggered = (
+                    pending.side == OrderSide.BUY and bar.low <= pending.limit_price
+                ) or (pending.side == OrderSide.SELL and bar.high >= pending.limit_price)
+            if triggered:
                 orders_to_fill.append(pending)
 
         for pending in orders_to_fill:
@@ -290,6 +296,14 @@ class SimulatedBrokerAdapter:
         """Cancel a pending limit order by ID."""
         for i, pending in enumerate(self._pending_orders):
             if pending.broker_order_id == str(order_id):
+                self._pending_orders.pop(i)
+                return True
+        return False
+
+    def cancel_pending_order(self, broker_order_id: str) -> bool:
+        """Cancel a single pending order by its broker order ID."""
+        for i, pending in enumerate(self._pending_orders):
+            if pending.broker_order_id == broker_order_id:
                 self._pending_orders.pop(i)
                 return True
         return False

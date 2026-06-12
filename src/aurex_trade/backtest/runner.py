@@ -153,7 +153,35 @@ class BacktestRunner:
                 records.append(record)
             signal = self._strategy.generate(bars)
 
+        # 6. Trim levels the strategy retired for margin (close trades + cancel orders)
+        self._handle_levels_to_close()
+
         return records
+
+    def _handle_levels_to_close(self) -> None:
+        """Close + cancel grid keys the strategy marked for trimming (margin mgmt)."""
+        get_levels = getattr(self._strategy, "get_levels_to_close", None)
+        if get_levels is None:
+            return
+        report_closed = getattr(self._strategy, "report_trade_closed", None)
+        for grid_key in get_levels():
+            # Cancel a still-resting order at this key, if any.
+            order_id = self._pending_order_map.pop(grid_key, None)
+            if order_id is not None:
+                self._pending_order_meta.pop(grid_key, None)
+                self._broker.cancel_pending_order(order_id)
+
+            # Close an open trade at this key, banking realized P&L.
+            trade_id = self._grid_trade_map.get(grid_key)
+            if trade_id is None:
+                continue
+            self._broker.close_trade(trade_id)
+            details = self._broker.get_closed_trade_details(trade_id)
+            realized_pnl = details.realized_pnl if details else 0.0
+            self._trade_pnls.append(realized_pnl)
+            del self._grid_trade_map[grid_key]
+            if report_closed is not None:
+                report_closed(grid_key, realized_pnl, "trim")
 
     def _handle_fills(self, newly_filled: list[_OpenTrade]) -> None:
         """Process limit order fills: match to grid keys, report, place opposite."""
@@ -289,21 +317,25 @@ class BacktestRunner:
             self._close_all_trades(signal.metadata.get("reason", ""))
             return None
 
-        # Determine order type from metadata
+        # Determine order type from metadata. LIMIT and STOP are both resting
+        # entry orders (pending until price reaches them); STOP carries its
+        # trigger price in the limit_price field, same as LIMIT.
         order_type_str = signal.metadata.get("order_type", "MARKET")
         is_limit = order_type_str == "LIMIT"
+        is_stop = order_type_str == "STOP"
+        is_resting = is_limit or is_stop
 
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
         quantity = float(signal.metadata.get("fixed_units", self._config.position_size))
         grid_key = signal.metadata.get("grid_level", "")
 
-        if is_limit:
+        if is_resting:
             limit_price = float(signal.metadata.get("limit_price", "0"))
             order = Order(
                 signal_id=signal.id,
                 symbol=self._config.symbol,
                 side=side,
-                order_type=OrderType.LIMIT,
+                order_type=OrderType.STOP if is_stop else OrderType.LIMIT,
                 quantity=quantity,
                 limit_price=limit_price,
                 stop_loss=signal.stop_loss,

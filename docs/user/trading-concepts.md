@@ -30,9 +30,9 @@ rules every time — no emotions, no second-guessing.
 Think of it like a recipe: given specific ingredients (market data), follow these
 steps, and you get a specific output (a buy or sell decision).
 
-## The Four Strategies
+## The Strategies
 
-AurexTrade currently offers four strategies. They work in different ways, which means
+AurexTrade offers several strategies. They work in different ways, which means
 they perform best in different market conditions.
 
 ### SMA Crossover (Trend-Following)
@@ -119,6 +119,77 @@ exactly at stop-loss distance, hitting stops on both sides of pairs.
 **Analogy:** It's like betting on both red and black at roulette — except in
 markets, one side can run far further than the other. You always lose one bet,
 but the winning bet can pay multiples of the losing one.
+
+---
+
+### Ciby Sliding Grid (Direction-Neutral, Sliding Window)
+
+**The idea:** A variation on the Ciby hedged grid that **follows price with a small,
+fixed window of levels** instead of leaving every level open forever. It opens a
+hedged pair (one buy AND one sell) at each level, but keeps only a handful active at
+a time — as price trends, levels far behind are closed to free up margin, while the
+**anchor pair is never closed** and its winning side rides the whole move. That
+anchor leg is where the real profit comes from.
+
+**How it works:**
+
+When the bot starts a session, it takes the current price as the **anchor** and
+opens a hedged pair there. It then sets the first level a wider **anchor gap** away
+(above and below), and every level beyond that one **grid spacing** apart. For
+example, with an anchor of 4100, an anchor gap of 15 and a spacing of 10, the levels
+sit at …4085, 4100 (anchor), 4115, 4125, 4135…
+
+- At each level the **sell** rests at the level price and the **buy** rests a small
+  **offset** above it (typically $0.90) to work around the spread.
+- Each side carries a stop-loss just past the **next level in its losing direction**
+  — a buy is stopped below, a sell above — so a stopped-out leg loses only about one
+  grid gap.
+- Orders rest at their **exact price** until the market reaches them (no early
+  fills), so the grid is laid down precisely even in fast-moving markets.
+- Position size is smaller at the anchor and larger at every other level.
+
+**The sliding window (margin management):**
+
+The bot caps how many levels are active at once — by default **2 levels on the side
+price is trending into** and **1 on the trailing side** (the anchor is exempt and
+always counts as neither). As price climbs and a new level opens beyond the cap, the
+**trailing level nearest the anchor is closed**, banking its result and freeing
+margin for the level ahead.
+
+For example, anchored at 4100 with price rising:
+
+- Price reaches 4115, then 4125 → both active (2 above the anchor).
+- Price reaches 4135 → opening it would make 3 above, so **4115 is closed** → active
+  above = 4125, 4135.
+- Price reaches 4145 → **4125 is closed** → active above = 4135, 4145.
+
+The anchor's pair at 4100 stays open the entire time. Because price kept rising, the
+anchor's buy leg is deep in profit — that is the position the strategy is really
+riding. Closing the trailing levels isn't a loss; those hedged pairs are closed at
+or near break-even, and the point is simply to **stay in the game without running out
+of margin**. If price turns and trends down instead, the window flips: 2 active
+levels below the anchor and 1 above.
+
+**Re-completing a pair:** If price leaves a level (still within the active window)
+and later returns after one side was stopped out, the bot re-places only the
+**missing** side — completing the pair again without stacking duplicates. Levels that
+were deliberately closed for margin are *not* reopened.
+
+**Session management:** Same safety net as the hedged grid — a session profit target
+and session loss limit (close everything and restart fresh), plus a daily loss limit
+that stops trading until the next day.
+
+**When it works best:** Volatile instruments that trend (gold/XAU_USD is ideal). A
+sustained directional move lets the anchor leg run while the window keeps margin
+under control.
+
+**When it struggles:** Tight whipsaw that repeatedly stops out both sides of pairs
+near the same levels.
+
+**Analogy:** It's like a moving walkway with a fixed number of footholds. You plant
+your anchor foot and let it carry you the whole way; as you stride forward, the
+foothold furthest behind folds away so you're never overstretched — but you keep
+moving in whichever direction the walkway is taking you.
 
 ---
 
@@ -216,6 +287,7 @@ does the work.
 | Clear trends (up or down for weeks) | SMA Crossover |
 | Choppy, sideways, range-bound | RSI Mean-Reversion |
 | Volatile with sustained moves (gold) | Ciby Hedged Grid |
+| Sustained trends, with margin kept under control | Ciby Sliding Grid |
 | Quiet ranges followed by breakouts | Ciby Hedged Doubling Grid |
 | Uncertain direction, want to capture either way | Simple Grid |
 | Not sure | Test with a backtest and compare results |

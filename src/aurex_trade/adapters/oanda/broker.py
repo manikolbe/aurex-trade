@@ -62,6 +62,9 @@ class OANDABrokerAdapter:
         if order.order_type == OrderType.LIMIT:
             return self._place_limit_order(order, units)
 
+        if order.order_type == OrderType.STOP:
+            return self._place_stop_order(order, units)
+
         return self._place_market_order(order, units)
 
     def _place_market_order(self, order: Order, units: int) -> Trade:
@@ -225,6 +228,114 @@ class OANDABrokerAdapter:
             broker_trade_id=broker_order_id,
         )
 
+    def _place_stop_order(self, order: Order, units: int) -> Trade:
+        """Place a GTC stop entry order — returns immediately with pending order ID.
+
+        A stop entry order fills when the market trades through the trigger price
+        (a BUY stop above the market, a SELL stop below it). Unlike a limit, it
+        does not fill early when price is already favourable — which is exactly
+        why grid levels above the current price use a BUY stop and levels below
+        use a SELL stop. Mirrors the limit-order flow otherwise.
+        """
+        if order.limit_price is None:
+            msg = "Stop order requires a limit_price (the trigger price)"
+            raise ValueError(msg)
+
+        order_body: dict[str, str | dict[str, str]] = {
+            "type": "STOP",
+            "instrument": order.symbol,
+            "units": str(units),
+            "price": f"{order.limit_price:.5f}",
+            "timeInForce": "GTC",
+            "positionFill": "DEFAULT",
+            "triggerCondition": "DEFAULT",
+        }
+
+        if order.stop_loss is not None:
+            order_body["stopLossOnFill"] = {"price": f"{order.stop_loss:.5f}"}
+        if order.take_profit is not None:
+            order_body["takeProfitOnFill"] = {"price": f"{order.take_profit:.5f}"}
+        if order.trailing_stop_distance is not None:
+            order_body["trailingStopLossOnFill"] = {
+                "distance": f"{order.trailing_stop_distance:.5f}",
+            }
+
+        body = {"order": order_body}
+
+        data = self._connection.post(f"/v3/accounts/{self._account_id}/orders", json=body)
+
+        create_txn = data.get("orderCreateTransaction")
+        if create_txn is None:
+            cancel = data.get("orderCancelTransaction", {})
+            reason = cancel.get("reason", "UNKNOWN")
+            msg = f"OANDA stop order rejected: {reason}"
+            log.warning("oanda_stop_order_rejected", reason=reason)
+            raise RuntimeError(msg)
+
+        broker_order_id = create_txn["id"]
+
+        # Check if the stop order was immediately cancelled (e.g. trigger price
+        # on the wrong side of the market, or trigger condition not met).
+        cancel_txn = data.get("orderCancelTransaction")
+        if cancel_txn is not None:
+            reason = cancel_txn.get("reason", "UNKNOWN")
+            log.warning(
+                "oanda_stop_order_immediately_cancelled",
+                symbol=order.symbol,
+                side=order.side.value,
+                trigger_price=order.limit_price,
+                reason=reason,
+                broker_order_id=broker_order_id,
+            )
+            msg = f"OANDA stop order immediately cancelled: {reason}"
+            raise RuntimeError(msg)
+
+        # Check if the stop order filled immediately (price already through trigger).
+        fill_txn = data.get("orderFillTransaction")
+        if fill_txn is not None:
+            trade_opened = fill_txn.get("tradeOpened")
+            broker_trade_id = trade_opened["tradeID"] if trade_opened else broker_order_id
+            fill_price = float(fill_txn["price"])
+            log.info(
+                "oanda_stop_order_filled_immediately",
+                symbol=order.symbol,
+                side=order.side.value,
+                quantity=order.quantity,
+                trigger_price=order.limit_price,
+                fill_price=fill_price,
+                broker_trade_id=broker_trade_id,
+            )
+            return Trade(
+                order_id=order.id,
+                symbol=order.symbol,
+                side=order.side,
+                quantity=order.quantity,
+                price=fill_price,
+                commission=0.0,
+                broker_trade_id=broker_trade_id,
+                immediately_filled=True,
+            )
+
+        log.info(
+            "oanda_stop_order_placed",
+            symbol=order.symbol,
+            side=order.side.value,
+            quantity=order.quantity,
+            trigger_price=order.limit_price,
+            broker_order_id=broker_order_id,
+        )
+
+        # Return Trade with order ID as broker_trade_id (pending, not yet filled)
+        return Trade(
+            order_id=order.id,
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            price=order.limit_price,
+            commission=0.0,
+            broker_trade_id=broker_order_id,
+        )
+
     def cancel_order(self, order_id: UUID) -> bool:
         """Cancel an order. Market FOK orders fill immediately — always returns False."""
         log.debug("oanda_cancel_noop", order_id=str(order_id))
@@ -374,6 +485,18 @@ class OANDABrokerAdapter:
                 )
             )
         return orders
+
+    def cancel_pending_order(self, broker_order_id: str) -> bool:
+        """Cancel a single pending order by its broker order ID. Returns success."""
+        try:
+            self._connection.put(
+                f"/v3/accounts/{self._account_id}/orders/{broker_order_id}/cancel"
+            )
+        except Exception:
+            log.warning("oanda_cancel_pending_order_failed", broker_order_id=broker_order_id)
+            return False
+        log.info("oanda_pending_order_cancelled", broker_order_id=broker_order_id)
+        return True
 
     def close_trade(self, broker_trade_id: str) -> None:
         """Close a specific trade using OANDA's dedicated close endpoint.

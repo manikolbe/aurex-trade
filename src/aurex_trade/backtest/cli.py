@@ -19,6 +19,7 @@ from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
 from aurex_trade.domain.strategy.ciby_hedged_doubling_grid import CibyHedgedDoublingGridStrategy
 from aurex_trade.domain.strategy.ciby_hedged_grid import CibyHedgedGridStrategy
+from aurex_trade.domain.strategy.ciby_sliding_grid import CibySlidingGridStrategy
 from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
 from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
 from aurex_trade.domain.strategy.sma_crossover import SMACrossover
@@ -63,6 +64,19 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
         session_loss_limit=float(p.get("session_loss_limit", 100.0)),
         whipsaw_limit=int(p.get("whipsaw_limit", 3)),
     ),
+    "ciby_sliding_grid": lambda p: CibySlidingGridStrategy(
+        grid_spacing=float(p.get("grid_spacing", 10.0)),
+        anchor_gap=float(p.get("anchor_gap", 15.0)),
+        buy_sell_offset=float(p.get("buy_sell_offset", 0.90)),
+        anchor_units=float(p.get("anchor_units", 10.0)),
+        grid_units=float(p.get("grid_units", 20.0)),
+        stop_buffer=float(p.get("stop_buffer", 1.0)),
+        max_levels_ahead=int(p.get("max_levels_ahead", 2)),
+        max_levels_behind=int(p.get("max_levels_behind", 1)),
+        session_profit_target=float(p.get("session_profit_target", 100.0)),
+        session_loss_limit=float(p.get("session_loss_limit", 50.0)),
+        daily_loss_limit=float(p.get("daily_loss_limit", 200.0)),
+    ),
 }
 
 # Per-strategy validators — filters out invalid param combos
@@ -92,6 +106,19 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
         and p.get("session_loss_limit", 100.0) > 0
         and p.get("whipsaw_limit", 3) >= 1
     ),
+    "ciby_sliding_grid": lambda p: (
+        p.get("grid_spacing", 10.0) > 0
+        and p.get("anchor_gap", 15.0) > 0
+        and p.get("buy_sell_offset", 0.90) >= 0
+        and p.get("anchor_units", 10.0) > 0
+        and p.get("grid_units", 20.0) > 0
+        and p.get("stop_buffer", 1.0) >= 0
+        and p.get("max_levels_ahead", 2) >= 1
+        and p.get("max_levels_behind", 1) >= 1
+        and p.get("session_profit_target", 100.0) > 0
+        and p.get("session_loss_limit", 50.0) > 0
+        and p.get("daily_loss_limit", 200.0) > 0
+    ),
 }
 
 # Maps strategy names to their metadata accessor
@@ -101,6 +128,7 @@ STRATEGY_METADATA: dict[str, Callable[[], StrategyMetadata]] = {
     "simple_grid": SimpleGridStrategy.metadata,
     "ciby_hedged_grid": CibyHedgedGridStrategy.metadata,
     "ciby_hedged_doubling_grid": CibyHedgedDoublingGridStrategy.metadata,
+    "ciby_sliding_grid": CibySlidingGridStrategy.metadata,
 }
 
 

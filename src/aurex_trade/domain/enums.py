@@ -31,6 +31,7 @@ class OrderType(StrEnum):
 
     MARKET = "market"  # Execute immediately at current market price
     LIMIT = "limit"  # Execute only at specified price or better
+    STOP = "stop"  # Execute when price reaches the trigger (or worse)
 
 
 class OrderStatus(StrEnum):
