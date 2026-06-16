@@ -17,7 +17,7 @@ class AuthConfig(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     redirect_uri: str = "http://localhost:8000/auth/callback"
-    allowed_emails: list[str] = ["manikolbe@gmail.com"]
+    allowed_emails: list[str] = []
     session_expiry_hours: int = 48
     cookie_secure: bool = False
     secret_key: str = ""

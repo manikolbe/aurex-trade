@@ -84,6 +84,17 @@ deploy-local-logs *args='':
 deploy-prod:
     ssh aurex 'cd ~/aurex-trade && git pull && docker compose build --build-arg GIT_SHA=$(git rev-parse --short HEAD) && docker compose up -d'
 
+# Pull production JSON logs into logs/prod/ (gitignored — contains PII)
+pull-logs:
+    mkdir -p logs/prod
+    ssh aurex 'docker cp aurex-app:/app/logs/. /tmp/aurex-logs/ && tar -C /tmp/aurex-logs -czf - .' | tar -C logs/prod -xzf -
+    ssh aurex 'rm -rf /tmp/aurex-logs'
+    @echo "Pulled prod logs into logs/prod/ (gitignored)."
+
+# Analyse a production run from pulled logs (see scripts/analyse_run.py for flags)
+analyse *args='':
+    uv run python scripts/analyse_run.py {{args}}
+
 # Clean build artifacts
 clean:
     rm -rf dist/ build/ .eggs/ *.egg-info/

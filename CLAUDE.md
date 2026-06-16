@@ -220,6 +220,61 @@ If testing closure detection, ensure a clean slate:
 - Close all open XAU_USD trades in OANDA before starting
 - Or: let the bot start fresh — it will track only trades it opens
 
+## Analysing Bot Runs in Production
+
+After deploying and letting the bot run, analyse its performance from the
+**structured JSON logs** — NOT the database.
+
+**Why logs, not the DB:** The engine only persists MARKET orders via `save_trade`.
+Limit/stop fills and — critically — **trade closures with realized P&L are never
+written to SQLite** (the `trades` table has no realized_pnl column). The structlog
+JSON log (`/app/logs/aurex_trade.log*`, rotated 10MB × 5 files) is the only
+complete, event-sourced record. The live equity/session charts in the web UI are
+in-memory and are lost on every redeploy/restart.
+
+### Workflow
+
+```bash
+just pull-logs      # docker-cp prod logs from aurex-app:/app/logs → logs/prod/ (gitignored)
+just analyse        # analyse the latest run (summary + anomalies)
+just analyse --list                  # list all runs for the user, pick one
+just analyse --run 2                 # analyse a specific run
+just analyse --run 2 --timeline      # + price-annotated event playback
+```
+
+`scripts/analyse_run.py` reads the pulled logs and:
+- **Filters to one user** by `user_id` (prod is multi-user — every engine log line
+  carries `user_id`).
+- **Segments into runs** by `engine_started` → `engine_stopped` (or "still
+  running"). Reads all rotated `.log`/`.log.N` files, since an older run's
+  `engine_started` may have rotated out of the main file.
+- Reports **net realized P&L, win rate, close-reason breakdown, errors, largest
+  losses**, and a **playback timeline** where each event is annotated with the
+  prevailing market price (`bars_fetched.latest_close` carried forward) — so you
+  can replay exactly what happened against price and grid state.
+
+### Identity & PII (PUBLIC REPO — STRICT)
+
+This repo is public. The analysis tooling carries **no identifiers**:
+- User identity (`user_id`, email) is read at runtime from `analysis.local.json`
+  (gitignored via `analysis.local.*`) or a `--user-id` flag. Never hardcode it.
+- Pulled logs land in `logs/prod/` (gitignored — they contain emails, OANDA
+  account ids, OAuth user ids).
+- Before committing, scan for leaks:
+  `git grep -nI "<your-email>|<account-id>|<oauth-user-id>"`.
+
+### Key log events the analyser reads
+
+| Event | Carries |
+|-------|---------|
+| `engine_started` | strategy, `strategy_params`, `risk_params`, `initial_equity` |
+| `engine_stopped` | `total_cycles` (absence ⇒ run still active) |
+| `grid_initialized` | `anchor_price` + full `levels` ladder |
+| `bars_fetched` | `latest_close` (market price per cycle) |
+| `trade_closed_by_broker` | `realized_pnl`, `close_reason` (close_sl/tp/ts), `close_price` |
+| `session_summary` | `cycles`, `equity`, `peak_equity`, `trades` |
+| `order_execution_failed`, `fast_poll_error` | failures/errors to flag |
+
 ## Risk Engine
 
 The `RiskEngine` is the mandatory gate between strategy signals and order execution.

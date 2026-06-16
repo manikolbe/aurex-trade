@@ -17,9 +17,17 @@ env/
 # Environment variables (never commit secrets)
 .env
 
-# Data & logs (runtime artifacts)
+# Data & logs (runtime artifacts) — may contain PII: emails, OANDA account IDs,
+# OAuth user IDs. NEVER commit. This is a PUBLIC repo.
 data/
 logs/
+
+# Pulled production logs and any local analysis config holding identifiers.
+# Belt-and-braces: logs/ already covers logs/prod/, but these are explicit so a
+# stray copy elsewhere is still ignored.
+**/prod-logs/
+*.prod.log
+analysis.local.*
 
 # IDE
 .idea/
