@@ -128,7 +128,7 @@ class CibyHedgedDoublingGridStrategy:
                     label="Units per Level",
                     tooltip=(
                         "Position size for each side of a hedged pair. At outer levels, "
-                        "the doubled position uses 2× this size (e.g. 2u hedges → 4u "
+                        "the doubled position uses 2x this size (e.g. 2u hedges -> 4u "
                         "doubled) to capture the breakout with more weight."
                     ),
                     default=2.0,
@@ -140,7 +140,7 @@ class CibyHedgedDoublingGridStrategy:
                     label="Trailing Stop Distance ($)",
                     tooltip=(
                         "Trail distance on the doubled position. The trailing stop "
-                        "activates once the position is in profit by 1× grid spacing, "
+                        "activates once the position is in profit by 1x grid spacing, "
                         "then trails at this distance. OANDA manages the trail "
                         "server-side."
                     ),
@@ -445,8 +445,8 @@ class CibyHedgedDoublingGridStrategy:
                 }
 
             tp_distance = 2 * self._spacing
-            buy_tp = round(level + tp_distance, 2) if buy_fill else round(level + tp_distance, 2)
-            sell_tp = round(level - tp_distance, 2) if sell_fill else round(level - tp_distance, 2)
+            buy_tp = round(level + tp_distance, 2)
+            sell_tp = round(level - tp_distance, 2)
 
             grid_levels.append({
                 "price": level,

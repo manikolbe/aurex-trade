@@ -11,8 +11,13 @@ from aurex_trade.web.ratelimit import (
     RateLimitConfig,
     _parse_retry_after,
     get_client_ip,
+    ratelimit_config,
     reset_limiter,
 )
+
+# Derive the bot-control request budget from config so these tests track the
+# configured limit instead of a hardcoded number (which silently goes stale).
+BOT_CONTROL_LIMIT = int(ratelimit_config.bot_control.split("/")[0])
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +40,7 @@ class TestRateLimitConfig:
         assert config.storage_uri == "memory://"
         assert config.default == "60/minute"
         assert config.compute == "5/minute"
-        assert config.bot_control == "3/minute"
+        assert config.bot_control == "20/minute"
         assert config.read == "120/minute"
         assert config.auth == "10/minute"
         assert config.auth_logout == "5/minute"
@@ -150,7 +155,7 @@ class TestRateLimitEndpoints:
             "interval_seconds": 60,
         }
 
-        for _ in range(3):
+        for _ in range(BOT_CONTROL_LIMIT):
             resp = client.post("/api/bot/start", json=body, headers=headers)
             assert resp.status_code != 429
 
@@ -178,7 +183,7 @@ class TestRateLimitEndpoints:
         }
 
         # Exhaust limit for ip1
-        for _ in range(3):
+        for _ in range(BOT_CONTROL_LIMIT):
             client.post("/api/bot/start", json=body, headers={"X-Forwarded-For": ip1})
 
         # ip1 is limited
@@ -209,7 +214,7 @@ class TestRateLimitResponse:
         }
 
         # Exhaust bot control limit
-        for _ in range(3):
+        for _ in range(BOT_CONTROL_LIMIT):
             client.post("/api/bot/start", json=body, headers=headers)
 
         resp = client.post("/api/bot/start", json=body, headers=headers)
@@ -231,7 +236,7 @@ class TestRateLimitResponse:
         }
 
         # Exhaust bot control limit
-        for _ in range(3):
+        for _ in range(BOT_CONTROL_LIMIT):
             client.post("/api/bot/start", json=body, headers=headers)
 
         resp = client.post("/api/bot/start", json=body, headers=headers)
@@ -244,7 +249,7 @@ class TestRateLimitResponse:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
 
-        for _ in range(3):
+        for _ in range(BOT_CONTROL_LIMIT):
             client.post("/api/bot/stop", headers=headers)
 
         resp = client.post("/api/bot/stop", headers=headers)

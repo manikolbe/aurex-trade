@@ -16,7 +16,7 @@ class TestBotStatusPoll:
         resp = client.get("/htmx/bot/status/poll")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
-        assert "Idle" in resp.text
+        assert "Start Bot" in resp.text
 
     def test_running_returns_running_partial(self, client: TestClient) -> None:
         manager: BotSessionManager = client.app.state.bot_session_manager  # type: ignore[union-attr]
@@ -39,6 +39,7 @@ class TestBotStatusPoll:
             "realized_pnl": 0.0,
             "win_rate": None,
             "avg_slippage": None,
+            "current_price": None,
         }
         engine.kill_switch = False
         connection = MagicMock()
@@ -56,7 +57,8 @@ class TestBotStatusPoll:
             resp = client.get("/htmx/bot/status/poll")
             assert resp.status_code == 200
             assert "Running" in resp.text
-            assert "sma_crossover" in resp.text
+            # Template renders the strategy name title-cased for display.
+            assert "Sma Crossover" in resp.text
             assert "XAU_USD" in resp.text
         finally:
             manager.stop("test-user-id")
@@ -111,6 +113,7 @@ class TestBotMetricsPoll:
             "realized_pnl": 50.0,
             "win_rate": 0.5,
             "avg_slippage": 0.3,
+            "current_price": 2050.0,
         }
         connection = MagicMock()
         manager.start(
