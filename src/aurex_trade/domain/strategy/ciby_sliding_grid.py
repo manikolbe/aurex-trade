@@ -391,13 +391,19 @@ class CibySlidingGridStrategy:
         return self._grid_units
 
     def _order_type_for(self, level: float, side: str) -> str:
-        """The order type used to enter a side: MARKET at the anchor, else the
-        resting type chosen so the order sits at its exact price without filling
-        early — above the market a buy is a STOP and a sell a LIMIT; below it a
-        buy is a LIMIT and a sell a STOP.
+        """The resting order type chosen so the order sits at its exact price
+        without filling early — above the market a buy is a STOP and a sell a
+        LIMIT; below it a buy is a LIMIT and a sell a STOP.
+
+        The anchor is NOT special-cased to MARKET here. Its initial pair is placed
+        at market explicitly (``_place_anchor_pair`` passes ``market=True``); this
+        path only runs when a side is (re-)placed by ``_maintain_grid``. If the
+        anchor's losing leg has stopped out and price has since moved past it,
+        re-entering at market would carry the original stop on the wrong side of
+        the new entry — OANDA rejects it (``STOP_LOSS_ON_FILL_LOSS``). Re-arming it
+        as a resting STOP/LIMIT at the anchor price instead only fills when price
+        returns, where the stop is valid again.
         """
-        if self._anchor_price is not None and level == round(self._anchor_price, 2):
-            return "MARKET"
         above_price = self._side_entry(level, side) > self._current_price
         if side == "long":
             return "STOP" if above_price else "LIMIT"

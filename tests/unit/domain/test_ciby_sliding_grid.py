@@ -261,6 +261,49 @@ class TestRefillMissingSide:
         assert len(shorts) == 0
 
 
+class TestAnchorRefillAfterStop:
+    """A stopped anchor leg must re-arm as a resting order, never market.
+
+    Regression: the anchor short was re-placed at MARKET with its original stop,
+    which sat on the wrong side once price had moved past it — OANDA rejected it
+    (STOP_LOSS_ON_FILL_LOSS) every cycle for hours, leaving the grid lopsided.
+    """
+
+    def test_stopped_anchor_leg_replaces_as_resting_not_market(self) -> None:
+        strategy = _new()
+        # Anchor at 4100: short stop sits at 4100 + gap(15) + buffer(1) = 4116.
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.report_fill("4100.00_short", 4100.0)
+        strategy.report_trade_closed("4100.00_short", -16.0, "close_sl")
+        assert "short" in strategy._stopped.get(4100.0, set())
+
+        # Price has risen above the anchor; the short leg is re-queued. It must
+        # NOT be a market order (which would carry the stale 4116 stop below the
+        # new entry — invalid for a short).
+        signals = _drain_all(strategy, [_bar(4108.0)])
+        anchor_short = [
+            s for s in signals
+            if s.metadata["grid_level"] == "4100.00_short"  # type: ignore[attr-defined]
+        ]
+        assert len(anchor_short) == 1
+        assert anchor_short[0].metadata["order_type"] != "MARKET"  # type: ignore[attr-defined]
+
+    def test_replaced_anchor_short_stop_is_above_entry(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.report_fill("4100.00_short", 4100.0)
+        strategy.report_trade_closed("4100.00_short", -16.0, "close_sl")
+
+        signals = _drain_all(strategy, [_bar(4108.0)])
+        anchor_short = next(
+            s for s in signals
+            if s.metadata["grid_level"] == "4100.00_short"  # type: ignore[attr-defined]
+        )
+        # A short's stop must sit ABOVE its entry to be valid at the broker.
+        entry = float(anchor_short.metadata["entry_price"])  # type: ignore[attr-defined]
+        assert anchor_short.stop_loss > entry  # type: ignore[attr-defined]
+
+
 class TestTrimming:
     """Active levels beyond the caps are retired (closed) to free margin."""
 

@@ -1346,6 +1346,31 @@ class TradingEngine:
             trailing_stop_distance=trailing_stop_distance,
         )
 
+        # Guard: a stop-loss on the wrong side of the entry is invalid — the
+        # broker rejects it (OANDA: STOP_LOSS_ON_FILL_LOSS). A long is stopped
+        # below its entry, a short above. The entry reference is the limit price
+        # for a resting order, else the current market price. Reject here, loudly
+        # and once, rather than spamming the broker with orders it will refuse.
+        entry_ref = order.limit_price if is_resting else latest_close
+        if order.stop_loss is not None and entry_ref is not None:
+            stop_on_wrong_side = (
+                side == OrderSide.BUY and order.stop_loss >= entry_ref
+            ) or (side == OrderSide.SELL and order.stop_loss <= entry_ref)
+            if stop_on_wrong_side:
+                grid_level_str = sig.metadata.get("grid_level")
+                self._log.warning(
+                    "stop_loss_wrong_side_rejected",
+                    side=side.value,
+                    entry=entry_ref,
+                    stop_loss=order.stop_loss,
+                    grid_level=grid_level_str,
+                )
+                if grid_level_str:
+                    on_rejected = getattr(self._strategy, "on_signal_rejected", None)
+                    if on_rejected is not None:
+                        on_rejected(grid_level_str)
+                return
+
         if is_resting:
             self._place_limit_order(order, sig)
         else:
