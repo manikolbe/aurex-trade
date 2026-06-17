@@ -617,6 +617,27 @@
     return html;
   }
 
+  function renderSessionPnlBreakdown(state) {
+    // The per-cell P&L below shows only OPEN positions' floating gain/loss.
+    // Trades already closed (stop-losses) have left the grid but their realized
+    // result is banked into the session. Surface both halves so the green open
+    // cells are never mistaken for the true session P&L.
+    var realized = state.session_realized_pnl;
+    var unrealized = state.session_unrealized_pnl;
+    if (realized === undefined || unrealized === undefined) return '';
+    var net = realized + unrealized;
+    function money(v) {
+      var cls = v >= 0 ? 'text-success' : 'text-error';
+      return '<span class="font-mono ' + cls + '">' + (v >= 0 ? '+' : '') + '$' + v.toFixed(2) + '</span>';
+    }
+    var html = '<div class="text-xs bg-base-200/50 rounded px-2 py-1.5 mb-3 space-y-0.5">';
+    html += '<div class="flex justify-between"><span class="text-base-content/60">Realized (closed trades)</span>' + money(realized) + '</div>';
+    html += '<div class="flex justify-between"><span class="text-base-content/60">Open (floating, see grid)</span>' + money(unrealized) + '</div>';
+    html += '<div class="flex justify-between border-t border-base-content/10 pt-0.5 mt-0.5"><span class="text-base-content/80 font-semibold">Net session P&L</span>' + money(net) + '</div>';
+    html += '</div>';
+    return html;
+  }
+
   function renderDailyLossGauge(label, current, lossLimit) {
     // One-sided gauge: $0 on right, -lossLimit on left
     var pct = ((lossLimit + current) / lossLimit) * 100;
@@ -669,6 +690,7 @@
 
     // P&L Gauges
     html += renderPnlGauge('Session P&L', state.session_pnl, state.session_loss_limit, state.session_profit_target);
+    html += renderSessionPnlBreakdown(state);
     html += renderDailyLossGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit);
 
     // Grid levels table — show active levels + 3 empty on each side
@@ -799,6 +821,7 @@
 
     // Session P&L gauge (loss-limit only, no profit target)
     html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
+    html += renderSessionPnlBreakdown(state);
     // Live price now shown by the sticky #bot-price-ticker in the card header.
 
     // Grid levels table — 3 columns, zone label inside price cell

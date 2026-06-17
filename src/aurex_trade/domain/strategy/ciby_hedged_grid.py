@@ -386,6 +386,8 @@ class CibyHedgedGridStrategy:
             "current_price": self._current_price,
             "grid_levels": grid_levels,
             "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
+            "session_realized_pnl": self._session_realized_pnl,
+            "session_unrealized_pnl": self._session_unrealized_pnl,
             "session_profit_target": self._session_profit_target,
             "session_loss_limit": self._session_loss_limit,
             "daily_pnl": self._daily_realized_pnl + self._session_unrealized_pnl,

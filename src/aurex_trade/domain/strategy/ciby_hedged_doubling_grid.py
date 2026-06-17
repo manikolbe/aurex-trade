@@ -479,6 +479,8 @@ class CibyHedgedDoublingGridStrategy:
             "current_price": self._current_price,
             "grid_levels": grid_levels,
             "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
+            "session_realized_pnl": self._session_realized_pnl,
+            "session_unrealized_pnl": self._session_unrealized_pnl,
             "session_loss_limit": self._session_loss_limit,
             "doubled_level": self._doubled_level,
             "doubled_side": self._doubled_side,

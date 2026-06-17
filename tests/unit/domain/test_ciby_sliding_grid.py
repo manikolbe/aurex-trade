@@ -429,6 +429,23 @@ class TestDisplayState:
         strategy = _new()
         assert strategy.get_display_state() is None
 
+    def test_session_pnl_split_into_realized_and_unrealized(self) -> None:
+        """Display state exposes realized and unrealized P&L separately so the UI
+        can show banked (closed-trade) losses, not just open floating cells.
+        """
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        # Bank a closed-trade loss and set current floating P&L.
+        strategy.report_trade_closed("4115.00_long", -40.0, "close_sl")
+        strategy.update_unrealized_pnl(12.0)
+
+        state = strategy.get_display_state()
+        assert state is not None
+        assert state["session_realized_pnl"] == -40.0
+        assert state["session_unrealized_pnl"] == 12.0
+        # The combined gauge value is the sum of the two halves.
+        assert state["session_pnl"] == -28.0
+
     def test_order_type_in_display_state(self) -> None:
         """Each side reports its entry order type (limit/stop/market) for the UI."""
         strategy = _new()
