@@ -783,11 +783,16 @@ class TradingEngine:
                 notify()
             return
 
+        # Reverse map broker_trade_id → grid_level so closures can be event-logged
+        # before _grid_trade_map is cleared below.
+        trade_id_to_grid = {tid: key for key, tid in self._grid_trade_map.items()}
+
         # Close each trade using dedicated close endpoint
         failed = 0
         for trade in open_trades:
             try:
                 self._broker.close_trade(trade.broker_trade_id)
+                self._log_close_all_pnl(trade.broker_trade_id, trade_id_to_grid, reason)
             except Exception:
                 failed += 1
                 if failed == 1:
@@ -884,6 +889,44 @@ class TradingEngine:
         notify = getattr(self._strategy, "notify_close_all_complete", None)
         if notify is not None:
             notify()
+
+    def _log_close_all_pnl(
+        self,
+        broker_id: str,
+        trade_id_to_grid: dict[str, str],
+        reason: str,
+    ) -> None:
+        """Event-log the realized P&L of a single trade closed by close-all.
+
+        The normal closure-detection loop (_check_closures) emits
+        trade_closed_by_broker, but it never sees close-all'd trades because the
+        grid map is cleared before it runs. Without this, every profit-target /
+        loss-limit close-all banks P&L into the account that is invisible to the
+        event-sourced ledger, so summing trade_closed_by_broker undercounts the
+        true realized result. Mirror that event here (close_reason=<reason>) so the
+        ledger is complete. Best-effort — never let logging block the close.
+        """
+        grid_key = trade_id_to_grid.get(broker_id, "")
+        try:
+            details = self._broker.get_closed_trade_details(broker_id)
+        except Exception:
+            self._log.warning("closed_trade_details_unavailable", broker_trade_id=broker_id)
+            return
+        if details is None:
+            return
+
+        realized_pnl = details.realized_pnl
+        if realized_pnl != 0.0:
+            self._trade_pnls.append(realized_pnl)
+
+        self._log.info(
+            "trade_closed_by_broker",
+            grid_level=grid_key,
+            broker_trade_id=broker_id,
+            close_reason=reason,
+            close_price=details.close_price,
+            realized_pnl=realized_pnl,
+        )
 
     def _check_closures(
         self,

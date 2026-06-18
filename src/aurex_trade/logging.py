@@ -47,9 +47,14 @@ def setup_logging(log_level: str = "INFO", log_dir: Path = Path("logs")) -> None
     )
     console_handler.setFormatter(console_formatter)
 
-    # File handler — JSON with rotation (10MB per file, keep 5 backups = 50MB max)
+    # File handler — JSON with rotation (10MB per file, keep 10 backups = 110MB max).
+    # The event-sourced trade log (signals, fills, closures, sessions) is the only
+    # complete record of a run, so retention is sized to comfortably hold several
+    # days of activity. This is viable only because the high-volume noise has been
+    # removed: the per-poll debug_trade_markers dump (was ~83% of volume) is gone,
+    # and the httpx/httpcore client loggers are quieted to WARNING below (~15%).
     file_handler = RotatingFileHandler(
-        log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=10, encoding="utf-8"
     )
     file_handler.setLevel(level)
     file_formatter = structlog.stdlib.ProcessorFormatter(
@@ -67,6 +72,13 @@ def setup_logging(log_level: str = "INFO", log_dir: Path = Path("logs")) -> None
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
     root_logger.setLevel(level)
+
+    # Quiet noisy third-party clients. httpx/httpcore log one INFO line per request
+    # ("HTTP Request: GET ..."), which floods the file with one line per OANDA poll
+    # (every few seconds) and carries no analytical value — only their warnings and
+    # errors matter. Pin them to WARNING regardless of the root level.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # --- structlog configuration ---
     structlog.configure(

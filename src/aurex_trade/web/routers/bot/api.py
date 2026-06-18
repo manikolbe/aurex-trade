@@ -130,11 +130,6 @@ def bot_equity(
     if session is None:
         return JSONResponse(status_code=404, content={"detail": "No bot running"})
     trade_markers = session.engine.get_trade_markers()
-    logger.info(
-        "debug_trade_markers",
-        count=len(trade_markers),
-        markers=trade_markers,
-    )
     return JSONResponse(
         content={
             "equity_history": session.engine.get_equity_history(),
