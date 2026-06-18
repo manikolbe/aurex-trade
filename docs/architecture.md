@@ -163,6 +163,15 @@ class HistoricalDataPort(Protocol):
     def get_date_range(self, symbol: str, granularity: str) -> tuple[datetime, datetime] | None: ...
 ```
 
+### RunStorePort
+```python
+class RunStorePort(Protocol):
+    def start_run(self, run_id: str, *, user_id: str, strategy: str, ...) -> None: ...
+    def finish_run(self, run_id: str, *, user_id: str, net_realized_pnl: float, ...) -> None: ...
+```
+Durable per-run summary (config + outcome + net P&L). Injected optionally into the
+engine; `None` ⇒ no-op (CLI/tests). See `docs/log-analysis.md`.
+
 ## Adapter Implementations
 
 ### Paper Adapter (`adapters/paper/`)
@@ -199,6 +208,10 @@ class HistoricalDataPort(Protocol):
   Used by both CLI and web for historical market data.
 - `UserDataPreferencesStore` — per-user date range preferences for the
   backtest UI, stored in `user_data_preferences` table.
+- `SQLiteRunStore` — implements `RunStorePort`, writes one durable summary row per
+  engine run to the `bot_runs` table (config + outcome + net P&L), so run history
+  survives log rotation. It is a rollup, not an event log; the structured JSON log
+  remains the authoritative event-sourced record. See `docs/log-analysis.md`.
 
 ## Strategies
 
@@ -275,7 +288,32 @@ CREATE TABLE positions (
     realized_pnl    REAL NOT NULL,
     timestamp       TEXT NOT NULL
 );
+
+-- Durable per-run summary (rollup, not an event log). One row per engine run;
+-- 'running' until engine_stopped finalizes it. See docs/log-analysis.md.
+CREATE TABLE bot_runs (
+    run_id            TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL,
+    strategy          TEXT NOT NULL,
+    symbol            TEXT NOT NULL,
+    interval          INTEGER NOT NULL,
+    strategy_params   TEXT NOT NULL DEFAULT '{}',
+    risk_params       TEXT NOT NULL DEFAULT '{}',
+    started_at        TEXT NOT NULL,
+    ended_at          TEXT,
+    status            TEXT NOT NULL DEFAULT 'running',
+    stop_reason       TEXT,
+    total_cycles      INTEGER,
+    sessions          INTEGER,
+    closures          INTEGER,
+    net_realized_pnl  REAL,
+    initial_equity    REAL,
+    final_equity      REAL
+);
 ```
+
+(Tables shown without `user_id` for brevity carry it in the real schema for
+multi-tenant isolation; see `schema.sql`.)
 
 ## Configuration
 

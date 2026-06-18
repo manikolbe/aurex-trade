@@ -120,6 +120,34 @@ CREATE TABLE IF NOT EXISTS user_risk_defaults (
     updated_at      TEXT NOT NULL
 );
 
+-- Durable per-run history rollup (survives log rotation).
+-- One row per engine run (engine_started → engine_stopped). A summary, NOT an
+-- event log: the structured JSON log remains the authoritative event-sourced view.
+-- A row left as status='running' with no recent activity indicates a crashed run.
+
+CREATE TABLE IF NOT EXISTS bot_runs (
+    run_id            TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL,
+    strategy          TEXT NOT NULL,
+    symbol            TEXT NOT NULL,
+    interval          INTEGER NOT NULL,
+    strategy_params   TEXT NOT NULL DEFAULT '{}',
+    risk_params       TEXT NOT NULL DEFAULT '{}',
+    started_at        TEXT NOT NULL,
+    ended_at          TEXT,
+    status            TEXT NOT NULL DEFAULT 'running',
+    stop_reason       TEXT,
+    total_cycles      INTEGER,
+    sessions          INTEGER,
+    closures          INTEGER,
+    net_realized_pnl  REAL,
+    initial_equity    REAL,
+    final_equity      REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_runs_user_started
+    ON bot_runs (user_id, started_at);
+
 -- Encrypted broker credentials (per-user isolation)
 
 CREATE TABLE IF NOT EXISTS broker_credentials (

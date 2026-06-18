@@ -38,6 +38,10 @@ def bot_runner(session_manager: BotSessionManager, user_id: str) -> None:
     try:
         session.engine.run()
     finally:
+        # Defensively clear bound log context on this pooled worker. run() clears it
+        # too, but if it raised before reaching its own finally (or before binding),
+        # this prevents this run's identity leaking into the next task on this thread.
+        structlog.contextvars.clear_contextvars()
         # Only clean up if OUR session is still the active one.
         # If the user already stopped us and started a new bot, the active
         # session will be a different instance — leave it alone.

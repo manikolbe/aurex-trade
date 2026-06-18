@@ -13,6 +13,7 @@ from aurex_trade.adapters.oanda.broker import OANDABrokerAdapter
 from aurex_trade.adapters.oanda.connection import OANDAConnection
 from aurex_trade.adapters.oanda.market_data import OANDAMarketDataAdapter
 from aurex_trade.adapters.sqlite.repository import SQLiteRepository
+from aurex_trade.adapters.sqlite.run_store import SQLiteRunStore
 from aurex_trade.backtest.cli import STRATEGY_REGISTRY
 from aurex_trade.config import OANDAConfig
 from aurex_trade.domain.risk.engine import RiskEngine
@@ -94,6 +95,7 @@ def create_bot_engine(
         broker = OANDABrokerAdapter(connection, creds.account_id)
         market_data = OANDAMarketDataAdapter(connection, creds.account_id, granularity)
         repository = SQLiteRepository(db_path)
+        run_store = SQLiteRunStore(db_path)
 
         engine = TradingEngine(
             strategy=strategy,
@@ -107,6 +109,7 @@ def create_bot_engine(
             user_id=user_id,
             strategy_params=strategy_params,
             risk_params=risk_params,
+            run_store=run_store,
         )
     except Exception:
         connection.disconnect()

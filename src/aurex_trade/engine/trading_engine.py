@@ -7,6 +7,7 @@ import contextlib
 import time
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict
+from uuid import uuid4
 
 import structlog
 
@@ -24,6 +25,7 @@ from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.ports.broker import BrokerPort
 from aurex_trade.ports.market_data import MarketDataPort
 from aurex_trade.ports.repository import RepositoryPort
+from aurex_trade.ports.run_store import RunStorePort
 
 log = structlog.get_logger()
 
@@ -117,6 +119,7 @@ class TradingEngine:
         user_id: str,
         strategy_params: dict[str, int | float] | None = None,
         risk_params: dict[str, int | float | bool] | None = None,
+        run_store: RunStorePort | None = None,
     ) -> None:
         self._strategy = strategy
         self._risk_engine = risk_engine
@@ -130,7 +133,17 @@ class TradingEngine:
         self._user_id = user_id
         self._strategy_params = strategy_params or {}
         self._risk_params = risk_params or {}
-        self._log = log.bind(user_id=user_id)
+        # Optional durable run-history rollup. None ⇒ engine no-ops (CLI/tests may
+        # not wire it). The structured log remains the complete record regardless.
+        self._run_store = run_store
+        # user_id is bound onto every log line via structlog contextvars in run()
+        # (alongside run_id/strategy/session_seq) — see logging.py merge_contextvars.
+        self._log = log
+        # Identity for this run, set in run(); empty until then.
+        self._run_id: str = ""
+        # Monotonic grid-lifecycle counter within a run; increments on each
+        # grid_initialized (first grid + every re-anchor). 0 until the first grid.
+        self._session_seq: int = 0
         self._running = False
         # Session stats for periodic summary
         self._session_signals = 0
@@ -181,74 +194,139 @@ class TradingEngine:
         self._running = True
         self._cycle_count = 0
         self._started_at = datetime.now(UTC)
+        self._session_seq = 0
+
+        # Bind run identity onto EVERY log line for this run via contextvars (the
+        # merge_contextvars processor in logging.py picks these up, including logs
+        # emitted deep inside adapters during a cycle). clear_contextvars() first is
+        # critical: this thread may be a reused ThreadPoolExecutor worker that ran a
+        # different user's bot, and contextvars persist across tasks on a thread.
+        structlog.contextvars.clear_contextvars()
+        self._run_id = uuid4().hex
+        structlog.contextvars.bind_contextvars(
+            user_id=self._user_id,
+            run_id=self._run_id,
+            strategy=self._strategy.name,
+        )
 
         # Initialize peak equity
         self._peak_equity = self._broker.equity
+        initial_equity = self._peak_equity
 
         self._log.info(
             "engine_started",
+            run_id=self._run_id,
             symbol=self._symbol,
             strategy=self._strategy.name,
             interval=self._interval_seconds,
             fill_poll_interval=self._FILL_POLL_INTERVAL,
-            initial_equity=self._peak_equity,
+            initial_equity=initial_equity,
             strategy_params=self._strategy_params,
             risk_params=self._risk_params,
         )
 
+        # Durable run-history rollup: record the run as 'running'. A run that never
+        # reaches finish_run (crash/kill) stays 'running' — itself diagnostic.
+        if self._run_store is not None:
+            with contextlib.suppress(Exception):
+                self._run_store.start_run(
+                    self._run_id,
+                    user_id=self._user_id,
+                    strategy=self._strategy.name,
+                    symbol=self._symbol,
+                    interval=self._interval_seconds,
+                    strategy_params=self._strategy_params,
+                    risk_params=self._risk_params,
+                    started_at=self._started_at,
+                    initial_equity=initial_equity,
+                )
+
         last_strategy_time = 0.0
+        stop_reason = "stopped"
 
-        while self._running:
-            if max_cycles is not None and self._cycle_count >= max_cycles:
-                self._log.info("max_cycles_reached", cycles=self._cycle_count)
-                break
+        try:
+            while self._running:
+                if max_cycles is not None and self._cycle_count >= max_cycles:
+                    self._log.info("max_cycles_reached", cycles=self._cycle_count)
+                    stop_reason = "max_cycles"
+                    break
 
-            now = time.monotonic()
+                now = time.monotonic()
 
-            # Fast poll: fill detection + closure detection every cycle
-            try:
-                self._run_fast_poll()
-            except Exception:
-                self._log.exception("fast_poll_error")
-
-            # Strategy cycle: run at configured interval
-            elapsed = now - last_strategy_time
-            if elapsed >= self._interval_seconds or last_strategy_time == 0.0:
-                last_strategy_time = now
+                # Fast poll: fill detection + closure detection every cycle
                 try:
-                    self._run_strategy_cycle()
+                    self._run_fast_poll()
                 except Exception:
-                    self._log.exception("cycle_error", cycle=self._cycle_count)
+                    self._log.exception("fast_poll_error")
 
-                self._cycle_count += 1
+                # Strategy cycle: run at configured interval
+                elapsed = now - last_strategy_time
+                if elapsed >= self._interval_seconds or last_strategy_time == 0.0:
+                    last_strategy_time = now
+                    try:
+                        self._run_strategy_cycle()
+                    except Exception:
+                        self._log.exception("cycle_error", cycle=self._cycle_count)
 
-                # Periodic session summary
-                if (
-                    self._cycle_count > 0
-                    and self._cycle_count % self._SUMMARY_INTERVAL == 0
+                    self._cycle_count += 1
+
+                    # Periodic session summary. Config (strategy/risk params, symbol,
+                    # interval) is re-emitted here so a long run whose engine_started
+                    # has rotated out of the log window is still fully recoverable.
+                    if (
+                        self._cycle_count > 0
+                        and self._cycle_count % self._SUMMARY_INTERVAL == 0
+                    ):
+                        position = self._broker.get_positions(self._symbol)
+                        self._log.info(
+                            "session_summary",
+                            cycles=self._cycle_count,
+                            signals=self._session_signals,
+                            trades=self._session_trades,
+                            rejections=self._session_rejections,
+                            equity=self._broker.equity,
+                            peak_equity=self._peak_equity,
+                            position_qty=position.quantity if position else 0.0,
+                            unrealized_pnl=position.unrealized_pnl if position else 0.0,
+                            realized_pnl=position.realized_pnl if position else 0.0,
+                            symbol=self._symbol,
+                            interval=self._interval_seconds,
+                            strategy_params=self._strategy_params,
+                            risk_params=self._risk_params,
+                        )
+
+                if self._running and (
+                    max_cycles is None or self._cycle_count < max_cycles
                 ):
-                    position = self._broker.get_positions(self._symbol)
-                    self._log.info(
-                        "session_summary",
-                        cycles=self._cycle_count,
-                        signals=self._session_signals,
-                        trades=self._session_trades,
-                        rejections=self._session_rejections,
-                        equity=self._broker.equity,
-                        peak_equity=self._peak_equity,
-                        position_qty=position.quantity if position else 0.0,
-                        unrealized_pnl=position.unrealized_pnl if position else 0.0,
-                        realized_pnl=position.realized_pnl if position else 0.0,
+                    sleep_seconds = (
+                        self._FILL_POLL_INTERVAL if self._interval_seconds > 0 else 0
                     )
+                    if sleep_seconds:
+                        time.sleep(sleep_seconds)
 
-            if self._running and (max_cycles is None or self._cycle_count < max_cycles):
-                sleep_seconds = self._FILL_POLL_INTERVAL if self._interval_seconds > 0 else 0
-                if sleep_seconds:
-                    time.sleep(sleep_seconds)
+            self._running = False
+            self._started_at = None
+            self._log.info("engine_stopped", total_cycles=self._cycle_count)
 
-        self._running = False
-        self._started_at = None
-        self._log.info("engine_stopped", total_cycles=self._cycle_count)
+            # Finalize the durable rollup. net P&L / closures come from _trade_pnls,
+            # which accumulates every realized close (normal + close-all).
+            if self._run_store is not None:
+                with contextlib.suppress(Exception):
+                    self._run_store.finish_run(
+                        self._run_id,
+                        user_id=self._user_id,
+                        ended_at=datetime.now(UTC),
+                        stop_reason=stop_reason,
+                        total_cycles=self._cycle_count,
+                        sessions=self._session_seq,
+                        closures=len(self._trade_pnls),
+                        net_realized_pnl=sum(self._trade_pnls),
+                        final_equity=self._broker.equity,
+                    )
+        finally:
+            # Always clear bound context on exit (normal, max_cycles, or exception)
+            # so a reused pool worker never carries this run's identity into the next.
+            structlog.contextvars.clear_contextvars()
 
     def stop(self) -> None:
         """Signal the engine to stop after the current cycle."""
@@ -1192,10 +1270,15 @@ class TradingEngine:
         all_signals: list[Signal] = []
         signal = self._strategy.generate(bars)
 
-        # Log grid levels once after strategy initializes
+        # Log grid levels once after strategy initializes. This fires on the first
+        # grid at startup AND on every re-anchor after a close-all (grid_logged is
+        # reset to False there) — so it is the one reliable point to advance the
+        # grid-lifecycle counter and re-bind it onto subsequent log lines.
         if not self._grid_logged:
             state = self.get_strategy_state()
             if state and "anchor_price" in state:
+                self._session_seq += 1
+                structlog.contextvars.bind_contextvars(session_seq=self._session_seq)
                 self._log.info(
                     "grid_initialized",
                     anchor_price=state["anchor_price"],

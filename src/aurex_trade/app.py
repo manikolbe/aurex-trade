@@ -109,6 +109,10 @@ def main() -> None:
         max_consecutive_losses=config.risk.max_consecutive_losses,
     )
 
+    from aurex_trade.adapters.sqlite.run_store import SQLiteRunStore
+
+    run_store = SQLiteRunStore(db_path=config.db_path)
+
     engine = TradingEngine(
         strategy=strategy,
         risk_engine=risk_engine,
@@ -118,6 +122,7 @@ def main() -> None:
         symbol=config.symbol,
         interval_seconds=config.interval_seconds,
         user_id="cli",
+        run_store=run_store,
     )
 
     log.info("engine_wired", strategy=strategy.name)

@@ -2,9 +2,14 @@
 """Analyse a production trading run from the JSON logs — session-aware playback.
 
 Reads the rotated structlog JSON logs pulled into ``logs/prod/`` (see
-``just pull-logs``), filters to a single user, segments the stream into runs
-(``engine_started`` → ``engine_stopped``/still-running), and reports performance,
-anomalies and a price-annotated event timeline for one chosen run.
+``just pull-logs``), filters to a single user, groups the stream into runs by the
+``run_id`` bound onto every log line, and reports performance, anomalies and a
+price-annotated event timeline for one chosen run. Within a run, activity is broken
+down by ``session_seq`` (one grid lifecycle: anchor → close-all → re-anchor).
+
+Lines without a ``run_id`` (pre-instrumentation logs from before run identity was
+added) are skipped — the analyser reports the skipped count so a stale pull is
+obvious rather than silently empty.
 
 IMPORTANT — this is a PUBLIC repo. This script carries NO identifiers. The user
 identity is read at runtime from ``analysis.local.json`` (gitignored) or a
@@ -51,23 +56,53 @@ class LogLine:
     event: str
     raw: dict[str, object]
 
+    @property
+    def run_id(self) -> str:
+        return str(self.raw.get("run_id", ""))
+
+    @property
+    def session_seq(self) -> int | None:
+        s = self.raw.get("session_seq")
+        return s if isinstance(s, int) else None
+
 
 @dataclass
 class Run:
-    """A single bot run: engine_started → engine_stopped (or still running)."""
+    """A single bot run, identified by run_id.
 
+    All lines sharing a run_id form one run. ``start``/``stop`` are the
+    ``engine_started``/``engine_stopped`` lines within the group, either of which may
+    be absent if it rotated out of the log window (start) or the run is still active
+    (stop). Config is sourced from ``engine_started`` when present, else from the
+    latest ``session_summary`` (which re-emits config) so it survives rotation.
+    """
+
+    run_id: str
     index: int
-    start: LogLine
-    stop: LogLine | None
     lines: list[LogLine] = field(default_factory=list)
+    start: LogLine | None = None
+    stop: LogLine | None = None
+
+    @property
+    def _config_raw(self) -> dict[str, object]:
+        """Config fields, from engine_started or the latest session_summary."""
+        if self.start is not None:
+            return self.start.raw
+        for ln in reversed(self.lines):
+            if ln.event == "session_summary":
+                return ln.raw
+        return {}
 
     @property
     def strategy(self) -> str:
-        return str(self.start.raw.get("strategy", "?"))
+        # strategy is bound onto every line via contextvars — use any line.
+        if self.lines:
+            return str(self.lines[0].raw.get("strategy", "?"))
+        return str(self._config_raw.get("strategy", "?"))
 
     @property
     def params(self) -> dict[str, object]:
-        p = self.start.raw.get("strategy_params")
+        p = self._config_raw.get("strategy_params")
         return p if isinstance(p, dict) else {}
 
     @property
@@ -75,14 +110,20 @@ class Run:
         return self.stop is None
 
     @property
+    def start_ts(self) -> datetime:
+        if self.start is not None:
+            return self.start.ts
+        return self.lines[0].ts if self.lines else self.end_ts
+
+    @property
     def end_ts(self) -> datetime:
         if self.stop is not None:
             return self.stop.ts
-        return self.lines[-1].ts if self.lines else self.start.ts
+        return self.lines[-1].ts if self.lines else self.start_ts
 
     @property
     def duration_str(self) -> str:
-        secs = (self.end_ts - self.start.ts).total_seconds()
+        secs = (self.end_ts - self.start_ts).total_seconds()
         h, rem = divmod(int(secs), 3600)
         m, s = divmod(rem, 60)
         return f"{h}h{m:02d}m" if h else f"{m}m{s:02d}s"
@@ -99,7 +140,11 @@ def _parse_ts(value: object) -> datetime | None:
 
 
 def load_lines(log_dir: Path, user_id: str) -> list[LogLine]:
-    """Read all rotated log files, filter to one user, drop noise, sort by time."""
+    """Read all rotated log files, filter to one user, drop noise, sort by time.
+
+    Lines without a ``run_id`` are skipped (pre-instrumentation logs); the count is
+    reported on stderr so a stale pull surfaces clearly instead of an empty result.
+    """
     files = sorted(log_dir.glob("aurex_trade.log*"))
     if not files:
         sys.exit(
@@ -107,6 +152,7 @@ def load_lines(log_dir: Path, user_id: str) -> list[LogLine]:
         )
 
     lines: list[LogLine] = []
+    skipped_no_run_id = 0
     for path in files:
         with path.open(encoding="utf-8") as fh:
             for rawline in fh:
@@ -127,31 +173,48 @@ def load_lines(log_dir: Path, user_id: str) -> list[LogLine]:
                 ts = _parse_ts(rec.get("timestamp"))
                 if ts is None:
                     continue
+                if not rec.get("run_id"):
+                    skipped_no_run_id += 1
+                    continue
                 lines.append(LogLine(ts=ts, event=event, raw=rec))
+
+    if skipped_no_run_id:
+        print(
+            f"Note: skipped {skipped_no_run_id} pre-instrumentation log line(s) with "
+            f"no run_id. If results look empty, the pull may predate run tracking.",
+            file=sys.stderr,
+        )
 
     lines.sort(key=lambda x: x.ts)
     return lines
 
 
 def segment_runs(lines: list[LogLine]) -> list[Run]:
-    """Split the chronological line stream into runs by engine_started/stopped."""
-    runs: list[Run] = []
-    current: Run | None = None
+    """Group the line stream into runs by run_id.
+
+    Every line carries a run_id (lines without one are dropped in load_lines), so a
+    run is simply all lines sharing a run_id. Runs are ordered by first-seen time;
+    ``index`` is a 1-based, human-friendly handle for ``--run N``.
+    """
+    by_run: dict[str, Run] = {}
+    order: list[str] = []
     for ln in lines:
+        run = by_run.get(ln.run_id)
+        if run is None:
+            run = Run(run_id=ln.run_id, index=0)
+            by_run[ln.run_id] = run
+            order.append(ln.run_id)
+        run.lines.append(ln)
         if ln.event == _START:
-            if current is not None:
-                runs.append(current)  # previous run ended without a stop marker
-            current = Run(index=len(runs) + 1, start=ln, stop=None)
-            continue
-        if current is None:
-            continue  # lines before the first start (carried-over run) — skip
-        current.lines.append(ln)
-        if ln.event == _STOP:
-            current.stop = ln
-            runs.append(current)
-            current = None
-    if current is not None:
-        runs.append(current)
+            run.start = ln
+        elif ln.event == _STOP:
+            run.stop = ln
+
+    runs = [by_run[rid] for rid in order]
+    # Order by actual start time, then assign 1-based indices.
+    runs.sort(key=lambda r: r.start_ts)
+    for i, run in enumerate(runs, start=1):
+        run.index = i
     return runs
 
 
@@ -159,94 +222,165 @@ def fmt_params(params: dict[str, object]) -> str:
     return ", ".join(f"{k}={v}" for k, v in params.items())
 
 
-def print_run_list(runs: list[Run], lines: list[LogLine]) -> None:
+def run_nutshell(run: Run) -> dict[str, object]:
+    """Compact one-record summary of a run — the quick entry point (also --list --json)."""
+    st = compute_stats(run)
+    return {
+        "index": run.index,
+        "run_id": run.run_id,
+        "start": run.start_ts.isoformat(),
+        "end": None if run.is_running else run.end_ts.isoformat(),
+        "status": "running" if run.is_running else "stopped",
+        "strategy": run.strategy,
+        "symbol": run._config_raw.get("symbol", "?"),
+        "net_pnl": round(st.net_pnl, 2),
+        "closures": len(st.closures),
+        "sessions": len(st.sessions),
+        "win_rate": round(st.win_rate, 1),
+    }
+
+
+def print_run_list(runs: list[Run], lines: list[LogLine], as_json: bool = False) -> None:
+    if as_json:
+        print(json.dumps([run_nutshell(r) for r in runs], indent=2))
+        return
     if lines:
         print(
             f"Log window: {lines[0].ts:%Y-%m-%d %H:%M} → {lines[-1].ts:%Y-%m-%d %H:%M} UTC"
             f"  ({len(lines)} events for this user)\n"
         )
     if not runs:
-        print("No runs (engine_started) found for this user in the log window.")
+        print("No runs found for this user in the log window.")
         return
-    print(f"{'#':>2}  {'Start (UTC)':<17}  {'Dur':>7}  {'Status':<8}  Strategy / params")
+    print(
+        f"{'#':>2}  {'run_id':<8}  {'Start (UTC)':<17}  {'Dur':>7}  "
+        f"{'Status':<8}  {'Net P&L':>9}  Strategy / params"
+    )
     print("-" * 100)
     for r in runs:
         status = "RUNNING" if r.is_running else "stopped"
+        st = compute_stats(r)
         print(
-            f"{r.index:>2}  {r.start.ts:%Y-%m-%d %H:%M}  {r.duration_str:>7}  "
-            f"{status:<8}  {r.strategy}"
+            f"{r.index:>2}  {r.run_id[:8]:<8}  {r.start_ts:%Y-%m-%d %H:%M}  "
+            f"{r.duration_str:>7}  {status:<8}  {_money(st.net_pnl):>9}  {r.strategy}"
         )
-        print(f"{'':>43}{fmt_params(r.params)}")
+        print(f"{'':>55}{fmt_params(r.params)}")
 
 
-def analyse_run(run: Run, show_timeline: bool) -> None:
-    """Print performance summary, anomalies and (optionally) a playback timeline."""
-    closures: list[dict[str, object]] = []
-    reason_counts: dict[str, int] = {}
-    net_pnl = 0.0
-    wins = losses = 0
-    rejections = 0
-    errors: list[LogLine] = []
-    anomalies: list[str] = []
+# Anomaly event names worth flagging explicitly.
+_ANOMALY_EVENTS = {
+    "cycle_error",
+    "fast_poll_error",
+    "check_limit_fills_error",
+    "signal_drain_limit_reached",
+    "limit_order_cancelled_or_expired",
+    "max_open_trades_reached",
+    "order_execution_failed",
+    "opposite_market_order_failed",
+}
+
+
+@dataclass
+class SessionStats:
+    """Per-grid-lifecycle (session_seq) aggregates within a run."""
+
+    seq: int
+    closures: int = 0
+    net_pnl: float = 0.0
+    wins: int = 0
+    losses: int = 0
+
+
+@dataclass
+class RunStats:
+    """Aggregates for one run, shared by the list view and the detail view."""
+
+    closures: list[dict[str, object]] = field(default_factory=list)
+    reason_counts: dict[str, int] = field(default_factory=dict)
+    net_pnl: float = 0.0
+    wins: int = 0
+    losses: int = 0
+    rejections: int = 0
+    errors: list[LogLine] = field(default_factory=list)
+    anomalies: list[str] = field(default_factory=list)
     last_summary: dict[str, object] | None = None
-    last_position: dict[str, object] | None = None  # freshest position_updated
+    last_position: dict[str, object] | None = None
+    sessions: dict[int, SessionStats] = field(default_factory=dict)
 
-    # Anomaly event names worth flagging explicitly.
-    anomaly_events = {
-        "cycle_error",
-        "fast_poll_error",
-        "check_limit_fills_error",
-        "signal_drain_limit_reached",
-        "limit_order_cancelled_or_expired",
-        "max_open_trades_reached",
-        "order_execution_failed",
-        "opposite_market_order_failed",
-    }
+    @property
+    def decided(self) -> int:
+        return self.wins + self.losses
 
+    @property
+    def win_rate(self) -> float:
+        return (self.wins / self.decided * 100) if self.decided else 0.0
+
+
+def compute_stats(run: Run) -> RunStats:
+    """Walk a run's lines once and compute all aggregates (run- and session-level)."""
+    st = RunStats()
     for ln in run.lines:
         ev = ln.event
         if ev == "trade_closed_by_broker":
             pnl = _num(ln.raw.get("realized_pnl")) or 0.0
             reason = str(ln.raw.get("close_reason", "?"))
-            net_pnl += pnl
-            reason_counts[reason] = reason_counts.get(reason, 0) + 1
-            if pnl > 0:
-                wins += 1
-            elif pnl < 0:
-                losses += 1
-            closures.append(ln.raw)
+            st.net_pnl += pnl
+            st.reason_counts[reason] = st.reason_counts.get(reason, 0) + 1
+            won = pnl > 0
+            lost = pnl < 0
+            if won:
+                st.wins += 1
+            elif lost:
+                st.losses += 1
+            st.closures.append(ln.raw)
+            # Per-session bucket (session_seq is bound onto the line).
+            seq = ln.session_seq
+            if seq is not None:
+                sess = st.sessions.get(seq)
+                if sess is None:
+                    sess = SessionStats(seq=seq)
+                    st.sessions[seq] = sess
+                sess.closures += 1
+                sess.net_pnl += pnl
+                sess.wins += int(won)
+                sess.losses += int(lost)
         elif ev == "session_summary":
-            last_summary = ln.raw
+            st.last_summary = ln.raw
         elif ev == "position_updated":
-            last_position = ln.raw
+            st.last_position = ln.raw
         elif ev in ("signal_rejected", "rejected") or ev == "max_open_trades_reached":
-            rejections += 1
+            st.rejections += 1
         is_error = ln.raw.get("level") in ("error", "critical") or "exception" in ev
         if is_error:
-            errors.append(ln)
-
+            st.errors.append(ln)
         # Anomaly list excludes error-level lines — those are shown under Errors
         # already, so listing them here too would double-count.
-        if ev in anomaly_events and not is_error:
-            anomalies.append(f"{ln.ts:%H:%M:%S}  {ev}  {_brief(ln.raw)}")
+        if ev in _ANOMALY_EVENTS and not is_error:
+            st.anomalies.append(f"{ln.ts:%H:%M:%S}  {ev}  {_brief(ln.raw)}")
+    return st
+
+
+def analyse_run(run: Run, show_timeline: bool) -> None:
+    """Print performance summary, anomalies and (optionally) a playback timeline."""
+    st = compute_stats(run)
+    cfg = run._config_raw
 
     # --- Header ---
     status = "RUNNING (no engine_stopped seen)" if run.is_running else "stopped"
-    sr = run.start.raw
-    print(f"\n=== Run #{run.index} — {run.strategy} [{status}] ===")
-    print(f"Started : {run.start.ts:%Y-%m-%d %H:%M:%S} UTC")
+    print(f"\n=== Run #{run.index} ({run.run_id[:8]}) — {run.strategy} [{status}] ===")
+    print(f"Started : {run.start_ts:%Y-%m-%d %H:%M:%S} UTC")
     print(f"End     : {run.end_ts:%Y-%m-%d %H:%M:%S} UTC  (duration {run.duration_str})")
 
     # --- Config ---
     print("\n-- Config --")
-    print(f"Symbol      : {sr.get('symbol', '?')}")
+    print(f"Symbol      : {cfg.get('symbol', '?')}")
     print(
-        f"Interval    : {sr.get('interval', '?')}s"
-        f"  (fill poll {sr.get('fill_poll_interval', '?')}s)"
+        f"Interval    : {cfg.get('interval', '?')}s"
+        f"  (fill poll {cfg.get('fill_poll_interval', '?')}s)"
     )
     print(f"Strategy    : {run.strategy}")
     print(f"Params      : {fmt_params(run.params)}")
-    risk = sr.get("risk_params")
+    risk = cfg.get("risk_params")
     if isinstance(risk, dict):
         if risk.get("enabled"):
             print(f"Risk engine : ENABLED — {fmt_params(risk)}")
@@ -257,7 +391,8 @@ def analyse_run(run: Run, show_timeline: bool) -> None:
     # initial_equity is logged at start; equity/peak come from the hourly
     # session_summary; the freshest unrealized/realized P&L come from the last
     # position_updated (fires per trade, so more current than the summary).
-    init_eq = _num(sr.get("initial_equity"))
+    last_summary = st.last_summary
+    init_eq = _num(cfg.get("initial_equity"))
     cur_eq = _num(last_summary.get("equity")) if last_summary else None
     peak_eq = _num(last_summary.get("peak_equity")) if last_summary else None
     print("\n-- Account --")
@@ -269,24 +404,38 @@ def analyse_run(run: Run, show_timeline: bool) -> None:
         print(f"Peak balance    : {_dollars(peak_eq)}")
     else:
         print("Current balance : n/a (no hourly summary yet — run < 1h or just started)")
-    if last_position is not None:
+    if st.last_position is not None:
+        lp = st.last_position
         print(
-            f"Open position   : qty {last_position.get('quantity')}"
-            f" @ {last_position.get('avg_cost')}"
-            f"  unrealized {_money(_num(last_position.get('unrealized_pnl')) or 0.0)}"
+            f"Open position   : qty {lp.get('quantity')}"
+            f" @ {lp.get('avg_cost')}"
+            f"  unrealized {_money(_num(lp.get('unrealized_pnl')) or 0.0)}"
         )
 
     # --- Performance ---
-    closed = len(closures)
-    decided = wins + losses
-    win_rate = (wins / decided * 100) if decided else 0.0
     print("\n-- Performance --")
-    print(f"Closures      : {closed}")
-    print(f"Net realized  : {_money(net_pnl)}")
-    print(f"Win / loss    : {wins} / {losses}  ({win_rate:.0f}% win rate)")
-    if reason_counts:
-        breakdown = ", ".join(f"{k}={v}" for k, v in sorted(reason_counts.items()))
+    print(f"Closures      : {len(st.closures)}")
+    print(f"Net realized  : {_money(st.net_pnl)}")
+    print(f"Win / loss    : {st.wins} / {st.losses}  ({st.win_rate:.0f}% win rate)")
+    if st.reason_counts:
+        breakdown = ", ".join(f"{k}={v}" for k, v in sorted(st.reason_counts.items()))
         print(f"Close reasons : {breakdown}")
+
+    # --- Sessions (per grid lifecycle) ---
+    # The sliding grid re-anchors on each close-all; P&L per session is the breakdown
+    # to tune against (each session is one grid at one anchor price).
+    if st.sessions:
+        print("\n-- Sessions (per grid lifecycle) --")
+        for seq in sorted(st.sessions):
+            s = st.sessions[seq]
+            print(
+                f"  session {seq:>2}: closures={s.closures:>3}  net={_money(s.net_pnl)}"
+                f"  W/L {s.wins}/{s.losses}"
+            )
+
+    closures = st.closures
+    errors = st.errors
+    anomalies = st.anomalies
 
     # --- Anomalies ---
     print("\n-- Anomalies / events of note --")
@@ -347,7 +496,12 @@ def _print_timeline(run: Run) -> None:
         if ln.event not in show:
             continue
         price = f"{last_price:>9.2f}" if last_price is not None else "    --   "
-        print(f"  {ln.ts:%m-%d %H:%M:%S}  {price}  {ln.event:<24} {_brief(ln.raw)}")
+        seq = ln.session_seq
+        sess = f"s{seq}" if seq is not None else "s-"
+        print(
+            f"  {ln.ts:%m-%d %H:%M:%S}  {sess:>3}  {price}  "
+            f"{ln.event:<24} {_brief(ln.raw)}"
+        )
 
 
 def _brief(raw: dict[str, object]) -> str:
@@ -383,8 +537,12 @@ def _brief(raw: dict[str, object]) -> str:
             f"cycles={raw.get('cycles')} trades={raw.get('trades')} "
             f"equity=${raw.get('equity')}"
         )
-    # Fallback: show a few non-bookkeeping keys.
-    skip = {"event", "level", "logger", "timestamp", "user_id", "user_email"}
+    # Fallback: show a few non-bookkeeping keys. The bound-context fields (run_id,
+    # strategy, session_seq) are on every line — skip them to keep the view focused.
+    skip = {
+        "event", "level", "logger", "timestamp", "user_id", "user_email",
+        "run_id", "strategy", "session_seq",
+    }
     parts = [f"{k}={v}" for k, v in raw.items() if k not in skip]
     return " ".join(parts[:6])
 
@@ -424,12 +582,37 @@ def resolve_identity(args: argparse.Namespace) -> str:
     )
 
 
+def _resolve_run(runs: list[Run], selector: str) -> Run:
+    """Resolve --run: an integer index (1-based) or a run_id prefix."""
+    if selector.isdigit():
+        idx = int(selector)
+        match = [r for r in runs if r.index == idx]
+        if match:
+            return match[0]
+        sys.exit(f"Run #{idx} not found. Use --list to see available runs.")
+    # Treat as a run_id prefix.
+    match = [r for r in runs if r.run_id.startswith(selector)]
+    if len(match) == 1:
+        return match[0]
+    if not match:
+        sys.exit(f"No run with id prefix '{selector}'. Use --list to see runs.")
+    sys.exit(f"Ambiguous run id prefix '{selector}' ({len(match)} matches).")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--log-dir", type=Path, default=DEFAULT_LOG_DIR)
     ap.add_argument("--user-id", help="Override identity (else read analysis.local.json)")
     ap.add_argument("--list", action="store_true", help="List runs and exit")
-    ap.add_argument("--run", type=int, help="Run index to analyse (default: latest)")
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        help="With --list, emit the run index as JSON (machine-readable nutshell)",
+    )
+    ap.add_argument(
+        "--run",
+        help="Run to analyse: 1-based index or run_id prefix (default: latest)",
+    )
     ap.add_argument("--timeline", action="store_true", help="Include event playback")
     args = ap.parse_args()
 
@@ -438,16 +621,10 @@ def main() -> None:
     runs = segment_runs(lines)
 
     if args.list or not runs:
-        print_run_list(runs, lines)
+        print_run_list(runs, lines, as_json=args.json)
         return
 
-    if args.run is not None:
-        match = [r for r in runs if r.index == args.run]
-        if not match:
-            sys.exit(f"Run #{args.run} not found. Use --list to see available runs.")
-        target = match[0]
-    else:
-        target = runs[-1]  # latest
+    target = _resolve_run(runs, args.run) if args.run is not None else runs[-1]
 
     print_run_list(runs, lines)
     analyse_run(target, show_timeline=args.timeline)

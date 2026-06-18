@@ -148,10 +148,15 @@ just deploy-prod         # Deploy to production VPS (push to main first)
 ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs --tail=50 app'
 
 # Useful grep filters for monitoring:
-# Bot config (strategy + risk params logged at startup):
+# Every engine log line carries bound context: user_id, run_id, strategy, session_seq.
+# Bot config (strategy + risk params logged at startup; re-emitted on session_summary):
 #   | grep "engine_started"
 # Grid levels (anchor + all levels, logged once after first bar):
 #   | grep "grid_initialized"
+# Isolate one run (everything that run logged):
+#   | grep '"run_id": "<run_id>"'
+# Isolate one grid lifecycle within a run (anchor → close-all → re-anchor):
+#   | grep '"session_seq": <n>'
 # All trade activity (signals, fills, closures):
 #   | grep "info" | grep -E "signal|trade_executed|trade_closed|position_updated|cycle_error"
 # Just closure detection:
@@ -178,22 +183,32 @@ Configuration is per-user (stored in SQLite via user preferences).
 
 | Setting | Description | Test Value | Notes |
 |---------|-------------|------------|-------|
-| **Strategy** | Trading strategy to use | `ciby_hedged_grid` | Selected from dropdown |
+| **Strategy** | Trading strategy to use | `ciby_sliding_grid` | The primary (effectively only) strategy in real use |
 | **Symbol** | Instrument to trade | `XAU_USD` | Gold vs USD |
 | **Interval** | Seconds between cycles | `60` | 1 min for testing, 300+ for production |
 | **Granularity** | OANDA candle granularity | `M1` | Must align with interval |
 
-### Ciby Hedged Grid Strategy Parameters
+> The other registered strategies (`ciby_hedged_grid`, `ciby_hedged_doubling_grid`,
+> `simple_grid`, `sma_crossover`, `rsi_mean_reversion`) are stale and not used.
 
-| Parameter | Description | Test Value | Production Value |
-|-----------|-------------|------------|-----------------|
-| `grid_spacing` | Distance between grid levels ($) | `15` | `15` |
-| `initial_units` | Units for first pair | `10` | `10` |
-| `grid_units` | Units for subsequent pairs | `20` | `20` |
-| `stop_distance` | Stop-loss distance ($) | `16` | `16` |
-| `session_profit_target` | Close all & restart when hit ($) | `100` | TBD |
-| `session_loss_limit` | Close all & restart when hit ($) | `50` | TBD |
-| `daily_loss_limit` | Stop trading for the day ($) | `200` | TBD |
+### Ciby Sliding Grid Strategy Parameters
+
+The web UI renders these dynamically from `StrategyMetadata`; defaults below come from
+`CibySlidingGridStrategy.metadata()`.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `grid_spacing` | Distance between consecutive grid levels beyond the first ($) | `10` |
+| `anchor_gap` | Distance from anchor to the first level above/below ($) | `15` |
+| `buy_sell_offset` | Gap between buy and sell of a hedged pair, to clear the spread ($) | `0.9` |
+| `anchor_units` | Units per side of the hedged pair at the anchor level | `10` |
+| `grid_units` | Units per side of the hedged pair at non-anchor levels | `20` |
+| `stop_buffer` | Extra distance past the next level where the stop sits ($) | `1.0` |
+| `max_levels_ahead` | Max active levels kept on the trending side | `2` |
+| `max_levels_behind` | Max active levels kept on the trailing side | `1` |
+| `session_profit_target` | Close all & restart when session P&L hits this ($) | `100` |
+| `session_loss_limit` | Close all & restart when session P&L drops below this ($) | `50` |
+| `daily_loss_limit` | Stop trading for the day when cumulative P&L drops below this ($) | `200` |
 
 ### Risk Engine Settings (environment variables)
 
@@ -207,8 +222,8 @@ Configuration is per-user (stored in SQLite via user preferences).
 ### Starting the Bot for Testing
 
 1. Navigate to web UI → Bot page
-2. Select strategy: `ciby_hedged_grid`
-3. Set params: `grid_spacing=15`, `initial_units=10`, `grid_units=20`, `stop_distance=16`
+2. Select strategy: `ciby_sliding_grid`
+3. Set params: `grid_spacing=10`, `anchor_gap=15`, `anchor_units=10`, `grid_units=20`, `stop_buffer=1`
 4. Set interval: `60` (1 minute cycles for fast feedback)
 5. Click Start → bot begins trading on connected OANDA account
 6. Monitor via logs: `ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs -f --tail=10 app'`
@@ -223,35 +238,46 @@ If testing closure detection, ensure a clean slate:
 ## Analysing Bot Runs in Production
 
 After deploying and letting the bot run, analyse its performance from the
-**structured JSON logs** — NOT the database.
+**structured JSON logs**. A durable per-run summary also lives in the DB (`bot_runs`
+table) — see below. **Full how-to: `docs/log-analysis.md`.**
 
-**Why logs, not the DB:** The engine only persists MARKET orders via `save_trade`.
-Limit/stop fills and — critically — **trade closures with realized P&L are never
-written to SQLite** (the `trades` table has no realized_pnl column). The structlog
-JSON log (`/app/logs/aurex_trade.log*`, rotated 10MB × 5 files) is the only
-complete, event-sourced record. The live equity/session charts in the web UI are
-in-memory and are lost on every redeploy/restart.
+**Why logs, not the DB, for detail:** The engine only persists MARKET orders via
+`save_trade`. Limit/stop fills and — critically — **individual trade closures with
+realized P&L are never written to SQLite** (the `trades` table has no realized_pnl
+column). The structlog JSON log (`/app/logs/aurex_trade.log*`, rotated 10MB × 10
+files) is the complete, event-sourced record. The `bot_runs` table is a per-run
+*summary* (config + outcome + net P&L) that survives rotation, but it is not the
+event log. The live equity/session charts in the web UI are in-memory and lost on
+every redeploy/restart.
+
+Every engine log line carries bound context: **`user_id`, `run_id`, `strategy`,
+`session_seq`** (a run = one `engine_started`→`engine_stopped`; a session = one grid
+lifecycle: anchor → close-all → re-anchor).
 
 ### Workflow
 
 ```bash
 just pull-logs      # docker-cp prod logs from aurex-app:/app/logs → logs/prod/ (gitignored)
-just analyse        # analyse the latest run (summary + anomalies)
-just analyse --list                  # list all runs for the user, pick one
-just analyse --run 2                 # analyse a specific run
+just analyse        # analyse the latest run (summary + per-session P&L + anomalies)
+just analyse --list                  # quick nutshell list of all runs (run_id, net P&L)
+just analyse --list --json           # same, machine-readable
+just analyse --run 2                 # analyse run #2 (by index)
+just analyse --run aaaa1111          # …or by run_id prefix
 just analyse --run 2 --timeline      # + price-annotated event playback
 ```
 
 `scripts/analyse_run.py` reads the pulled logs and:
-- **Filters to one user** by `user_id` (prod is multi-user — every engine log line
-  carries `user_id`).
-- **Segments into runs** by `engine_started` → `engine_stopped` (or "still
-  running"). Reads all rotated `.log`/`.log.N` files, since an older run's
-  `engine_started` may have rotated out of the main file.
-- Reports **net realized P&L, win rate, close-reason breakdown, errors, largest
-  losses**, and a **playback timeline** where each event is annotated with the
-  prevailing market price (`bars_fetched.latest_close` carried forward) — so you
-  can replay exactly what happened against price and grid state.
+- **Filters to one user** by `user_id` (prod is multi-user). Reads all rotated
+  `.log`/`.log.N` files.
+- **Groups lines into runs by `run_id`.** Lines without a `run_id`
+  (pre-instrumentation logs) are skipped, with a reported count. Config is taken from
+  `engine_started`, falling back to the latest `session_summary` (which re-emits
+  config) when the start line has rotated out.
+- Reports **net realized P&L, win rate, a per-session P&L breakdown, close-reason
+  breakdown, errors, largest losses**, and a **playback timeline** where each event
+  is annotated with the prevailing market price (`bars_fetched.latest_close` carried
+  forward) and its `session_seq` — so you can replay exactly what happened against
+  price and grid state.
 
 ### Identity & PII (PUBLIC REPO — STRICT)
 
@@ -265,15 +291,28 @@ This repo is public. The analysis tooling carries **no identifiers**:
 
 ### Key log events the analyser reads
 
+Every engine log line also carries the bound context fields `user_id`, `run_id`,
+`strategy`, and `session_seq` (added once via structlog contextvars, merged onto
+every line). The table below lists the event-specific payload.
+
 | Event | Carries |
 |-------|---------|
-| `engine_started` | strategy, `strategy_params`, `risk_params`, `initial_equity` |
+| `engine_started` | `run_id`, strategy, `strategy_params`, `risk_params`, `initial_equity` |
 | `engine_stopped` | `total_cycles` (absence ⇒ run still active) |
-| `grid_initialized` | `anchor_price` + full `levels` ladder |
+| `grid_initialized` | `session_seq`, `anchor_price` + full `levels` ladder |
 | `bars_fetched` | `latest_close` (market price per cycle) |
 | `trade_closed_by_broker` | `realized_pnl`, `close_reason` (close_sl/tp/ts), `close_price` |
-| `session_summary` | `cycles`, `equity`, `peak_equity`, `trades` |
+| `session_summary` | `cycles`, `equity`, `peak_equity`, `trades`; also re-emits `strategy_params`, `risk_params`, `symbol`, `interval` (config survives rotation) |
 | `order_execution_failed`, `fast_poll_error` | failures/errors to flag |
+
+### Durable run history (DB)
+
+`bot_runs` (SQLite, user-scoped) holds one summary row per run — config, runtime,
+status, and net P&L — written on `engine_started` (`status='running'`) and finalized
+on `engine_stopped` (`status='stopped'`). A row stuck at `'running'` with no recent
+log indicates a crashed run. It is a rollup, not an event log: the analyser remains
+authoritative; the two should agree on net P&L for a given `run_id`. True independent
+validation (vs. OANDA's transaction history) is future work.
 
 ## Risk Engine
 

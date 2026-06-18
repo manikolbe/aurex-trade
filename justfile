@@ -91,7 +91,8 @@ pull-logs:
     ssh aurex 'rm -rf /tmp/aurex-logs'
     @echo "Pulled prod logs into logs/prod/ (gitignored)."
 
-# Analyse a production run from pulled logs (see scripts/analyse_run.py for flags)
+# Analyse a production run from pulled logs (groups by run_id, per-session P&L).
+# Flags: --list [--json], --run <index|run_id-prefix>, --timeline. See docs/log-analysis.md.
 analyse *args='':
     uv run python scripts/analyse_run.py {{args}}
 
