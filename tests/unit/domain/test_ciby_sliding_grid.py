@@ -408,6 +408,59 @@ class TestSessionExits:
         assert strategy._session_active is False
 
 
+class TestDayBoundary:
+    """The UTC day boundary resets only the daily counter — it must NOT restart the
+    session (that would null the anchor without a close-all, orphaning open trades).
+    """
+
+    def test_day_boundary_resets_daily_counter_only(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0, day="2025-05-01")])
+        anchor_before = strategy._anchor_price
+        assert anchor_before is not None
+        # Accumulate some daily P&L on day 1.
+        strategy.report_trade_closed("4115.00_long", -30.0, "close_sl")
+        assert strategy._daily_realized_pnl == -30.0
+
+        # Cross into day 2.
+        _drain_all(strategy, [_bar(4101.0, day="2025-05-02")])
+
+        # Daily counter reset, but the grid/anchor is untouched (no restart).
+        assert strategy._daily_realized_pnl == 0.0
+        assert strategy._anchor_price == anchor_before
+        assert strategy._session_active is True
+
+    def test_day_boundary_does_not_orphan_open_trades(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0, day="2025-05-01")])
+        # Mark a level as filled (an open broker trade exists for it).
+        strategy.report_fill("4100.00_long", 4100.0)
+        assert "long" in strategy._filled.get(4100.0, set())
+
+        # Cross midnight — the filled level must survive (no _restart_session()).
+        _drain_all(strategy, [_bar(4100.5, day="2025-05-02")])
+        assert "long" in strategy._filled.get(4100.0, set())
+
+    def test_day_boundary_re_enables_trading_after_daily_halt(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0, day="2025-05-01")])
+        # Breach the daily loss limit → trading halted for the day.
+        strategy.report_trade_closed("4115.00_long", -250.0, "close_sl")
+        assert strategy._session_active is False
+
+        # Engine processes the resulting close-all, then acknowledges it. (Without
+        # this the strategy keeps re-emitting the FLAT close-all every cycle, so we
+        # advance one generate() then notify — never drain a pending close-all.)
+        sig = strategy.generate([_bar(4100.0, day="2025-05-01")])
+        assert sig is not None and sig.signal_type == SignalType.FLAT
+        strategy.notify_close_all_complete()
+
+        # New day re-enables trading and zeroes the daily counter.
+        sig = strategy.generate([_bar(4101.0, day="2025-05-02")])
+        assert strategy._session_active is True
+        assert strategy._daily_realized_pnl == 0.0
+
+
 class TestAuthoritativeRealizedPnl:
     """Engine-supplied realized P&L (balance-delta based) takes over from the
     per-closure accumulation when set_realized_pnl() is used (live trading).

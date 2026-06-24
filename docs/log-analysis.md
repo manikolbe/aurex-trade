@@ -55,9 +55,14 @@ only when P&L is realized) and derives realized P&L from deltas:
   log the running `balance` and `run_realized` (= balance − initial_balance).
 - `close_all_executed` logs `balance` and `session_realized` (that grid lifecycle's
   realized P&L = balance delta since the session started) — **authoritative**.
-- `trade_closed_by_broker` (broker-side stop-loss) carries `close_reason: close_sl`
-  and `close_price` (the prevailing market price), but `realized_pnl: null` — the
-  banked amount is reflected in the balance, not the per-trade event.
+- `trade_closed_by_broker` (broker-side stop-loss) carries `close_reason: close_sl`,
+  `close_price`, and a per-trade `realized_pnl` computed locally as
+  `(stop − entry) × qty` (`realized_pnl_basis: stop_price`) — accurate to slippage
+  and exact in sign. This feeds win-rate and the risk engine's consecutive-loss gate;
+  the authoritative session/run total still comes from the balance delta. Margin-trim
+  closes (`level_trimmed`) carry the exact P&L from the close response.
+- Fail-closed: a failed `/summary` read logs `balance_read_failed` and skips the
+  cycle; ≥3 consecutive failures log `balance_read_halt` and stop the bot.
 
 The analyser nets realized P&L from the balance delta, falling back to the sum of
 `session_realized` deltas, then (for pre-fix runs that logged per-closure P&L) to

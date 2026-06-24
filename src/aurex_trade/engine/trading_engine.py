@@ -51,6 +51,19 @@ class TradeMarker(TypedDict):
     broker_trade_id: str
 
 
+class TradeEntry(TypedDict):
+    """Entry record for an open trade, kept so realized P&L can be computed
+    locally when a protective stop fills (OANDA's per-trade history 504s on
+    long-lived accounts). Keyed by broker_trade_id in TradingEngine._trade_entry.
+    """
+
+    grid_key: str
+    side: str  # "buy" / "sell" (OrderSide.value)
+    quantity: float
+    entry_price: float  # actual fill price (not the limit/stop trigger)
+    stop_loss: float | None  # protective stop price, if set
+
+
 class EventLogEntry(TypedDict):
     """A timestamped event for the UI event log."""
 
@@ -104,6 +117,9 @@ class TradingEngine:
     _SUMMARY_INTERVAL: int = 60
     # Fast poll interval (seconds) for fill/closure detection
     _FILL_POLL_INTERVAL: int = 5
+    # Halt trading after this many CONSECUTIVE balance-read failures (a sustained
+    # /summary outage). Tolerates transient blips; fails closed on a real outage.
+    _MAX_BALANCE_READ_FAILURES: int = 3
 
     def __init__(
         self,
@@ -174,6 +190,9 @@ class TradingEngine:
         self._trade_markers: list[TradeMarker] = []
         # Grid level key → broker trade ID mapping for closure detection
         self._grid_trade_map: dict[str, str] = {}
+        # broker_trade_id → entry record, for local realized-P&L on SL fills.
+        # Kept in lockstep with the open trades the engine has mapped.
+        self._trade_entry: dict[str, TradeEntry] = {}
         self._grid_logged: bool = False
         # Pending limit orders: grid_level_key → broker_order_id
         self._pending_order_map: dict[str, str] = {}
@@ -184,6 +203,10 @@ class TradingEngine:
         # Close-all circuit breaker state
         self._close_all_failed_count: int = 0
         self._close_all_next_retry_at: datetime | None = None
+        # Balance-read failure tracking. A transient /summary blip skips the cycle;
+        # a sustained outage (>= _MAX_BALANCE_READ_FAILURES consecutive) halts
+        # trading — never trade on stale realized P&L. Reset to 0 on success.
+        self._balance_read_failures: int = 0
         # Hard safety cap on open trades (0 = disabled)
         self._max_open_trades: int = 50
         # Session history: completed strategy sessions (grid lifecycles)
@@ -230,13 +253,27 @@ class TradingEngine:
         # None and the per-cycle push is skipped.
         initial_balance: float | None = None
         if hasattr(self._broker, "get_account_summary"):
-            with contextlib.suppress(Exception):
+            # Fail-closed: a broker that exposes balances MUST give us a starting
+            # anchor — without it, realized-P&L tracking (and the loss limits that
+            # depend on it) would silently not work. Do not start trading.
+            try:
                 initial_balance = float(self._broker.get_account_summary()["balance"])
-                self._run_start_balance = initial_balance
-                self._session_start_balance = initial_balance
-                self._day_start_balance = initial_balance
-                self._balance_day = self._started_at.strftime("%Y-%m-%d")
-                self._last_balance = initial_balance
+            except Exception as exc:
+                self._running = False
+                self._started_at = None
+                self._log.error(
+                    "balance_anchor_seed_failed",
+                    error=str(exc),
+                    reason="cannot read starting balance — not starting (fail-closed)",
+                    exc_info=True,
+                )
+                structlog.contextvars.clear_contextvars()
+                return
+            self._run_start_balance = initial_balance
+            self._session_start_balance = initial_balance
+            self._day_start_balance = initial_balance
+            self._balance_day = self._started_at.strftime("%Y-%m-%d")
+            self._last_balance = initial_balance
 
         self._log.info(
             "engine_started",
@@ -254,7 +291,10 @@ class TradingEngine:
         # Durable run-history rollup: record the run as 'running'. A run that never
         # reaches finish_run (crash/kill) stays 'running' — itself diagnostic.
         if self._run_store is not None:
-            with contextlib.suppress(Exception):
+            # The rollup is a convenience summary, not the authoritative ledger (the
+            # JSON log is) — a DB write failure must not stop trading. Logged, not
+            # silently swallowed.
+            try:
                 self._run_store.start_run(
                     self._run_id,
                     user_id=self._user_id,
@@ -266,6 +306,8 @@ class TradingEngine:
                     started_at=self._started_at,
                     initial_equity=initial_equity,
                 )
+            except Exception as exc:
+                self._log.warning("run_store_start_failed", error=str(exc))
 
         last_strategy_time = 0.0
         stop_reason = "stopped"
@@ -344,8 +386,15 @@ class TradingEngine:
             # back to the last seen balance, then to the equity property.
             final_balance: float | None = None
             if hasattr(self._broker, "get_account_summary"):
-                with contextlib.suppress(Exception):
+                try:
                     final_balance = float(self._broker.get_account_summary()["balance"])
+                except Exception as exc:
+                    # Safe fallback: use the last balance we saw. Logged, not silent.
+                    self._log.warning(
+                        "final_balance_read_failed",
+                        error=str(exc),
+                        fallback="last_seen_balance",
+                    )
             if final_balance is not None:
                 self._last_balance = final_balance
             else:
@@ -368,7 +417,9 @@ class TradingEngine:
             # of per-closure P&Ls. `closures` counts trades closed (close-all path,
             # which still carries exact per-trade P&L from the close response).
             if self._run_store is not None:
-                with contextlib.suppress(Exception):
+                # Best-effort rollup (the JSON log is authoritative) — logged, not
+                # silently swallowed, so a DB issue is visible.
+                try:
                     net_realized = (
                         run_realized if run_realized is not None
                         else sum(self._trade_pnls)
@@ -384,6 +435,8 @@ class TradingEngine:
                         net_realized_pnl=net_realized,
                         final_equity=self._broker.equity,
                     )
+                except Exception as exc:
+                    self._log.warning("run_store_finish_failed", error=str(exc))
         finally:
             # Always clear bound context on exit (normal, max_cycles, or exception)
             # so a reused pool worker never carries this run's identity into the next.
@@ -720,6 +773,20 @@ class TradingEngine:
             # Confirmed fill — map for closure detection
             self._grid_trade_map[grid_key] = broker_trade_id
 
+            # Record entry so realized P&L can be computed on a later SL fill.
+            # The resting order's stop/units were stashed in the pending meta at
+            # placement (the Order object is long gone by now).
+            fill_meta = self._pending_order_meta.get(grid_key, {})
+            stop_str = fill_meta.get("resting_stop_loss", "")
+            units_str = fill_meta.get("resting_units", "")
+            entry_side = OrderSide.BUY if grid_key.endswith("_long") else OrderSide.SELL
+            self._record_trade_entry(
+                broker_trade_id, grid_key, entry_side.value,
+                float(units_str) if units_str else 0.0,
+                fill_price,
+                float(stop_str) if stop_str else None,
+            )
+
             # Report fill to strategy
             report_fill = getattr(self._strategy, "report_fill", None)
             if report_fill is not None:
@@ -821,6 +888,11 @@ class TradingEngine:
         # Track for closure detection
         if broker_trade_id:
             self._grid_trade_map[opposite_grid_key] = broker_trade_id
+            # Record entry so realized P&L can be computed on a later SL fill.
+            self._record_trade_entry(
+                broker_trade_id, opposite_grid_key, side.value,
+                quantity, trade.price, stop_loss,
+            )
 
         # Report fill to strategy
         report_fill = getattr(self._strategy, "report_fill", None)
@@ -917,6 +989,7 @@ class TradingEngine:
             self._pending_order_map.clear()
             self._pending_order_meta.clear()
             self._grid_trade_map.clear()
+            self._trade_entry.clear()
             notify = getattr(self._strategy, "notify_close_all_complete", None)
             if notify is not None:
                 notify()
@@ -983,6 +1056,7 @@ class TradingEngine:
         self._pending_order_map.clear()
         self._pending_order_meta.clear()
         self._grid_trade_map.clear()
+        self._trade_entry.clear()
 
         # Realized P&L for this session = account-balance delta since the session
         # started (balance excludes unrealized, and all trades are now closed, so
@@ -992,12 +1066,18 @@ class TradingEngine:
         session_realized: float | None = None
         end_balance: float | None = None
         if hasattr(self._broker, "get_account_summary"):
-            with contextlib.suppress(Exception):
+            try:
                 end_balance = float(self._broker.get_account_summary()["balance"])
                 self._last_balance = end_balance
                 if self._session_start_balance is not None:
                     session_realized = end_balance - self._session_start_balance
                 self._session_start_balance = end_balance
+            except Exception as exc:
+                # Fallback below uses the strategy's reported session_pnl. The
+                # session-start re-anchor (Fix 3 engine side) happens on the next
+                # grid_initialized regardless, so a missed read can't carry the
+                # prior session's P&L forward. Logged, not silent.
+                self._log.warning("close_all_balance_read_failed", error=str(exc))
 
         self._log.info(
             "close_all_executed",
@@ -1095,6 +1175,50 @@ class TradingEngine:
             realized_pnl=realized_pnl,
         )
 
+    def _record_trade_entry(
+        self,
+        broker_trade_id: str,
+        grid_key: str,
+        side: str,
+        quantity: float,
+        entry_price: float,
+        stop_loss: float | None,
+    ) -> None:
+        """Remember an open trade's entry so realized P&L can be computed locally
+        when its protective stop fills. Called at each point a trade is mapped for
+        closure detection — i.e. at FILL time — so it works uniformly for market,
+        limit, and stop entries (limit/stop are mapped only once filled).
+        """
+        if not broker_trade_id:
+            return
+        self._trade_entry[broker_trade_id] = TradeEntry(
+            grid_key=grid_key,
+            side=side,
+            quantity=quantity,
+            entry_price=entry_price,
+            stop_loss=stop_loss,
+        )
+
+    def _realized_pnl_from_entry(self, entry: TradeEntry) -> float | None:
+        """Estimate realized P&L of a stopped-out trade from its entry record.
+
+        A protective stop fills at ~its stop price, so P&L ~= (stop - entry) * qty
+        (signed by side). This is accurate to slippage and exact in sign -- which is
+        what the risk engine's consecutive-loss gate and win-rate need. Falls back
+        to the last market price if no stop was recorded. Returns None if neither
+        is available (caller must not fabricate a 0.0 -- that would corrupt the
+        consecutive-loss run).
+        """
+        exit_price = entry["stop_loss"]
+        if exit_price is None:
+            exit_price = self._last_price
+        if exit_price is None:
+            return None
+        qty = entry["quantity"]
+        if entry["side"] == OrderSide.BUY.value:
+            return (exit_price - entry["entry_price"]) * qty
+        return (entry["entry_price"] - exit_price) * qty
+
     def _check_closures(
         self,
         open_trades: list[OpenBrokerTrade],
@@ -1119,21 +1243,41 @@ class TradingEngine:
             # stop filled). We do NOT call get_closed_trade_details here: OANDA's
             # transaction-history endpoint 504s on long-lived accounts (it's the
             # root cause of the silent $0-P&L bug). The sliding grid uses stop-loss
-            # protective exits only, so the reason is close_sl; the exact per-trade
-            # realized P&L is unknown without history, but it is captured in the
-            # account balance and flows to session/daily/run P&L via balance deltas.
+            # protective exits only, so the reason is close_sl.
             side = "close_sl"
-            close_price = self._last_price if self._last_price is not None else 0.0
+
+            # Compute per-trade realized P&L locally from the entry record (entry
+            # price + stop price). A stop fills at ~its stop price, so this is
+            # accurate to slippage and EXACT in sign — which is what the risk
+            # engine's consecutive-loss gate and win-rate need. The authoritative
+            # dollar total still comes from the account-balance delta elsewhere.
+            entry = self._trade_entry.pop(broker_id, None)
+            realized_pnl = self._realized_pnl_from_entry(entry) if entry else None
+            if entry is not None and entry["stop_loss"] is not None:
+                close_price = entry["stop_loss"]
+                pnl_basis = "stop_price"
+            elif self._last_price is not None:
+                close_price = self._last_price
+                pnl_basis = "last_price"
+            else:
+                close_price = 0.0
+                pnl_basis = "unknown"
 
             # Remove from map (always runs)
             del self._grid_trade_map[grid_key]
 
-            # Report trade closure to strategy for grid-state bookkeeping. The
-            # dollar value is unknown per-trade (0.0); when realized P&L is
-            # supplied authoritatively (balance deltas) the strategy ignores it.
+            # Feed the per-trade ledger (win-rate + risk-engine consecutive-loss).
+            # Only append a known value — never fabricate a 0.0, which would break
+            # the consecutive-loss run.
+            if realized_pnl is not None:
+                self._trade_pnls.append(realized_pnl)
+
+            # Report trade closure to strategy for grid-state bookkeeping. When
+            # realized P&L is supplied authoritatively (balance deltas) the strategy
+            # ignores the dollar value; pass the best estimate we have (else 0.0).
             report_closed = getattr(self._strategy, "report_trade_closed", None)
             if report_closed is not None:
-                report_closed(grid_key, 0.0, side)
+                report_closed(grid_key, realized_pnl or 0.0, side)
 
             # Release the grid level back to 'waiting' (legacy float-key strategies)
             release = getattr(self._strategy, "release_level", None)
@@ -1141,7 +1285,7 @@ class TradingEngine:
                 with contextlib.suppress(ValueError):
                     release(float(grid_key))
 
-            # Record close marker for chart (price is the prevailing market price)
+            # Record close marker for chart (price ≈ the stop fill price)
             self._trade_markers.append(
                 TradeMarker(
                     timestamp=datetime.now(UTC).isoformat(),
@@ -1154,10 +1298,11 @@ class TradingEngine:
                 )
             )
 
+            pnl_label = "?" if realized_pnl is None else f"{realized_pnl:+.2f}"
             self._event_log.append(EventLogEntry(
                 timestamp=datetime.now(UTC).isoformat(),
                 event=side,
-                details=f"SL @ {close_price:.2f} (#{broker_id})",
+                details=f"SL @ {close_price:.2f} (#{broker_id}) P&L {pnl_label}",
             ))
 
             self._log.info(
@@ -1166,7 +1311,8 @@ class TradingEngine:
                 broker_trade_id=broker_id,
                 close_reason=side,
                 close_price=close_price,
-                realized_pnl=None,  # unknown per-trade; see balance-delta accounting
+                realized_pnl=realized_pnl,
+                realized_pnl_basis=pnl_basis,  # stop_price | last_price | unknown
             )
 
     def _run_fast_poll(self) -> None:
@@ -1186,9 +1332,9 @@ class TradingEngine:
         """Close grid levels the strategy has marked for trimming (margin mgmt).
 
         The strategy returns grid keys via get_levels_to_close(). For each, close
-        the open trade if it has one (banking realized P&L, reported back through
-        normal closure detection) and cancel any still-resting order. Margin-freeing
-        trims use the dedicated close endpoint — no counter-order, no extra margin.
+        the open trade if it has one (banking realized P&L from the close response)
+        and cancel any still-resting order. Margin-freeing trims use the dedicated
+        close endpoint — no counter-order, no extra margin.
         """
         get_levels = getattr(self._strategy, "get_levels_to_close", None)
         if get_levels is None:
@@ -1204,24 +1350,57 @@ class TradingEngine:
                 self._pending_order_meta.pop(grid_key, None)
                 try:
                     self._broker.cancel_pending_order(order_id)
-                except Exception:
-                    self._log.warning("trim_cancel_pending_failed", grid_level=grid_key)
+                except Exception as exc:
+                    self._log.warning(
+                        "trim_cancel_pending_failed",
+                        grid_level=grid_key,
+                        error=str(exc),
+                    )
 
-            # Close an open trade at this key, if any. Its closure (and realized
-            # P&L) is picked up by _check_closures on the next poll, which calls
-            # report_trade_closed; the strategy treats retired levels accordingly.
+            # Close an open trade at this key, if any. This is a DELIBERATE close
+            # (not a stop-out), so the close response carries the exact per-trade
+            # realized P&L — capture it for the ledger (win-rate + risk engine).
+            # We must remove the trade from the maps here so the next fast poll's
+            # _check_closures does not also see it vanish and double-count it.
             trade_id = self._grid_trade_map.get(grid_key)
             if trade_id is not None:
                 try:
-                    self._broker.close_trade(trade_id)
-                    self._log.info("level_trimmed", grid_level=grid_key, broker_trade_id=trade_id)
-                    self._event_log.append(EventLogEntry(
-                        timestamp=datetime.now(UTC).isoformat(),
-                        event="trim",
-                        details=f"Level trimmed for margin: {grid_key} (#{trade_id})",
-                    ))
-                except Exception:
-                    self._log.warning("trim_close_trade_failed", grid_level=grid_key)
+                    details = self._broker.close_trade(trade_id)
+                except Exception as exc:
+                    self._log.warning(
+                        "trim_close_trade_failed", grid_level=grid_key, error=str(exc)
+                    )
+                    continue
+
+                # Stop tracking this trade (deliberate close — not an SL closure).
+                del self._grid_trade_map[grid_key]
+                self._trade_entry.pop(trade_id, None)
+
+                realized_pnl = details.realized_pnl if details is not None else None
+                if realized_pnl is not None and realized_pnl != 0.0:
+                    self._trade_pnls.append(realized_pnl)
+
+                # Report to the strategy as a trim (NOT close_sl) so it retires the
+                # level rather than re-placing the missing side.
+                report_closed = getattr(self._strategy, "report_trade_closed", None)
+                if report_closed is not None:
+                    report_closed(grid_key, realized_pnl or 0.0, "close_trim")
+
+                self._log.info(
+                    "level_trimmed",
+                    grid_level=grid_key,
+                    broker_trade_id=trade_id,
+                    realized_pnl=realized_pnl,
+                )
+                pnl_label = "?" if realized_pnl is None else f"{realized_pnl:+.2f}"
+                self._event_log.append(EventLogEntry(
+                    timestamp=datetime.now(UTC).isoformat(),
+                    event="trim",
+                    details=(
+                        f"Level trimmed for margin: {grid_key} (#{trade_id})"
+                        f" P&L {pnl_label}"
+                    ),
+                ))
 
     def _check_deferred_trailing_stop(
         self, open_trades: list[OpenBrokerTrade]
@@ -1367,7 +1546,27 @@ class TradingEngine:
         # for long-lived accounts.
         update_pnl = getattr(self._strategy, "update_unrealized_pnl", None)
         if hasattr(self._broker, "get_account_summary"):
-            summary = self._broker.get_account_summary()
+            try:
+                summary = self._broker.get_account_summary()
+            except Exception as exc:
+                # Fail-closed on a sustained outage: a single blip skips the cycle;
+                # repeated failures halt trading rather than run on stale P&L.
+                self._balance_read_failures += 1
+                self._log.warning(
+                    "balance_read_failed",
+                    error=str(exc),
+                    consecutive_failures=self._balance_read_failures,
+                    exc_info=True,
+                )
+                if self._balance_read_failures >= self._MAX_BALANCE_READ_FAILURES:
+                    self._log.error(
+                        "balance_read_halt",
+                        consecutive_failures=self._balance_read_failures,
+                        reason="account balance unavailable — halting (fail-closed)",
+                    )
+                    self.stop()
+                return  # skip the rest of this cycle (no trading on stale balance)
+            self._balance_read_failures = 0  # success resets the counter
             if update_pnl is not None:
                 update_pnl(summary["unrealized_pnl"])
             self._push_realized_pnl(float(summary["balance"]))
@@ -1387,10 +1586,18 @@ class TradingEngine:
             if state and "anchor_price" in state:
                 self._session_seq += 1
                 structlog.contextvars.bind_contextvars(session_seq=self._session_seq)
+                # Re-anchor the session balance baseline to the start of THIS grid
+                # lifecycle. This is the single source of truth for session-start
+                # (the engine owns it), covering both close-all re-anchors and any
+                # strategy that starts a session without a close-all — so session
+                # realized P&L (balance delta) never carries a prior session's P&L.
+                if self._last_balance is not None:
+                    self._session_start_balance = self._last_balance
                 self._log.info(
                     "grid_initialized",
                     anchor_price=state["anchor_price"],
                     levels=state.get("levels") or state.get("grid_levels"),
+                    session_start_balance=self._session_start_balance,
                 )
                 self._grid_logged = True
                 if self._session_start_at is None:
@@ -1666,6 +1873,11 @@ class TradingEngine:
             # Map trade for closure detection
             if grid_level_str:
                 self._grid_trade_map[grid_level_str] = broker_order_id
+                # Record entry so realized P&L can be computed on a later SL fill.
+                self._record_trade_entry(
+                    broker_order_id, grid_level_str, order.side.value,
+                    order.quantity, trade.price, order.stop_loss,
+                )
                 # Report fill to strategy
                 report_fill = getattr(self._strategy, "report_fill", None)
                 if report_fill is not None:
@@ -1678,8 +1890,14 @@ class TradingEngine:
         # Normal path: track as pending order for fill detection
         if grid_level_str and broker_order_id:
             self._pending_order_map[grid_level_str] = broker_order_id
-            # Store metadata for placing opposite side on fill
-            self._pending_order_meta[grid_level_str] = dict(signal.metadata)
+            # Store metadata for placing opposite side on fill. Stash the resting
+            # order's own stop-loss/units so the fill-detection path can record an
+            # entry (the Order object is gone by then).
+            meta = dict(signal.metadata)
+            if order.stop_loss is not None:
+                meta["resting_stop_loss"] = f"{order.stop_loss:.5f}"
+            meta["resting_units"] = f"{order.quantity:.5f}"
+            self._pending_order_meta[grid_level_str] = meta
 
         self._log.info(
             "limit_order_placed",
@@ -1765,6 +1983,11 @@ class TradingEngine:
         grid_level_str = signal.metadata.get("grid_level")
         if grid_level_str and broker_trade_id:
             self._grid_trade_map[grid_level_str] = broker_trade_id
+            # Record entry so realized P&L can be computed on a later SL fill.
+            self._record_trade_entry(
+                broker_trade_id, grid_level_str, order.side.value,
+                order.quantity, trade.price, order.stop_loss,
+            )
 
         # Report actual fill price to strategy (updates grid entry/SL display)
         if grid_level_str:

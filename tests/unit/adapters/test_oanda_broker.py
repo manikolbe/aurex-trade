@@ -598,3 +598,18 @@ class TestCloseTradeReturnsClosedInfo:
     def test_returns_none_when_no_fill_in_response(self) -> None:
         self.conn.put.return_value = {"orderCancelTransaction": {"id": "9004"}}
         assert self.adapter.close_trade("8503") is None
+
+    def test_does_not_substitute_aggregate_pl_when_per_trade_missing(self) -> None:
+        # A close-all fill closing several trades: fill-level "pl"/"price" are the
+        # AGGREGATE. If the matched entry lacks realizedPL, we must NOT attribute
+        # the batch total to this one trade — return None instead.
+        self.conn.put.return_value = {
+            "orderFillTransaction": {
+                "id": "9005", "reason": "MARKET_ORDER",
+                "pl": "-100.00", "price": "4050.00",  # aggregate across 4 trades
+                "tradesClosed": [
+                    {"tradeID": "8504", "price": "4050.00"},  # no realizedPL
+                ],
+            }
+        }
+        assert self.adapter.close_trade("8504") is None

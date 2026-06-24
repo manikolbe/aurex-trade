@@ -259,10 +259,18 @@ changes only when P&L is realized) at run start, each session start (after a
 close-all + re-anchor), and the UTC day boundary, and derives realized P&L from the
 deltas. `balance` is logged on `engine_started`, `session_summary`,
 `close_all_executed`, and `engine_stopped`; `session_realized` (per-session delta)
-rides on `close_all_executed`. Broker-side stop-loss closures
-(`trade_closed_by_broker`) therefore carry `realized_pnl: null` — the banked amount
-is in the balance, not the per-trade event. `bot_runs.net_realized_pnl` is the run's
-balance delta (`final_balance − initial_balance`).
+rides on `close_all_executed`. `bot_runs.net_realized_pnl` is the run's balance delta
+(`final_balance − initial_balance`).
+
+Per-trade realized P&L (for win-rate + the risk engine's consecutive-loss gate) is
+computed **locally**, not from the history API: each open trade's entry price + stop
+price are recorded at fill, and on a stop-out `trade_closed_by_broker` reports
+`realized_pnl ≈ (stop − entry) × qty` (`realized_pnl_basis: stop_price`). Margin-trim
+closes (`level_trimmed`) and close-all trades carry the **exact** P&L from the close
+response. These per-trade values are accurate-but-secondary; the session/daily/run
+totals always come from the balance delta. **Fail-closed:** if `/summary` (balance)
+can't be read, the cycle is skipped and logged; ≥3 consecutive failures halt the bot
+rather than trade on stale P&L.
 
 Every engine log line carries bound context: **`user_id`, `run_id`, `strategy`,
 `session_seq`** (a run = one `engine_started`→`engine_stopped`; a session = one grid
@@ -318,7 +326,9 @@ every line). The table below lists the event-specific payload.
 | `grid_initialized` | `session_seq`, `anchor_price` + full `levels` ladder |
 | `bars_fetched` | `latest_close` (market price per cycle) |
 | `close_all_executed` | `reason`, `trades_closed`, `balance`, `session_realized` (per-session realized P&L = balance delta — **authoritative**) |
-| `trade_closed_by_broker` | `close_reason` (close_sl), `close_price` (= last market price); `realized_pnl` is `null` for broker-side closures (banked amount is in the balance delta) |
+| `trade_closed_by_broker` | `close_reason` (close_sl), `close_price`, `realized_pnl` (per-trade, computed locally from entry vs stop price), `realized_pnl_basis` (`stop_price`\|`last_price`\|`unknown`). Feeds win-rate + the risk engine's consecutive-loss gate; the **authoritative** session/run total still comes from the balance delta |
+| `level_trimmed` | margin-trim close: `realized_pnl` (exact, from the close response), `broker_trade_id` |
+| `balance_read_failed` / `balance_read_halt` | a `/summary` read failed (transient → skip cycle; ≥3 consecutive → halt, fail-closed) |
 | `session_summary` | `cycles`, `equity`, `peak_equity`, `balance`, `run_realized`, `trades`; also re-emits `strategy_params`, `risk_params`, `symbol`, `interval` (config survives rotation) |
 | `order_execution_failed`, `fast_poll_error` | failures/errors to flag |
 

@@ -316,13 +316,15 @@ class CibySlidingGridStrategy:
         self._current_price = current_bar.close
         current_date = current_bar.timestamp.strftime("%Y-%m-%d")
 
-        # Day boundary reset
+        # Day boundary reset. Reset ONLY the daily loss counter and re-enable
+        # trading (a daily-loss-limit halt should not persist into the new day).
+        # Do NOT restart the session here: the grid is healthy and mid-flight, and
+        # _restart_session() would null the anchor WITHOUT a close-all, orphaning
+        # the open broker trades. A session ends only via an explicit close-all
+        # (profit target / loss limit), which re-anchors the balance baseline too.
         if self._current_date and current_date != self._current_date:
             self._daily_realized_pnl = 0.0
             self._session_active = True
-            self._session_count = 1
-            self._session_history = []
-            self._restart_session()
         self._current_date = current_date
 
         # Drain any queued signals first (one per cycle)

@@ -565,12 +565,26 @@ class OANDABrokerAdapter:
             # keep OANDA's verbatim reason, falling back to a generic label.
             reason = fill_reason or "MARKET_CLOSE"
 
-        realized_pnl = float(str(closed_entry.get("realizedPL", fill.get("pl", "0.0"))))
-        close_price = float(str(closed_entry.get("price", fill.get("price", "0.0"))))
+        # Use ONLY the per-trade fields. Do NOT fall back to the fill-level "pl"/
+        # "price": on a close-all that closes several trades in one fill, those are
+        # the aggregate across ALL closed trades, so substituting them here would
+        # mis-attribute the whole batch's P&L to a single trade. If a per-entry
+        # field is missing, return None (no reliable per-trade value) and log it.
+        raw_pnl = closed_entry.get("realizedPL")
+        raw_price = closed_entry.get("price")
+        if raw_pnl is None or raw_price is None:
+            log.warning(
+                "oanda_close_fill_missing_per_trade_fields",
+                broker_trade_id=broker_trade_id,
+                has_realized_pl=raw_pnl is not None,
+                has_price=raw_price is not None,
+            )
+            return None
+
         return ClosedTradeInfo(
             broker_trade_id=broker_trade_id,
-            close_price=close_price,
-            realized_pnl=realized_pnl,
+            close_price=float(str(raw_price)),
+            realized_pnl=float(str(raw_pnl)),
             close_reason=reason,
         )
 
