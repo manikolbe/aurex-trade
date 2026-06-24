@@ -543,3 +543,58 @@ class TestGetClosedTradeDetails:
     def test_returns_none_when_summary_unavailable(self) -> None:
         self.conn.get.side_effect = OANDAAPIError(500, "boom")
         assert self.adapter.get_closed_trade_details("2673") is None
+
+
+class TestCloseTradeReturnsClosedInfo:
+    """close_trade parses realized P&L from the PUT /close response itself, so it
+    never touches the (504-prone) transactions history endpoint.
+    """
+
+    def setup_method(self) -> None:
+        self.conn = MagicMock(spec=OANDAConnection)
+        self.adapter = OANDABrokerAdapter(connection=self.conn, account_id="101-001-123")
+
+    def test_parses_realized_pnl_and_price_from_close_fill(self) -> None:
+        self.conn.put.return_value = {
+            "orderFillTransaction": {
+                "id": "9001", "type": "ORDER_FILL", "reason": "MARKET_ORDER",
+                "price": "4050.00", "pl": "-12.50",
+                "tradesClosed": [
+                    {"tradeID": "8500", "realizedPL": "-12.50", "price": "4050.00"},
+                ],
+            }
+        }
+        info = self.adapter.close_trade("8500")
+        assert info is not None
+        assert info.broker_trade_id == "8500"
+        assert info.realized_pnl == -12.50
+        assert info.close_price == 4050.00
+        assert info.close_reason == "MARKET_ORDER"  # OANDA's verbatim deliberate-close reason
+        self.conn.put.assert_called_once_with(
+            "/v3/accounts/101-001-123/trades/8500/close", json={"units": "ALL"}
+        )
+
+    def test_maps_stop_loss_reason(self) -> None:
+        self.conn.put.return_value = {
+            "orderFillTransaction": {
+                "id": "9002", "reason": "STOP_LOSS_ORDER", "price": "4040.00",
+                "tradesClosed": [{"tradeID": "8501", "realizedPL": "-9.0", "price": "4040.00"}],
+            }
+        }
+        info = self.adapter.close_trade("8501")
+        assert info is not None
+        assert info.close_reason == "STOP_LOSS"
+        assert info.realized_pnl == -9.0
+
+    def test_returns_none_when_no_matching_closed_trade(self) -> None:
+        self.conn.put.return_value = {
+            "orderFillTransaction": {
+                "id": "9003", "reason": "MARKET_ORDER",
+                "tradesClosed": [{"tradeID": "OTHER", "realizedPL": "1.0"}],
+            }
+        }
+        assert self.adapter.close_trade("8502") is None
+
+    def test_returns_none_when_no_fill_in_response(self) -> None:
+        self.conn.put.return_value = {"orderCancelTransaction": {"id": "9004"}}
+        assert self.adapter.close_trade("8503") is None

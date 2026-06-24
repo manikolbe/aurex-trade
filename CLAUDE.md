@@ -250,6 +250,20 @@ files) is the complete, event-sourced record. The `bot_runs` table is a per-run
 event log. The live equity/session charts in the web UI are in-memory and lost on
 every redeploy/restart.
 
+**Realized P&L = account-balance delta (not per-trade history).** OANDA's
+transaction/trade *history* endpoints (`/transactions*`, `/trades/{id}`,
+`/trades?state=CLOSED`) return **HTTP 504** once an account accumulates a large
+history (~10k+ transactions), so the engine does **not** look up per-trade realized
+P&L. Instead it snapshots the account **balance** (`/summary`, always fast — balance
+changes only when P&L is realized) at run start, each session start (after a
+close-all + re-anchor), and the UTC day boundary, and derives realized P&L from the
+deltas. `balance` is logged on `engine_started`, `session_summary`,
+`close_all_executed`, and `engine_stopped`; `session_realized` (per-session delta)
+rides on `close_all_executed`. Broker-side stop-loss closures
+(`trade_closed_by_broker`) therefore carry `realized_pnl: null` — the banked amount
+is in the balance, not the per-trade event. `bot_runs.net_realized_pnl` is the run's
+balance delta (`final_balance − initial_balance`).
+
 Every engine log line carries bound context: **`user_id`, `run_id`, `strategy`,
 `session_seq`** (a run = one `engine_started`→`engine_stopped`; a session = one grid
 lifecycle: anchor → close-all → re-anchor).
@@ -273,7 +287,9 @@ just analyse --run 2 --timeline      # + price-annotated event playback
   (pre-instrumentation logs) are skipped, with a reported count. Config is taken from
   `engine_started`, falling back to the latest `session_summary` (which re-emits
   config) when the start line has rotated out.
-- Reports **net realized P&L, win rate, a per-session P&L breakdown, close-reason
+- Reports **net realized P&L** (from the account-balance delta — authoritative;
+  falls back to summed per-session deltas, then to summed per-closure P&L for
+  pre-fix runs that logged it), **win rate, a per-session P&L breakdown, close-reason
   breakdown, errors, largest losses**, and a **playback timeline** where each event
   is annotated with the prevailing market price (`bars_fetched.latest_close` carried
   forward) and its `session_seq` — so you can replay exactly what happened against
@@ -297,12 +313,13 @@ every line). The table below lists the event-specific payload.
 
 | Event | Carries |
 |-------|---------|
-| `engine_started` | `run_id`, strategy, `strategy_params`, `risk_params`, `initial_equity` |
-| `engine_stopped` | `total_cycles` (absence ⇒ run still active) |
+| `engine_started` | `run_id`, strategy, `strategy_params`, `risk_params`, `initial_equity`, `initial_balance` |
+| `engine_stopped` | `total_cycles` (absence ⇒ run still active), `balance`, `run_realized` |
 | `grid_initialized` | `session_seq`, `anchor_price` + full `levels` ladder |
 | `bars_fetched` | `latest_close` (market price per cycle) |
-| `trade_closed_by_broker` | `realized_pnl`, `close_reason` (close_sl/tp/ts), `close_price` |
-| `session_summary` | `cycles`, `equity`, `peak_equity`, `trades`; also re-emits `strategy_params`, `risk_params`, `symbol`, `interval` (config survives rotation) |
+| `close_all_executed` | `reason`, `trades_closed`, `balance`, `session_realized` (per-session realized P&L = balance delta — **authoritative**) |
+| `trade_closed_by_broker` | `close_reason` (close_sl), `close_price` (= last market price); `realized_pnl` is `null` for broker-side closures (banked amount is in the balance delta) |
+| `session_summary` | `cycles`, `equity`, `peak_equity`, `balance`, `run_realized`, `trades`; also re-emits `strategy_params`, `risk_params`, `symbol`, `interval` (config survives rotation) |
 | `order_execution_failed`, `fast_poll_error` | failures/errors to flag |
 
 ### Durable run history (DB)

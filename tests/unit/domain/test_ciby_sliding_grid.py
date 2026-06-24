@@ -408,6 +408,70 @@ class TestSessionExits:
         assert strategy._session_active is False
 
 
+class TestAuthoritativeRealizedPnl:
+    """Engine-supplied realized P&L (balance-delta based) takes over from the
+    per-closure accumulation when set_realized_pnl() is used (live trading).
+    """
+
+    def test_set_realized_pnl_sets_not_accumulates(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(-15.0, -15.0)
+        assert strategy._session_realized_pnl == -15.0
+        assert strategy._daily_realized_pnl == -15.0
+        # A second push REPLACES (does not add to) the previous value.
+        strategy.set_realized_pnl(-22.0, -40.0)
+        assert strategy._session_realized_pnl == -22.0
+        assert strategy._daily_realized_pnl == -40.0
+
+    def test_report_trade_closed_does_not_accumulate_when_authoritative(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(-15.0, -15.0)
+        # Engine still reports closures for grid bookkeeping, but the dollar
+        # figure must NOT be added on top of the authoritative value.
+        strategy.report_trade_closed("4115.00_long", -99.0, "close_sl")
+        assert strategy._session_realized_pnl == -15.0
+        assert strategy._daily_realized_pnl == -15.0
+
+    def test_report_trade_closed_still_does_grid_bookkeeping(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(0.0, 0.0)
+        # The losing side should be marked stopped so a revisit re-places it.
+        strategy.report_trade_closed("4115.00_long", -16.0, "close_sl")
+        assert "long" in strategy._stopped.get(4115.0, set())
+
+    def test_authoritative_realized_feeds_profit_target(self) -> None:
+        # Realized losses pushed via set_realized_pnl must count against the
+        # session gauge — this is the prod bug: profit target previously fired
+        # on unrealized alone while realized losses were invisible.
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(-40.0, -40.0)
+        strategy.update_unrealized_pnl(50.0)
+        state = strategy.get_display_state()
+        assert state is not None
+        # Net session P&L is realized + unrealized = +10, NOT +50.
+        assert state["session_pnl"] == 10.0
+
+    def test_authoritative_realized_triggers_loss_limit(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        # Realized balance loss alone breaches the -50 session loss limit.
+        strategy.set_realized_pnl(-60.0, -60.0)
+        sig = strategy.generate([_bar(4099.0)])
+        assert sig is not None
+        assert sig.signal_type == SignalType.FLAT
+        assert sig.metadata["reason"] == "session_loss_limit"
+
+    def test_authoritative_daily_loss_limit_stops_trading(self) -> None:
+        strategy = _new()
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(-10.0, -250.0)  # daily breaches default 200
+        assert strategy._session_active is False
+
+
 class TestDisplayState:
     def test_state_shape(self) -> None:
         strategy = _new()

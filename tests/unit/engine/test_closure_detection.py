@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from aurex_trade.adapters.memory.repository import InMemoryRepository
 from aurex_trade.adapters.paper.broker import PaperBrokerAdapter
 from aurex_trade.domain.enums import OrderSide
-from aurex_trade.domain.models import ClosedTradeInfo, OpenBrokerTrade
+from aurex_trade.domain.models import OpenBrokerTrade
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
 from aurex_trade.engine.trading_engine import TradingEngine
@@ -56,7 +56,13 @@ class TestCheckClosures:
         assert engine._grid_trade_map == {}
 
     def test_detects_closed_trade_and_releases_level(self) -> None:
-        """When a mapped trade is no longer open, level is released."""
+        """When a mapped trade is no longer open, the level is released.
+
+        Closure detection no longer calls get_closed_trade_details (OANDA's
+        history endpoint 504s on long-lived accounts). A vanished trade is treated
+        as a protective stop (close_sl); per-trade realized P&L is captured via
+        account-balance deltas elsewhere, not here.
+        """
         engine, broker, strategy = _build_grid_engine()
 
         # Manually set up a mapped trade
@@ -67,14 +73,7 @@ class TestCheckClosures:
 
         # Mock broker to return empty open trades (trade 100 closed)
         broker.get_open_trades = MagicMock(return_value=[])  # type: ignore[method-assign]
-        broker.get_closed_trade_details = MagicMock(  # type: ignore[method-assign]
-            return_value=ClosedTradeInfo(
-                broker_trade_id="100",
-                close_price=2090.0,
-                realized_pnl=150.0,
-                close_reason="TAKE_PROFIT",
-            )
-        )
+        engine._last_price = 2090.0  # prevailing market price → chart marker price
 
         engine._check_closures(broker.get_open_trades("XAU_USD"))
 
@@ -82,29 +81,22 @@ class TestCheckClosures:
         assert 2060.0 not in engine._grid_trade_map
         # Level should be released from strategy
         assert 2060.0 not in strategy._filled_levels
-        # Close marker should be recorded
+        # Close marker should be recorded (always close_sl, priced at last_price)
         markers = engine.get_trade_markers()
-        close_markers = [m for m in markers if m["side"] == "close_tp"]
+        close_markers = [m for m in markers if m["side"] == "close_sl"]
         assert len(close_markers) == 1
         assert close_markers[0]["price"] == 2090.0
         assert close_markers[0]["broker_trade_id"] == "100"
 
     def test_stop_loss_closure_creates_sl_marker(self) -> None:
-        """Stop loss closure creates a close_sl marker."""
+        """A broker-side closure creates a close_sl marker priced at last_price."""
         engine, broker, strategy = _build_grid_engine()
 
         engine._grid_trade_map[2040.0] = "200"
         strategy._filled_levels[2040.0] = OrderSide.SELL  # type: ignore[assignment]
 
         broker.get_open_trades = MagicMock(return_value=[])  # type: ignore[method-assign]
-        broker.get_closed_trade_details = MagicMock(  # type: ignore[method-assign]
-            return_value=ClosedTradeInfo(
-                broker_trade_id="200",
-                close_price=2070.0,
-                realized_pnl=-90.0,
-                close_reason="STOP_LOSS",
-            )
-        )
+        engine._last_price = 2070.0
 
         engine._check_closures(broker.get_open_trades("XAU_USD"))
 

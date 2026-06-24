@@ -233,7 +233,7 @@ def run_nutshell(run: Run) -> dict[str, object]:
         "status": "running" if run.is_running else "stopped",
         "strategy": run.strategy,
         "symbol": run._config_raw.get("symbol", "?"),
-        "net_pnl": round(st.net_pnl, 2),
+        "net_pnl": round(st.net_best, 2),
         "closures": len(st.closures),
         "sessions": len(st.sessions),
         "win_rate": round(st.win_rate, 1),
@@ -262,7 +262,7 @@ def print_run_list(runs: list[Run], lines: list[LogLine], as_json: bool = False)
         st = compute_stats(r)
         print(
             f"{r.index:>2}  {r.run_id[:8]:<8}  {r.start_ts:%Y-%m-%d %H:%M}  "
-            f"{r.duration_str:>7}  {status:<8}  {_money(st.net_pnl):>9}  {r.strategy}"
+            f"{r.duration_str:>7}  {status:<8}  {_money(st.net_best):>9}  {r.strategy}"
         )
         print(f"{'':>55}{fmt_params(r.params)}")
 
@@ -289,6 +289,9 @@ class SessionStats:
     net_pnl: float = 0.0
     wins: int = 0
     losses: int = 0
+    # Authoritative per-session realized P&L from the close-all balance delta
+    # (None for sessions that never closed-all, e.g. the final open session).
+    realized_balance: float | None = None
 
 
 @dataclass
@@ -306,6 +309,31 @@ class RunStats:
     last_summary: dict[str, object] | None = None
     last_position: dict[str, object] | None = None
     sessions: dict[int, SessionStats] = field(default_factory=dict)
+    # Balance-delta realized P&L (authoritative, post-fix). Initial balance comes
+    # from engine_started; last_balance is carried forward from the freshest event
+    # that logs it (session_summary / close_all_executed / engine_stopped).
+    initial_balance: float | None = None
+    last_balance: float | None = None
+    # Sum of session_realized deltas (close_all_executed events), the per-session
+    # banked result — used when present, else we fall back to summing closures.
+    sum_session_realized: float | None = None
+
+    @property
+    def net_realized_balance(self) -> float | None:
+        """Run net realized P&L from account-balance delta, if balance was logged."""
+        if self.initial_balance is not None and self.last_balance is not None:
+            return self.last_balance - self.initial_balance
+        return None
+
+    @property
+    def net_best(self) -> float:
+        """Best available net realized P&L: balance delta > session deltas > legacy."""
+        nb = self.net_realized_balance
+        if nb is not None:
+            return nb
+        if self.sum_session_realized is not None:
+            return self.sum_session_realized
+        return self.net_pnl
 
     @property
     def decided(self) -> int:
@@ -319,9 +347,14 @@ class RunStats:
 def compute_stats(run: Run) -> RunStats:
     """Walk a run's lines once and compute all aggregates (run- and session-level)."""
     st = RunStats()
+    st.initial_balance = _num(run._config_raw.get("initial_balance"))
     for ln in run.lines:
         ev = ln.event
         if ev == "trade_closed_by_broker":
+            # Post-fix, per-trade realized_pnl is often null (broker-side SL
+            # closures carry no per-trade P&L without the 504-prone history API);
+            # treat null as 0 for the legacy-sum fallback. Authoritative net comes
+            # from balance deltas below.
             pnl = _num(ln.raw.get("realized_pnl")) or 0.0
             reason = str(ln.raw.get("close_reason", "?"))
             st.net_pnl += pnl
@@ -346,6 +379,28 @@ def compute_stats(run: Run) -> RunStats:
                 sess.losses += int(lost)
         elif ev == "session_summary":
             st.last_summary = ln.raw
+            bal = _num(ln.raw.get("balance"))
+            if bal is not None:
+                st.last_balance = bal
+        elif ev == "close_all_executed":
+            # Authoritative per-session realized P&L (balance delta) + run balance.
+            sr = _num(ln.raw.get("session_realized"))
+            if sr is not None:
+                st.sum_session_realized = (st.sum_session_realized or 0.0) + sr
+                seq = ln.session_seq
+                if seq is not None:
+                    sess = st.sessions.get(seq)
+                    if sess is None:
+                        sess = SessionStats(seq=seq)
+                        st.sessions[seq] = sess
+                    sess.realized_balance = sr
+            bal = _num(ln.raw.get("balance"))
+            if bal is not None:
+                st.last_balance = bal
+        elif ev == "engine_stopped":
+            bal = _num(ln.raw.get("balance"))
+            if bal is not None:
+                st.last_balance = bal
         elif ev == "position_updated":
             st.last_position = ln.raw
         elif ev in ("signal_rejected", "rejected") or ev == "max_open_trades_reached":
@@ -413,9 +468,19 @@ def analyse_run(run: Run, show_timeline: bool) -> None:
         )
 
     # --- Performance ---
+    # Net realized P&L comes from the account-balance delta (authoritative — it is
+    # exactly the banked result, immune to the per-trade history API that 504s on
+    # long-lived accounts). Falls back to summing per-session balance deltas, then
+    # to summing per-closure realized_pnl for pre-fix runs (which logged it).
     print("\n-- Performance --")
     print(f"Closures      : {len(st.closures)}")
-    print(f"Net realized  : {_money(st.net_pnl)}")
+    net_balance = st.net_realized_balance
+    if net_balance is not None:
+        print(f"Net realized  : {_money(net_balance)}  [account-balance delta]")
+    elif st.sum_session_realized is not None:
+        print(f"Net realized  : {_money(st.sum_session_realized)}  [sum of session deltas]")
+    else:
+        print(f"Net realized  : {_money(st.net_pnl)}  [sum of per-closure P&L — legacy]")
     print(f"Win / loss    : {st.wins} / {st.losses}  ({st.win_rate:.0f}% win rate)")
     if st.reason_counts:
         breakdown = ", ".join(f"{k}={v}" for k, v in sorted(st.reason_counts.items()))
@@ -423,13 +488,18 @@ def analyse_run(run: Run, show_timeline: bool) -> None:
 
     # --- Sessions (per grid lifecycle) ---
     # The sliding grid re-anchors on each close-all; P&L per session is the breakdown
-    # to tune against (each session is one grid at one anchor price).
+    # to tune against (each session is one grid at one anchor price). Prefer the
+    # authoritative close-all balance delta; fall back to summed per-closure P&L.
     if st.sessions:
         print("\n-- Sessions (per grid lifecycle) --")
         for seq in sorted(st.sessions):
             s = st.sessions[seq]
+            if s.realized_balance is not None:
+                net_str = f"{_money(s.realized_balance)}"
+            else:
+                net_str = f"{_money(s.net_pnl)} (open/legacy)"
             print(
-                f"  session {seq:>2}: closures={s.closures:>3}  net={_money(s.net_pnl)}"
+                f"  session {seq:>2}: closures={s.closures:>3}  net={net_str}"
                 f"  W/L {s.wins}/{s.losses}"
             )
 

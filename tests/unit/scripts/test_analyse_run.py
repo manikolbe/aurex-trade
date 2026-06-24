@@ -148,6 +148,61 @@ def test_list_json_nutshell(tmp_path: Path) -> None:
     assert nut_b["net_pnl"] == pytest.approx(-30.0)
 
 
+def _balance_delta_log(tmp_path: Path) -> Path:
+    """A post-fix run: engine_started carries initial_balance; close_all_executed
+    carries the authoritative per-session balance delta + running balance.
+    """
+    lines = [
+        _line(timestamp="2026-06-24T08:00:00Z", event="engine_started", run_id="cccc",
+              strategy="ciby_sliding_grid", symbol="XAU_USD", interval=60,
+              initial_equity=100000, initial_balance=100000,
+              strategy_params={"grid_spacing": 10}, risk_params={"enabled": False}),
+        _line(timestamp="2026-06-24T08:00:06Z", event="grid_initialized", run_id="cccc",
+              strategy="ciby_sliding_grid", session_seq=1, anchor_price=4000.0),
+        # Session 1 closes-all with a realized loss of -15 → balance 99985.
+        _line(timestamp="2026-06-24T08:30:00Z", event="close_all_executed", run_id="cccc",
+              strategy="ciby_sliding_grid", session_seq=1, reason="session_profit_target",
+              trades_closed=3, balance=99985.0, session_realized=-15.0),
+        _line(timestamp="2026-06-24T08:30:06Z", event="grid_initialized", run_id="cccc",
+              strategy="ciby_sliding_grid", session_seq=2, anchor_price=3990.0),
+        # Session 2 closes-all with -20 → balance 99965.
+        _line(timestamp="2026-06-24T09:00:00Z", event="close_all_executed", run_id="cccc",
+              strategy="ciby_sliding_grid", session_seq=2, reason="session_profit_target",
+              trades_closed=2, balance=99965.0, session_realized=-20.0),
+        _line(timestamp="2026-06-24T09:05:00Z", event="engine_stopped", run_id="cccc",
+              strategy="ciby_sliding_grid", total_cycles=65, balance=99965.0,
+              run_realized=-35.0),
+    ]
+    return _write_log(tmp_path, lines)
+
+
+def test_net_realized_from_balance_delta(tmp_path: Path) -> None:
+    """Net realized P&L is the account-balance delta, not summed per-closure P&L."""
+    log_dir = _balance_delta_log(tmp_path)
+    run = ar.segment_runs(ar.load_lines(log_dir, "u1"))[0]
+    st = ar.compute_stats(run)
+
+    # initial_balance 100000 → last balance 99965 = -35 (the real banked result).
+    assert st.net_realized_balance == pytest.approx(-35.0)
+    assert st.net_best == pytest.approx(-35.0)
+    # Sum of per-session deltas agrees.
+    assert st.sum_session_realized == pytest.approx(-35.0)
+    # Per-session authoritative deltas are surfaced.
+    assert st.sessions[1].realized_balance == pytest.approx(-15.0)
+    assert st.sessions[2].realized_balance == pytest.approx(-20.0)
+    # The nutshell uses the balance-delta net.
+    assert ar.run_nutshell(run)["net_pnl"] == pytest.approx(-35.0)
+
+
+def test_legacy_run_without_balance_falls_back(tmp_path: Path) -> None:
+    """Pre-fix runs (no balance logged) still net via summed per-closure P&L."""
+    log_dir = _two_run_log(tmp_path)
+    run_a = ar.segment_runs(ar.load_lines(log_dir, "u1"))[0]
+    st = ar.compute_stats(run_a)
+    assert st.net_realized_balance is None
+    assert st.net_best == pytest.approx(st.net_pnl) == pytest.approx(24.5)
+
+
 def test_resolve_run_by_index_and_prefix(tmp_path: Path) -> None:
     log_dir = _two_run_log(tmp_path)
     runs = ar.segment_runs(ar.load_lines(log_dir, "u1"))

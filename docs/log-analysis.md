@@ -43,6 +43,33 @@ equity/session charts are in-memory and lost on every restart.
 There *is* a durable DB summary — see [Durable run history](#durable-run-history-bot_runs) —
 but it is a per-run rollup, not the event log.
 
+### Realized P&L comes from the account-balance delta
+
+OANDA's transaction/trade **history** endpoints (`/transactions*`, `/trades/{id}`,
+`/trades?state=CLOSED`) time out with **HTTP 504** once an account has a large
+history (~10k+ transactions). So the engine never looks up per-trade realized P&L.
+Instead it reads the account **balance** (`/summary`, always fast — balance moves
+only when P&L is realized) and derives realized P&L from deltas:
+
+- `engine_started` logs `initial_balance`; `engine_stopped` and `session_summary`
+  log the running `balance` and `run_realized` (= balance − initial_balance).
+- `close_all_executed` logs `balance` and `session_realized` (that grid lifecycle's
+  realized P&L = balance delta since the session started) — **authoritative**.
+- `trade_closed_by_broker` (broker-side stop-loss) carries `close_reason: close_sl`
+  and `close_price` (the prevailing market price), but `realized_pnl: null` — the
+  banked amount is reflected in the balance, not the per-trade event.
+
+The analyser nets realized P&L from the balance delta, falling back to the sum of
+`session_realized` deltas, then (for pre-fix runs that logged per-closure P&L) to
+summing `trade_closed_by_broker.realized_pnl`. The chosen source is labelled in the
+**Performance** block.
+
+> Historical note: before this change the engine looked up each closure via the
+> transactions endpoint. On long-lived accounts that 504'd, the exception was
+> swallowed, and every closure was recorded as `$0` — so the session profit-target
+> fired on unrealized P&L alone while realized stop-loss losses were invisible. The
+> balance-delta model removes that whole failure mode.
+
 ## Workflow
 
 ### 1. Pull the logs
@@ -121,7 +148,10 @@ grep '"run_id": "<run_id>"' logs/prod/aurex_trade.log*
 # One grid lifecycle within a run:
 grep '"run_id": "<run_id>"' logs/prod/* | grep '"session_seq": 2'
 
-# Closures with realized P&L:
+# Per-session realized P&L (balance delta) at each close-all:
+grep '"event": "close_all_executed"' logs/prod/*
+
+# Closure events (broker-side stop-loss; realized_pnl is null — see balance delta):
 grep '"event": "trade_closed_by_broker"' logs/prod/*
 
 # Errors only:
@@ -139,7 +169,9 @@ block renders real values for any run with activity still in-window.
 
 `bot_runs` (SQLite, user-scoped) holds one summary row per run: config, runtime,
 status, sessions, closures, net P&L. Written `status='running'` on `engine_started`
-and finalized `status='stopped'` on `engine_stopped`.
+and finalized `status='stopped'` on `engine_stopped`. `net_realized_pnl` is the run's
+**account-balance delta** (`final_balance − initial_balance`) — the same broker-truth
+figure the analyser reports, so the two agree by construction.
 
 - A row stuck at `'running'` with no recent log = a **crashed** run (it never reached
   finish). This is intentional and diagnostic — mirrors "absence of `engine_stopped`

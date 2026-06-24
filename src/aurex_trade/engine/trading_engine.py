@@ -14,6 +14,7 @@ import structlog
 from aurex_trade.domain.enums import OrderSide, OrderType, RiskAction, SignalType
 from aurex_trade.domain.models import (
     AccountState,
+    ClosedTradeInfo,
     OpenBrokerTrade,
     Order,
     Position,
@@ -153,6 +154,16 @@ class TradingEngine:
         self._peak_equity: float = 0.0
         self._trade_pnls: list[float] = []
         self._slippages: list[float] = []
+        # Balance snapshots for realized-P&L-by-balance-delta. Account balance
+        # (excludes unrealized) changes ONLY when P&L is realized, so deltas give
+        # realized P&L without OANDA's unreliable per-trade history endpoints.
+        # None until the first balance read (e.g. paper/backtest brokers that
+        # expose no balance — handled by capability check).
+        self._run_start_balance: float | None = None
+        self._session_start_balance: float | None = None
+        self._day_start_balance: float | None = None
+        self._balance_day: str = ""  # UTC date (YYYY-MM-DD) the day anchor is for
+        self._last_balance: float | None = None  # most recent balance, carried forward
         # Observability (read by web layer via get_metrics())
         self._cycle_count: int = 0
         self._started_at: datetime | None = None
@@ -213,6 +224,20 @@ class TradingEngine:
         self._peak_equity = self._broker.equity
         initial_equity = self._peak_equity
 
+        # Seed balance anchors for realized-P&L-by-balance-delta. Balance (excludes
+        # unrealized) is the source of truth for realized P&L. Capability-gated:
+        # paper/backtest brokers expose no get_account_summary, so anchors stay
+        # None and the per-cycle push is skipped.
+        initial_balance: float | None = None
+        if hasattr(self._broker, "get_account_summary"):
+            with contextlib.suppress(Exception):
+                initial_balance = float(self._broker.get_account_summary()["balance"])
+                self._run_start_balance = initial_balance
+                self._session_start_balance = initial_balance
+                self._day_start_balance = initial_balance
+                self._balance_day = self._started_at.strftime("%Y-%m-%d")
+                self._last_balance = initial_balance
+
         self._log.info(
             "engine_started",
             run_id=self._run_id,
@@ -221,6 +246,7 @@ class TradingEngine:
             interval=self._interval_seconds,
             fill_poll_interval=self._FILL_POLL_INTERVAL,
             initial_equity=initial_equity,
+            initial_balance=initial_balance,
             strategy_params=self._strategy_params,
             risk_params=self._risk_params,
         )
@@ -286,6 +312,13 @@ class TradingEngine:
                             rejections=self._session_rejections,
                             equity=self._broker.equity,
                             peak_equity=self._peak_equity,
+                            balance=self._last_balance,
+                            run_realized=(
+                                self._last_balance - self._run_start_balance
+                                if self._last_balance is not None
+                                and self._run_start_balance is not None
+                                else None
+                            ),
                             position_qty=position.quantity if position else 0.0,
                             unrealized_pnl=position.unrealized_pnl if position else 0.0,
                             realized_pnl=position.realized_pnl if position else 0.0,
@@ -306,12 +339,40 @@ class TradingEngine:
 
             self._running = False
             self._started_at = None
-            self._log.info("engine_stopped", total_cycles=self._cycle_count)
+            # Final balance for the run's net realized P&L (balance delta is the
+            # broker-truth realized result; balance excludes unrealized). Falls
+            # back to the last seen balance, then to the equity property.
+            final_balance: float | None = None
+            if hasattr(self._broker, "get_account_summary"):
+                with contextlib.suppress(Exception):
+                    final_balance = float(self._broker.get_account_summary()["balance"])
+            if final_balance is not None:
+                self._last_balance = final_balance
+            else:
+                final_balance = self._last_balance
 
-            # Finalize the durable rollup. net P&L / closures come from _trade_pnls,
-            # which accumulates every realized close (normal + close-all).
+            run_realized = (
+                final_balance - self._run_start_balance
+                if final_balance is not None and self._run_start_balance is not None
+                else None
+            )
+            self._log.info(
+                "engine_stopped",
+                total_cycles=self._cycle_count,
+                balance=final_balance,
+                run_realized=run_realized,
+            )
+
+            # Finalize the durable rollup. Net realized P&L is the run's balance
+            # delta (broker truth) when available; otherwise fall back to the sum
+            # of per-closure P&Ls. `closures` counts trades closed (close-all path,
+            # which still carries exact per-trade P&L from the close response).
             if self._run_store is not None:
                 with contextlib.suppress(Exception):
+                    net_realized = (
+                        run_realized if run_realized is not None
+                        else sum(self._trade_pnls)
+                    )
                     self._run_store.finish_run(
                         self._run_id,
                         user_id=self._user_id,
@@ -320,7 +381,7 @@ class TradingEngine:
                         total_cycles=self._cycle_count,
                         sessions=self._session_seq,
                         closures=len(self._trade_pnls),
-                        net_realized_pnl=sum(self._trade_pnls),
+                        net_realized_pnl=net_realized,
                         final_equity=self._broker.equity,
                     )
         finally:
@@ -869,8 +930,10 @@ class TradingEngine:
         failed = 0
         for trade in open_trades:
             try:
-                self._broker.close_trade(trade.broker_trade_id)
-                self._log_close_all_pnl(trade.broker_trade_id, trade_id_to_grid, reason)
+                details = self._broker.close_trade(trade.broker_trade_id)
+                self._log_close_all_pnl(
+                    trade.broker_trade_id, trade_id_to_grid, reason, details
+                )
             except Exception:
                 failed += 1
                 if failed == 1:
@@ -921,20 +984,41 @@ class TradingEngine:
         self._pending_order_meta.clear()
         self._grid_trade_map.clear()
 
+        # Realized P&L for this session = account-balance delta since the session
+        # started (balance excludes unrealized, and all trades are now closed, so
+        # this is the exact banked result). Re-anchor the session baseline for the
+        # next grid lifecycle. Balance is logged so the analyser can net realized
+        # P&L straight from the log stream without any history API call.
+        session_realized: float | None = None
+        end_balance: float | None = None
+        if hasattr(self._broker, "get_account_summary"):
+            with contextlib.suppress(Exception):
+                end_balance = float(self._broker.get_account_summary()["balance"])
+                self._last_balance = end_balance
+                if self._session_start_balance is not None:
+                    session_realized = end_balance - self._session_start_balance
+                self._session_start_balance = end_balance
+
         self._log.info(
             "close_all_executed",
             reason=reason,
             trades_closed=len(open_trades),
+            balance=end_balance,
+            session_realized=session_realized,
         )
 
-        # Record session summary
+        # Record session summary. Prefer the broker-truth balance delta; fall back
+        # to the strategy's reported session_pnl if balance is unavailable.
         now = datetime.now(UTC)
         session_pnl = 0.0
-        get_state = getattr(self._strategy, "get_display_state", None)
-        if get_state is not None:
-            state = get_state()
-            if state and "session_pnl" in state:
-                session_pnl = float(state["session_pnl"])
+        if session_realized is not None:
+            session_pnl = session_realized
+        else:
+            get_state = getattr(self._strategy, "get_display_state", None)
+            if get_state is not None:
+                state = get_state()
+                if state and "session_pnl" in state:
+                    session_pnl = float(state["session_pnl"])
 
         self._session_history.append(SessionSummary(
             session_number=len(self._session_history) + 1,
@@ -973,24 +1057,29 @@ class TradingEngine:
         broker_id: str,
         trade_id_to_grid: dict[str, str],
         reason: str,
+        details: ClosedTradeInfo | None,
     ) -> None:
         """Event-log the realized P&L of a single trade closed by close-all.
 
-        The normal closure-detection loop (_check_closures) emits
-        trade_closed_by_broker, but it never sees close-all'd trades because the
-        grid map is cleared before it runs. Without this, every profit-target /
-        loss-limit close-all banks P&L into the account that is invisible to the
-        event-sourced ledger, so summing trade_closed_by_broker undercounts the
-        true realized result. Mirror that event here (close_reason=<reason>) so the
-        ledger is complete. Best-effort — never let logging block the close.
+        ``details`` is parsed by the broker from the close response itself (no
+        history lookup, which 504s on long-lived OANDA accounts). The normal
+        closure-detection loop (_check_closures) never sees close-all'd trades
+        because the grid map is cleared before it runs, so we mirror its
+        trade_closed_by_broker event here. Per-trade realized P&L still feeds
+        _trade_pnls (win rate + risk-engine consecutive-loss tracking); the
+        authoritative session/run P&L comes from balance deltas elsewhere.
         """
         grid_key = trade_id_to_grid.get(broker_id, "")
-        try:
-            details = self._broker.get_closed_trade_details(broker_id)
-        except Exception:
-            self._log.warning("closed_trade_details_unavailable", broker_trade_id=broker_id)
-            return
         if details is None:
+            # No closing fill in the response — count the closure but with no P&L.
+            self._log.info(
+                "trade_closed_by_broker",
+                grid_level=grid_key,
+                broker_trade_id=broker_id,
+                close_reason=reason,
+                close_price=None,
+                realized_pnl=None,
+            )
             return
 
         realized_pnl = details.realized_pnl
@@ -1026,39 +1115,25 @@ class TradingEngine:
                 keys_to_free.append((grid_key, broker_id))
 
         for grid_key, broker_id in keys_to_free:
-            # Query close details from broker (best-effort — don't block release)
+            # A trade vanished from open trades → the broker closed it (a protective
+            # stop filled). We do NOT call get_closed_trade_details here: OANDA's
+            # transaction-history endpoint 504s on long-lived accounts (it's the
+            # root cause of the silent $0-P&L bug). The sliding grid uses stop-loss
+            # protective exits only, so the reason is close_sl; the exact per-trade
+            # realized P&L is unknown without history, but it is captured in the
+            # account balance and flows to session/daily/run P&L via balance deltas.
             side = "close_sl"
-            close_price = 0.0
-            realized_pnl = 0.0
-            try:
-                details = self._broker.get_closed_trade_details(broker_id)
-                if details:
-                    close_reason = details.close_reason
-                    if "TAKE_PROFIT" in close_reason:
-                        side = "close_tp"
-                    elif "TRAILING_STOP" in close_reason:
-                        side = "close_ts"
-                    else:
-                        side = "close_sl"
-                    close_price = details.close_price
-                    realized_pnl = details.realized_pnl
-            except Exception:
-                self._log.warning(
-                    "closed_trade_details_unavailable",
-                    broker_trade_id=broker_id,
-                )
+            close_price = self._last_price if self._last_price is not None else 0.0
 
             # Remove from map (always runs)
             del self._grid_trade_map[grid_key]
 
-            # Track P&L for consecutive loss detection in risk engine
-            if realized_pnl != 0.0:
-                self._trade_pnls.append(realized_pnl)
-
-            # Report trade closure to strategy (for P&L tracking + reason)
+            # Report trade closure to strategy for grid-state bookkeeping. The
+            # dollar value is unknown per-trade (0.0); when realized P&L is
+            # supplied authoritatively (balance deltas) the strategy ignores it.
             report_closed = getattr(self._strategy, "report_trade_closed", None)
             if report_closed is not None:
-                report_closed(grid_key, realized_pnl, side)
+                report_closed(grid_key, 0.0, side)
 
             # Release the grid level back to 'waiting' (legacy float-key strategies)
             release = getattr(self._strategy, "release_level", None)
@@ -1066,7 +1141,7 @@ class TradingEngine:
                 with contextlib.suppress(ValueError):
                     release(float(grid_key))
 
-            # Record close marker for chart
+            # Record close marker for chart (price is the prevailing market price)
             self._trade_markers.append(
                 TradeMarker(
                     timestamp=datetime.now(UTC).isoformat(),
@@ -1079,15 +1154,10 @@ class TradingEngine:
                 )
             )
 
-            close_label = "TP" if "tp" in side else ("TS" if "ts" in side else "SL")
-            pnl_str = (
-                f"+${realized_pnl:.2f}" if realized_pnl >= 0
-                else f"-${abs(realized_pnl):.2f}"
-            )
             self._event_log.append(EventLogEntry(
                 timestamp=datetime.now(UTC).isoformat(),
                 event=side,
-                details=f"{close_label} @ {close_price:.2f} (#{broker_id}) P&L: {pnl_str}",
+                details=f"SL @ {close_price:.2f} (#{broker_id})",
             ))
 
             self._log.info(
@@ -1096,7 +1166,7 @@ class TradingEngine:
                 broker_trade_id=broker_id,
                 close_reason=side,
                 close_price=close_price,
-                realized_pnl=realized_pnl,
+                realized_pnl=None,  # unknown per-trade; see balance-delta accounting
             )
 
     def _run_fast_poll(self) -> None:
@@ -1229,6 +1299,39 @@ class TradingEngine:
             ),
         ))
 
+    def _push_realized_pnl(self, balance: float) -> None:
+        """Derive realized P&L from account-balance deltas and push to strategy.
+
+        Account balance excludes unrealized P&L, so a change in balance is exactly
+        realized P&L. We snapshot balance at run start, session start (after each
+        close-all + re-anchor), and the UTC day boundary, then push:
+            session_realized = balance - session_start_balance
+            daily_realized   = balance - day_start_balance
+        This replaces the previous per-trade history lookup, which 504s on
+        long-lived OANDA accounts.
+        """
+        self._last_balance = balance
+
+        # Initialise anchors lazily (first cycle, or brokers that only now expose
+        # balance). run() seeds run/session/day from the start balance.
+        if self._session_start_balance is None:
+            self._session_start_balance = balance
+        if self._day_start_balance is None:
+            self._day_start_balance = balance
+            self._balance_day = datetime.now(UTC).strftime("%Y-%m-%d")
+
+        # UTC day rollover: re-anchor the daily baseline.
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        if self._balance_day and today != self._balance_day:
+            self._day_start_balance = balance
+            self._balance_day = today
+
+        set_realized = getattr(self._strategy, "set_realized_pnl", None)
+        if set_realized is not None:
+            session_realized = balance - self._session_start_balance
+            daily_realized = balance - self._day_start_balance
+            set_realized(session_realized, daily_realized)
+
     def _run_strategy_cycle(self) -> None:
         """Strategy cycle: fetch data, generate signals, place orders."""
         # Step 1: Fetch market data
@@ -1257,14 +1360,19 @@ class TradingEngine:
             latest_time=bars[-1].timestamp.isoformat(),
         )
 
-        # Feed unrealized P&L to strategy (for session P&L tracking)
+        # Feed unrealized + realized P&L to strategy (for session P&L tracking).
+        # One get_account_summary() call serves both: unrealizedPL and balance.
+        # Realized P&L is derived from balance deltas (balance moves only on
+        # realization) because OANDA's per-trade history endpoints are unreliable
+        # for long-lived accounts.
         update_pnl = getattr(self._strategy, "update_unrealized_pnl", None)
-        if update_pnl is not None:
-            if hasattr(self._broker, "get_account_summary"):
-                summary = self._broker.get_account_summary()
+        if hasattr(self._broker, "get_account_summary"):
+            summary = self._broker.get_account_summary()
+            if update_pnl is not None:
                 update_pnl(summary["unrealized_pnl"])
-            else:
-                update_pnl(0.0)
+            self._push_realized_pnl(float(summary["balance"]))
+        elif update_pnl is not None:
+            update_pnl(0.0)
 
         # Step 2: Generate signals — drain all queued signals in one cycle
         all_signals: list[Signal] = []

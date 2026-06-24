@@ -516,17 +516,63 @@ class OANDABrokerAdapter:
         log.info("oanda_pending_order_cancelled", broker_order_id=broker_order_id)
         return True
 
-    def close_trade(self, broker_trade_id: str) -> None:
+    def close_trade(self, broker_trade_id: str) -> ClosedTradeInfo | None:
         """Close a specific trade using OANDA's dedicated close endpoint.
 
         Uses PUT /trades/{id}/close which does NOT require margin (unlike
         placing a counter-order). Raises on failure.
+
+        Returns the realized P&L / close details parsed directly from the close
+        response's ``orderFillTransaction`` (which carries ``tradesClosed[]`` with
+        realizedPL + price, and the fill ``reason``). This avoids the transactions
+        history endpoint, which 504s on long-lived accounts. Returns None if the
+        response lacks a closing fill (e.g. trade already gone).
         """
-        self._connection.put(
+        data = self._connection.put(
             f"/v3/accounts/{self._account_id}/trades/{broker_trade_id}/close",
             json={"units": "ALL"},
         )
         log.info("oanda_trade_closed", broker_trade_id=broker_trade_id)
+        return self._parse_close_fill(broker_trade_id, data)
+
+    @staticmethod
+    def _parse_close_fill(
+        broker_trade_id: str, data: dict[str, object]
+    ) -> ClosedTradeInfo | None:
+        """Extract ClosedTradeInfo from a PUT /close orderFillTransaction body."""
+        fill = data.get("orderFillTransaction")
+        if not isinstance(fill, dict):
+            return None
+
+        # Locate this trade in tradesClosed[] for its exact realizedPL + price.
+        closed_entry: dict[str, object] | None = None
+        for entry in fill.get("tradesClosed", []) or []:
+            if isinstance(entry, dict) and entry.get("tradeID") == broker_trade_id:
+                closed_entry = entry
+                break
+        if closed_entry is None:
+            return None
+
+        fill_reason = str(fill.get("reason", ""))
+        if "TAKE_PROFIT" in fill_reason:
+            reason = "TAKE_PROFIT"
+        elif "TRAILING_STOP" in fill_reason:
+            reason = "TRAILING_STOP"
+        elif "STOP_LOSS" in fill_reason:
+            reason = "STOP_LOSS"
+        else:
+            # A deliberate close (margin trim / close-all) fills via MARKET_ORDER;
+            # keep OANDA's verbatim reason, falling back to a generic label.
+            reason = fill_reason or "MARKET_CLOSE"
+
+        realized_pnl = float(str(closed_entry.get("realizedPL", fill.get("pl", "0.0"))))
+        close_price = float(str(closed_entry.get("price", fill.get("price", "0.0"))))
+        return ClosedTradeInfo(
+            broker_trade_id=broker_trade_id,
+            close_price=close_price,
+            realized_pnl=realized_pnl,
+            close_reason=reason,
+        )
 
     def set_trailing_stop(self, broker_trade_id: str, distance: float) -> None:
         """Add or replace a trailing stop loss on an existing open trade."""

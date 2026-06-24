@@ -109,12 +109,16 @@ class PaperBrokerAdapter:
         """Paper broker has no pending orders."""
         return []
 
-    def close_trade(self, broker_trade_id: str) -> None:
-        """Close a specific open trade by removing it from tracked trades."""
+    def close_trade(self, broker_trade_id: str) -> ClosedTradeInfo | None:
+        """Close a specific open trade by removing it from tracked trades.
+
+        Paper broker does not track per-trade realized P&L, so returns None.
+        """
         if broker_trade_id not in self._open_trades:
             msg = f"Trade {broker_trade_id} not found"
             raise RuntimeError(msg)
         del self._open_trades[broker_trade_id]
+        return None
 
     def set_trailing_stop(self, broker_trade_id: str, distance: float) -> None:
         """Paper broker — trailing stop is tracked but not simulated."""

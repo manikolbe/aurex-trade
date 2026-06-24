@@ -6,6 +6,10 @@ for close-all'd trades. Every profit-target / loss-limit restart banked P&L into
 account that was invisible to the ledger — so summing trade_closed_by_broker
 undercounted the true realized result (e.g. a winning anchor leg harvested at the
 profit target showed up nowhere). The close path now mirrors that event.
+
+Per-trade realized P&L is parsed from close_trade()'s return value (the OANDA close
+response carries it), NOT from a follow-up get_closed_trade_details history lookup
+(that endpoint 504s on long-lived accounts).
 """
 
 from unittest.mock import MagicMock
@@ -72,8 +76,8 @@ def test_close_all_logs_per_trade_realized_pnl() -> None:
         [_open_trade("7253"), _open_trade("7440")],
         [],  # verification check: all closed
     ]
-    broker.close_trade.return_value = None
-    broker.get_closed_trade_details.side_effect = lambda tid: {
+    # Realized P&L now comes from close_trade()'s return (the close response).
+    broker.close_trade.side_effect = lambda tid: {
         "7253": _closed("7253", 417.50, 4269.45),   # winning anchor short
         "7440": _closed("7440", -41.00, 4307.41),
     }[tid]
@@ -104,8 +108,7 @@ def test_close_all_pnl_feeds_consecutive_loss_tracking() -> None:
     broker.equity = 100_000.0
     broker.cancel_all_orders.return_value = 0
     broker.get_open_trades.side_effect = [[_open_trade("1")], []]
-    broker.close_trade.return_value = None
-    broker.get_closed_trade_details.return_value = _closed("1", -240.4, 4257.08)
+    broker.close_trade.return_value = _closed("1", -240.4, 4257.08)
 
     strategy = MagicMock()
     strategy.name = "ciby_sliding_grid"
@@ -119,22 +122,25 @@ def test_close_all_pnl_feeds_consecutive_loss_tracking() -> None:
     assert -240.4 in engine._trade_pnls
 
 
-def test_close_all_logging_failure_does_not_block_close() -> None:
-    """If close-details lookup raises, close-all still completes and notifies."""
+def test_close_all_with_no_parsed_fill_still_completes() -> None:
+    """If close_trade returns None (no fill parsed), close-all still completes."""
     broker = MagicMock()
     broker.equity = 100_000.0
     broker.cancel_all_orders.return_value = 0
     broker.get_open_trades.side_effect = [[_open_trade("1")], []]
-    broker.close_trade.return_value = None
-    broker.get_closed_trade_details.side_effect = RuntimeError("api down")
+    broker.close_trade.return_value = None  # no closing fill in the response
 
     strategy = MagicMock()
     strategy.name = "ciby_sliding_grid"
     strategy.get_display_state.return_value = {"session_pnl": 0.0}
     engine = _make_engine(broker, strategy)
     engine._grid_trade_map = {"4268.09_long": "1"}
+    engine._log = MagicMock()
 
     engine._close_all_trades("session_profit_target")
 
-    # Close-all still succeeded end-to-end despite the logging lookup failing.
+    # Close-all still succeeded end-to-end; a closure event is still emitted.
     strategy.notify_close_all_complete.assert_called_once()
+    events = _closed_events(engine._log)
+    assert len(events) == 1
+    assert events[0]["realized_pnl"] is None

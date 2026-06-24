@@ -106,6 +106,12 @@ class CibySlidingGridStrategy:
         self._session_realized_pnl: float = 0.0
         self._session_unrealized_pnl: float = 0.0
         self._daily_realized_pnl: float = 0.0
+        # When True, realized P&L is supplied authoritatively by the engine via
+        # set_realized_pnl() (derived from account-balance deltas) rather than
+        # accumulated per-closure in report_trade_closed(). Flipped on the first
+        # set_realized_pnl() call. Live trading sets it; backtest never does (so
+        # backtest keeps its exact per-trade accumulation).
+        self._realized_authoritative: bool = False
 
         # Session / day orchestration
         self._session_active: bool = True
@@ -281,6 +287,25 @@ class CibySlidingGridStrategy:
     def update_unrealized_pnl(self, unrealized_pnl: float) -> None:
         """Called by engine each cycle with current unrealized P&L from broker."""
         self._session_unrealized_pnl = unrealized_pnl
+
+    def set_realized_pnl(self, session_realized: float, daily_realized: float) -> None:
+        """Authoritatively set realized P&L from engine-computed balance deltas.
+
+        The engine derives these from account-balance snapshots (balance changes
+        only when P&L is realized), because OANDA's per-trade history endpoints are
+        unreliable for long-lived accounts. Calling this marks realized P&L as
+        engine-supplied, so report_trade_closed() stops accumulating dollars and
+        does grid-state bookkeeping only. Also re-evaluates the daily-loss-limit
+        trigger that previously lived in report_trade_closed().
+        """
+        self._realized_authoritative = True
+        self._session_realized_pnl = session_realized
+        self._daily_realized_pnl = daily_realized
+
+        if self._daily_realized_pnl <= -self._daily_loss_limit:
+            self._close_reason = "daily_loss_limit"
+            self._close_all_pending = True
+            self._session_active = False
 
     def generate(self, bars: list[BarData]) -> Signal | None:
         """Generate signals: drain queue, check P&L exits, place/grow the grid."""
@@ -621,14 +646,21 @@ class CibySlidingGridStrategy:
     def report_trade_closed(
         self, grid_level_key: str, realized_pnl: float, close_side: str = ""
     ) -> None:
-        """Called by engine when a broker-side closure (stop-loss) is detected."""
-        self._session_realized_pnl += realized_pnl
-        self._daily_realized_pnl += realized_pnl
+        """Called by engine when a broker-side closure (stop-loss) is detected.
 
-        if self._daily_realized_pnl <= -self._daily_loss_limit:
-            self._close_reason = "daily_loss_limit"
-            self._close_all_pending = True
-            self._session_active = False
+        Realized-P&L accounting: when realized P&L is supplied authoritatively by
+        the engine (set_realized_pnl, balance-delta based) we do NOT accumulate
+        dollars here or re-check the daily limit — that path owns those numbers.
+        We always do the grid-state bookkeeping below regardless.
+        """
+        if not self._realized_authoritative:
+            self._session_realized_pnl += realized_pnl
+            self._daily_realized_pnl += realized_pnl
+
+            if self._daily_realized_pnl <= -self._daily_loss_limit:
+                self._close_reason = "daily_loss_limit"
+                self._close_all_pending = True
+                self._session_active = False
 
         parsed = self._parse_key(grid_level_key)
         if parsed is None:
