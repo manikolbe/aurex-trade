@@ -18,45 +18,11 @@ from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy, StrategyMetadata
 from aurex_trade.domain.strategy.ciby_hedged_doubling_grid import CibyHedgedDoublingGridStrategy
-from aurex_trade.domain.strategy.ciby_hedged_grid import CibyHedgedGridStrategy
 from aurex_trade.domain.strategy.ciby_sliding_grid import CibySlidingGridStrategy
-from aurex_trade.domain.strategy.rsi_mean_reversion import RSIMeanReversion
-from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
-from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 from aurex_trade.metrics import RANKABLE_METRICS
 
 # Strategy factory registry — maps name to (params → Strategy) callable
 STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
-    "sma_crossover": lambda p: SMACrossover(
-        short_window=int(p["short_window"]),
-        long_window=int(p["long_window"]),
-        atr_multiplier=float(p.get("atr_multiplier", 2.0)),
-        atr_period=int(p.get("atr_period", 14)),
-        reward_ratio=float(p.get("reward_ratio", 2.0)),
-    ),
-    "rsi_mean_reversion": lambda p: RSIMeanReversion(
-        period=int(p.get("period", 14)),
-        overbought=int(p.get("overbought", 70)),
-        oversold=int(p.get("oversold", 30)),
-        atr_multiplier=float(p.get("atr_multiplier", 2.0)),
-        atr_period=int(p.get("atr_period", 14)),
-        reward_ratio=float(p.get("reward_ratio", 1.5)),
-    ),
-    "simple_grid": lambda p: SimpleGridStrategy(
-        grid_spacing=float(p.get("grid_spacing", 10.0)),
-        max_levels=int(p.get("max_levels", 6)),
-        stop_distance=float(p.get("stop_distance", 30.0)),
-        num_levels_above=int(p.get("num_levels_above", 3)),
-        num_levels_below=int(p.get("num_levels_below", 3)),
-        reward_ratio=float(p.get("reward_ratio", 1.0)),
-    ),
-    "ciby_hedged_grid": lambda p: CibyHedgedGridStrategy(
-        grid_spacing=float(p.get("grid_spacing", 10.0)),
-        grid_units=float(p.get("grid_units", 10.0)),
-        session_profit_target=float(p.get("session_profit_target", 100.0)),
-        session_loss_limit=float(p.get("session_loss_limit", 50.0)),
-        daily_loss_limit=float(p.get("daily_loss_limit", 200.0)),
-    ),
     "ciby_hedged_doubling_grid": lambda p: CibyHedgedDoublingGridStrategy(
         spacing=float(p.get("spacing", 20.0)),
         units=float(p.get("units", 2.0)),
@@ -81,24 +47,6 @@ STRATEGY_REGISTRY: dict[str, Callable[[dict[str, int | float]], Strategy]] = {
 
 # Per-strategy validators — filters out invalid param combos
 PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
-    "sma_crossover": lambda p: p["short_window"] < p["long_window"],
-    "rsi_mean_reversion": lambda p: (
-        p.get("period", 14) > 0 and 0 < p.get("oversold", 30) < p.get("overbought", 70) < 100
-    ),
-    "simple_grid": lambda p: (
-        p.get("grid_spacing", 10.0) > 0
-        and p.get("max_levels", 6) >= 2
-        and p.get("stop_distance", 30.0) > 0
-        and p.get("num_levels_above", 3) >= 1
-        and p.get("num_levels_below", 3) >= 1
-    ),
-    "ciby_hedged_grid": lambda p: (
-        p.get("grid_spacing", 10.0) > 0
-        and p.get("grid_units", 10.0) > 0
-        and p.get("session_profit_target", 100.0) > 0
-        and p.get("session_loss_limit", 50.0) > 0
-        and p.get("daily_loss_limit", 200.0) > 0
-    ),
     "ciby_hedged_doubling_grid": lambda p: (
         p.get("spacing", 20.0) > 0
         and p.get("units", 2.0) > 0
@@ -123,10 +71,6 @@ PARAM_VALIDATORS: dict[str, Callable[[dict[str, int | float]], bool]] = {
 
 # Maps strategy names to their metadata accessor
 STRATEGY_METADATA: dict[str, Callable[[], StrategyMetadata]] = {
-    "sma_crossover": SMACrossover.metadata,
-    "rsi_mean_reversion": RSIMeanReversion.metadata,
-    "simple_grid": SimpleGridStrategy.metadata,
-    "ciby_hedged_grid": CibyHedgedGridStrategy.metadata,
     "ciby_hedged_doubling_grid": CibyHedgedDoublingGridStrategy.metadata,
     "ciby_sliding_grid": CibySlidingGridStrategy.metadata,
 }
@@ -162,7 +106,7 @@ def main() -> None:
     run_parser = subparsers.add_parser("run", help="Run a backtest")
     run_parser.add_argument(
         "--strategy",
-        default="sma_crossover",
+        default="ciby_sliding_grid",
         choices=list(STRATEGY_REGISTRY.keys()),
         help="Strategy to use",
     )
@@ -214,7 +158,7 @@ def main() -> None:
     sweep_parser = subparsers.add_parser("sweep", help="Run parameter sweep (grid search)")
     sweep_parser.add_argument(
         "--strategy",
-        default="sma_crossover",
+        default="ciby_sliding_grid",
         choices=list(STRATEGY_REGISTRY.keys()),
         help="Strategy to sweep",
     )
@@ -254,7 +198,7 @@ def main() -> None:
     wf_parser = subparsers.add_parser("walk-forward", help="Run walk-forward validation")
     wf_parser.add_argument(
         "--strategy",
-        default="sma_crossover",
+        default="ciby_sliding_grid",
         choices=list(STRATEGY_REGISTRY.keys()),
         help="Strategy to validate",
     )

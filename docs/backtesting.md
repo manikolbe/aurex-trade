@@ -21,22 +21,19 @@ everything together.
 # 1. Download historical data from OANDA
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
 
-# 2. Run a backtest with SMA Crossover
-just backtest --strategy sma_crossover --param short_window=10 --param long_window=30
+# 2. Run a backtest with Ciby Sliding Grid (the primary strategy)
+just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param anchor_gap=15
 
-# 3. Run with RSI Mean-Reversion
-just backtest --strategy rsi_mean_reversion --param period=14 --param overbought=70 --param oversold=30
-
-# 4. Adjust costs for realistic simulation
-just backtest --strategy sma_crossover --param short_window=20 --param long_window=50 --spread 0.6 --slippage 0.2
+# 3. Adjust costs for realistic simulation
+just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param stop_buffer=3 --spread 0.6 --slippage 0.2
 ```
 
 ```bash
-# 5. Run with Ciby Hedged Grid (grid strategy — risk engine auto-disabled)
-just backtest --strategy ciby_hedged_grid \
-    --param grid_spacing=15 --param grid_units=10 \
-    --param session_profit_target=100 --param session_loss_limit=50 \
-    --param daily_loss_limit=200 --spread 0.5
+# 4. Run with Ciby Hedged Doubling Grid (grid strategy — risk engine auto-disabled)
+just backtest --strategy ciby_hedged_doubling_grid \
+    --param spacing=20 --param units=2 \
+    --param trailing_stop_distance=20 --param session_loss_limit=100 \
+    --param whipsaw_limit=3 --spread 0.5
 ```
 
 ## Key Properties
@@ -58,7 +55,7 @@ just backtest --strategy <name> [--param key=value ...] [options]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--strategy` | sma_crossover | Strategy to use (any registered name) |
+| `--strategy` | ciby_sliding_grid | Strategy to use (any registered name) |
 | `--param` | (defaults) | Strategy parameter (repeatable, format: key=value) |
 
 If no `--param` flags are provided, strategy metadata defaults are used.
@@ -105,25 +102,20 @@ If no `--param` flags are provided, strategy metadata defaults are used.
 Automatically tests all parameter combinations and ranks by a metric:
 
 ```bash
-# SMA Crossover sweep
-just sweep --strategy sma_crossover \
-    --param short_window=5,10,15,20 --param long_window=20,30,50,100 \
-    --spread 0.6 --slippage 0.2 --rank-by sharpe_ratio
+# Ciby Sliding Grid sweep
+just sweep --strategy ciby_sliding_grid \
+    --param grid_spacing=5,10,20 --param anchor_gap=10,15 \
+    --param stop_buffer=1,3 --spread 0.6 --slippage 0.2 --rank-by sharpe_ratio
 
-# RSI Mean-Reversion sweep
-just sweep --strategy rsi_mean_reversion \
-    --param period=7,14,21 --param overbought=70,75,80 --param oversold=20,25,30 \
-    --spread 0.6
-
-# Ciby Hedged Grid sweep
-just sweep --strategy ciby_hedged_grid \
-    --param grid_spacing=10,15,20 --param grid_units=10,20 \
-    --param session_profit_target=100 --param session_loss_limit=50,100 \
-    --param daily_loss_limit=200,500 --spread 0.5
+# Ciby Hedged Doubling Grid sweep
+just sweep --strategy ciby_hedged_doubling_grid \
+    --param spacing=10,20 --param units=2,4 \
+    --param trailing_stop_distance=10,20 --param session_loss_limit=100 \
+    --param whipsaw_limit=3 --spread 0.5
 ```
 
 - Generic `--param key=v1,v2,...` design — works for any strategy
-- Invalid combos filtered automatically (e.g. short >= long for SMA, oversold >= overbought for RSI)
+- Invalid combos filtered automatically by each strategy's `PARAM_VALIDATORS` entry
 - Deterministic — same inputs always produce identical rankings
 - Strategy registry in `backtest/cli.py` maps names to factory callables
 
@@ -132,19 +124,15 @@ just sweep --strategy ciby_hedged_grid \
 Prevents overfitting by validating best params on unseen data:
 
 ```bash
-just walk-forward --strategy sma_crossover \
-    --param short_window=5,10,20 --param long_window=20,30,50 \
+just walk-forward --strategy ciby_sliding_grid \
+    --param grid_spacing=5,10 --param anchor_gap=10,15 --param stop_buffer=1,3 \
     --train-bars 7200 --test-bars 7200 --spread 0.6
 
-just walk-forward --strategy rsi_mean_reversion \
-    --param period=7,14,21 --param overbought=70,75 --param oversold=25,30 \
-    --train-bars 7200 --test-bars 7200 --spread 0.6
-
-# Ciby Hedged Grid walk-forward
-just walk-forward --strategy ciby_hedged_grid \
-    --param grid_spacing=10,15 --param grid_units=10,20 \
-    --param session_profit_target=100 --param session_loss_limit=50,100 \
-    --param daily_loss_limit=200 --spread 0.5
+# Ciby Hedged Doubling Grid walk-forward
+just walk-forward --strategy ciby_hedged_doubling_grid \
+    --param spacing=10,20 --param units=2,4 \
+    --param trailing_stop_distance=10,20 --param session_loss_limit=100 \
+    --param whipsaw_limit=3 --spread 0.5
 ```
 
 - Non-overlapping windows: Train [Wk1] -> Test [Wk2], Train [Wk3] -> Test [Wk4], ...

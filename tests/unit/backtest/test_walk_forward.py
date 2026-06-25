@@ -8,7 +8,7 @@ from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.walk_forward import WalkForwardValidator
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.sma_crossover import SMACrossover
+from tests.conftest import StatelessTestStrategy
 
 
 def _make_trending_bars(count: int) -> list[BarData]:
@@ -67,8 +67,10 @@ def _risk_engine() -> RiskEngine:
     )
 
 
-def _sma_factory(params: dict[str, int]) -> SMACrossover:
-    return SMACrossover(short_window=params["short_window"], long_window=params["long_window"])
+def _sma_factory(params: dict[str, int]) -> StatelessTestStrategy:
+    return StatelessTestStrategy(
+        short_window=params["short_window"], long_window=params["long_window"]
+    )
 
 
 class TestAggregateMetricsEqualWinsLosses:
@@ -208,7 +210,7 @@ class TestWalkForwardValidator:
 
         agg = result.aggregate_test_metrics
         assert agg.initial_capital == 100_000.0
-        assert result.strategy_name == "sma_crossover"
+        assert result.strategy_name == "stateless_test"
         assert result.symbol == "TEST"
 
     def test_deterministic_results(self) -> None:

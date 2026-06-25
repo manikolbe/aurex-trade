@@ -3,8 +3,8 @@
 from aurex_trade.adapters.memory.repository import InMemoryRepository
 from aurex_trade.adapters.paper.broker import PaperBrokerAdapter
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.sma_crossover import SMACrossover
 from aurex_trade.engine.trading_engine import TradingEngine
+from tests.conftest import StatelessTestStrategy
 
 _TEST_USER_ID = "test-user"
 
@@ -19,7 +19,7 @@ def _build_engine(
     """Build a fully wired TradingEngine with paper adapters."""
     broker = PaperBrokerAdapter(base_price=180.0, seed=seed)
     repository = InMemoryRepository()
-    strategy = SMACrossover(short_window=short_window, long_window=long_window, atr_period=3)
+    strategy = StatelessTestStrategy(short_window=short_window, long_window=long_window)
     risk_engine = RiskEngine(
         max_position_size=max_position_size,
         max_daily_loss=500.0,

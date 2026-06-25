@@ -14,7 +14,7 @@ import structlog
 from aurex_trade.config import AppConfig
 from aurex_trade.domain.enums import TradingMode
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.sma_crossover import SMACrossover
+from aurex_trade.domain.strategy.ciby_sliding_grid import CibySlidingGridStrategy
 from aurex_trade.engine.trading_engine import TradingEngine
 from aurex_trade.logging import setup_logging
 
@@ -92,11 +92,18 @@ def main() -> None:
         repository = SQLiteRepository(db_path=config.db_path)
 
     # Domain components (no adapter knowledge)
-    strategy = SMACrossover(
-        short_window=config.strategy.sma_short_window,
-        long_window=config.strategy.sma_long_window,
-        atr_multiplier=config.strategy.atr_multiplier,
-        atr_period=config.strategy.atr_period,
+    strategy = CibySlidingGridStrategy(
+        grid_spacing=config.strategy.grid_spacing,
+        anchor_gap=config.strategy.anchor_gap,
+        buy_sell_offset=config.strategy.buy_sell_offset,
+        anchor_units=config.strategy.anchor_units,
+        grid_units=config.strategy.grid_units,
+        stop_buffer=config.strategy.stop_buffer,
+        max_levels_ahead=config.strategy.max_levels_ahead,
+        max_levels_behind=config.strategy.max_levels_behind,
+        session_profit_target=config.strategy.session_profit_target,
+        session_loss_limit=config.strategy.session_loss_limit,
+        daily_loss_limit=config.strategy.daily_loss_limit,
     )
     risk_engine = RiskEngine(
         max_position_size=config.risk.max_position_size,

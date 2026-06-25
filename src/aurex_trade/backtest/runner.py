@@ -1,9 +1,10 @@
 """Backtest runner — orchestrates historical replay through strategy and risk.
 
 Supports two modes:
-- Simple: stateless strategies (SMA, RSI) — single signal per bar, risk-gated
-- Grid: stateful strategies (ciby_hedged_grid) — signal drain, limit orders,
-  stop-loss enforcement, strategy callbacks, risk engine disabled
+- Simple: stateless strategies — single signal per bar, risk-gated
+- Grid: stateful strategies (ciby_sliding_grid, ciby_hedged_doubling_grid) —
+  signal drain, limit orders, stop-loss enforcement, strategy callbacks, risk
+  engine disabled
 
 Mode is auto-detected via `hasattr(strategy, "report_fill")`.
 """
@@ -121,9 +122,7 @@ class BacktestRunner:
         records: list[BacktestTradeRecord] = []
 
         # 1. Process bar — trigger SLs and fill limits
-        newly_filled, newly_closed = self._broker.process_bar(
-            self._market_data.current_bar
-        )
+        newly_filled, newly_closed = self._broker.process_bar(self._market_data.current_bar)
 
         # 2. Handle fills — call report_fill + place opposite market order
         self._handle_fills(newly_filled)
@@ -138,9 +137,7 @@ class BacktestRunner:
             update_pnl(unrealized)
 
         # 5. Drain signals from strategy
-        bars = self._market_data.get_latest_bars(
-            self._config.symbol, self._config.bar_count
-        )
+        bars = self._market_data.get_latest_bars(self._config.symbol, self._config.bar_count)
         if not bars:
             return records
 
@@ -243,8 +240,7 @@ class BacktestRunner:
         for grid_key, broker_order_id in list(self._pending_order_map.items()):
             # Check if this order is still in the broker's pending list
             still_pending = any(
-                p.broker_order_id == broker_order_id
-                for p in self._broker._pending_orders
+                p.broker_order_id == broker_order_id for p in self._broker._pending_orders
             )
             if not still_pending:
                 # This order was filled — check if it matches this trade
@@ -255,9 +251,7 @@ class BacktestRunner:
                     return grid_key
         return None
 
-    def _place_opposite_market_order(
-        self, grid_key: str, filled_trade: _OpenTrade
-    ) -> None:
+    def _place_opposite_market_order(self, grid_key: str, filled_trade: _OpenTrade) -> None:
         """After a limit fills, place the opposite side as a market order."""
         meta = self._pending_order_meta.get(grid_key, {})
         if not meta:
@@ -272,9 +266,7 @@ class BacktestRunner:
             return
 
         opposite_side = OrderSide.BUY if opposite_side_str == "BUY" else OrderSide.SELL
-        opposite_stop_loss = (
-            float(opposite_stop_loss_str) if opposite_stop_loss_str else None
-        )
+        opposite_stop_loss = float(opposite_stop_loss_str) if opposite_stop_loss_str else None
         quantity = float(fixed_units_str) if fixed_units_str else filled_trade.quantity
 
         order = Order(
@@ -310,10 +302,7 @@ class BacktestRunner:
     ) -> BacktestTradeRecord | None:
         """Process a single signal from a grid strategy."""
         # Handle FLAT / close_all
-        if (
-            signal.signal_type == SignalType.FLAT
-            and signal.metadata.get("action") == "close_all"
-        ):
+        if signal.signal_type == SignalType.FLAT and signal.metadata.get("action") == "close_all":
             self._close_all_trades(signal.metadata.get("reason", ""))
             return None
 
@@ -400,9 +389,7 @@ class BacktestRunner:
                     # Find grid key and report
                     for key, tid in list(self._grid_trade_map.items()):
                         if tid == trade.broker_trade_id:
-                            report_closed = getattr(
-                                self._strategy, "report_trade_closed", None
-                            )
+                            report_closed = getattr(self._strategy, "report_trade_closed", None)
                             if report_closed:
                                 report_closed(key, closed.realized_pnl)
                             self._trade_pnls.append(closed.realized_pnl)
@@ -436,9 +423,7 @@ class BacktestRunner:
     def _run_simple_step(self, bar_index: int) -> BacktestTradeRecord | None:
         """Execute one trading step for simple strategies."""
         # Step 1: Get bars for strategy
-        bars = self._market_data.get_latest_bars(
-            self._config.symbol, self._config.bar_count
-        )
+        bars = self._market_data.get_latest_bars(self._config.symbol, self._config.bar_count)
         if not bars:
             return None
 
@@ -476,9 +461,7 @@ class BacktestRunner:
         side = OrderSide.BUY if signal.signal_type == SignalType.LONG else OrderSide.SELL
         entry_price = bars[-1].close
 
-        quantity = self._risk_engine.calculate_position_size(
-            signal, account_state, entry_price
-        )
+        quantity = self._risk_engine.calculate_position_size(signal, account_state, entry_price)
         if quantity <= 0.0:
             quantity = self._config.position_size
 

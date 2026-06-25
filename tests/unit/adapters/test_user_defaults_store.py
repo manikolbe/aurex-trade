@@ -9,29 +9,29 @@ class TestStrategyDefaults:
     def test_save_and_get_strategy_defaults(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
-        params = {"short_window": 15, "long_window": 40}
-        store.save_strategy_defaults("user1", "sma_crossover", params)
+        params = {"grid_spacing": 15, "anchor_gap": 40}
+        store.save_strategy_defaults("user1", "ciby_sliding_grid", params)
 
-        result = store.get_strategy_defaults("user1", "sma_crossover")
-        assert result == {"short_window": 15, "long_window": 40}
+        result = store.get_strategy_defaults("user1", "ciby_sliding_grid")
+        assert result == {"grid_spacing": 15, "anchor_gap": 40}
         store.close()
 
     def test_upsert_overwrites_existing(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
-        params1 = {"short_window": 10, "long_window": 30}
-        params2 = {"short_window": 20, "long_window": 50}
-        store.save_strategy_defaults("user1", "sma_crossover", params1)
-        store.save_strategy_defaults("user1", "sma_crossover", params2)
+        params1 = {"grid_spacing": 10, "anchor_gap": 30}
+        params2 = {"grid_spacing": 20, "anchor_gap": 50}
+        store.save_strategy_defaults("user1", "ciby_sliding_grid", params1)
+        store.save_strategy_defaults("user1", "ciby_sliding_grid", params2)
 
-        result = store.get_strategy_defaults("user1", "sma_crossover")
-        assert result == {"short_window": 20, "long_window": 50}
+        result = store.get_strategy_defaults("user1", "ciby_sliding_grid")
+        assert result == {"grid_spacing": 20, "anchor_gap": 50}
         store.close()
 
     def test_get_nonexistent_returns_none(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
-        result = store.get_strategy_defaults("user1", "sma_crossover")
+        result = store.get_strategy_defaults("user1", "ciby_sliding_grid")
         assert result is None
         store.close()
 
@@ -39,55 +39,55 @@ class TestStrategyDefaults:
         store = UserDefaultsStore(tmp_path / "test.db")
 
         store.save_strategy_defaults(
-            "user1", "sma_crossover", {"short_window": 10}, is_preferred=True
+            "user1", "ciby_sliding_grid", {"grid_spacing": 10}, is_preferred=True
         )
 
-        assert store.get_preferred_strategy("user1") == "sma_crossover"
+        assert store.get_preferred_strategy("user1") == "ciby_sliding_grid"
         store.close()
 
     def test_preferred_strategy_clears_old(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
         store.save_strategy_defaults(
-            "user1", "sma_crossover", {"short_window": 10}, is_preferred=True
+            "user1", "ciby_sliding_grid", {"grid_spacing": 10}, is_preferred=True
         )
         store.save_strategy_defaults(
-            "user1", "rsi_mean_reversion", {"period": 14}, is_preferred=True
+            "user1", "ciby_hedged_doubling_grid", {"spacing": 20}, is_preferred=True
         )
 
-        assert store.get_preferred_strategy("user1") == "rsi_mean_reversion"
+        assert store.get_preferred_strategy("user1") == "ciby_hedged_doubling_grid"
         store.close()
 
     def test_get_all_strategy_defaults(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
-        store.save_strategy_defaults("user1", "sma_crossover", {"short_window": 15})
-        store.save_strategy_defaults("user1", "rsi_mean_reversion", {"period": 21})
+        store.save_strategy_defaults("user1", "ciby_sliding_grid", {"grid_spacing": 15})
+        store.save_strategy_defaults("user1", "ciby_hedged_doubling_grid", {"spacing": 21})
 
         result = store.get_all_strategy_defaults("user1")
         assert result == {
-            "sma_crossover": {"short_window": 15},
-            "rsi_mean_reversion": {"period": 21},
+            "ciby_sliding_grid": {"grid_spacing": 15},
+            "ciby_hedged_doubling_grid": {"spacing": 21},
         }
         store.close()
 
     def test_strategy_defaults_scoped_by_user(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
-        store.save_strategy_defaults("user1", "sma_crossover", {"short_window": 10})
-        store.save_strategy_defaults("user2", "sma_crossover", {"short_window": 20})
+        store.save_strategy_defaults("user1", "ciby_sliding_grid", {"grid_spacing": 10})
+        store.save_strategy_defaults("user2", "ciby_sliding_grid", {"grid_spacing": 20})
 
-        assert store.get_strategy_defaults("user1", "sma_crossover") == {"short_window": 10}
-        assert store.get_strategy_defaults("user2", "sma_crossover") == {"short_window": 20}
+        assert store.get_strategy_defaults("user1", "ciby_sliding_grid") == {"grid_spacing": 10}
+        assert store.get_strategy_defaults("user2", "ciby_sliding_grid") == {"grid_spacing": 20}
         store.close()
 
     def test_delete_strategy_defaults(self, tmp_path: Path) -> None:
         store = UserDefaultsStore(tmp_path / "test.db")
 
-        store.save_strategy_defaults("user1", "sma_crossover", {"short_window": 15})
-        store.delete_strategy_defaults("user1", "sma_crossover")
+        store.save_strategy_defaults("user1", "ciby_sliding_grid", {"grid_spacing": 15})
+        store.delete_strategy_defaults("user1", "ciby_sliding_grid")
 
-        assert store.get_strategy_defaults("user1", "sma_crossover") is None
+        assert store.get_strategy_defaults("user1", "ciby_sliding_grid") is None
         store.close()
 
     def test_no_preferred_returns_none(self, tmp_path: Path) -> None:

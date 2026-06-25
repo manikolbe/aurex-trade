@@ -50,10 +50,10 @@ For detailed explanations of every metric, see [Understanding Results](understan
 
 ## Trying Different Settings
 
-Go back to the form and change some parameters. For example, with SMA Crossover:
+Go back to the form and change some parameters. For example, with Ciby Sliding Grid:
 
-- Try a shorter **Short Window** (e.g., 5) — makes the strategy react faster
-- Try a longer **Long Window** (e.g., 50) — makes it more cautious
+- Try a wider **Grid Spacing** (e.g., 20) — fewer, more widely-spaced levels
+- Try a larger **Stop Buffer** (e.g., 3) — gives each leg more room before stopping out
 
 Each combination will give different results. But testing one at a time is slow —
 which is where the next tools come in.

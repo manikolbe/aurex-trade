@@ -127,10 +127,10 @@ class TestRateLimitEndpoints:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
         backtest_payload = {
-            "strategy": "sma_crossover",
+            "strategy": "ciby_sliding_grid",
             "symbol": "XAU_USD",
             "granularity": "M1",
-            "params": {"short_window": 10, "long_window": 30},
+            "params": {"grid_spacing": 10, "anchor_gap": 15},
             "capital": 10000,
             "risk_per_trade": 0.02,
         }
@@ -148,7 +148,7 @@ class TestRateLimitEndpoints:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
         body = {
-            "strategy_name": "sma_crossover",
+            "strategy_name": "ciby_sliding_grid",
             "strategy_params": {},
             "risk_params": {},
             "symbol": "XAU_USD",
@@ -175,7 +175,7 @@ class TestRateLimitEndpoints:
         ip1 = _unique_ip()
         ip2 = _unique_ip()
         body = {
-            "strategy_name": "sma_crossover",
+            "strategy_name": "ciby_sliding_grid",
             "strategy_params": {},
             "risk_params": {},
             "symbol": "XAU_USD",
@@ -206,7 +206,7 @@ class TestRateLimitResponse:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
         body = {
-            "strategy_name": "sma_crossover",
+            "strategy_name": "ciby_sliding_grid",
             "strategy_params": {},
             "risk_params": {},
             "symbol": "XAU_USD",
@@ -228,7 +228,7 @@ class TestRateLimitResponse:
         ip = _unique_ip()
         headers = {"X-Forwarded-For": ip}
         body = {
-            "strategy_name": "sma_crossover",
+            "strategy_name": "ciby_sliding_grid",
             "strategy_params": {},
             "risk_params": {},
             "symbol": "XAU_USD",

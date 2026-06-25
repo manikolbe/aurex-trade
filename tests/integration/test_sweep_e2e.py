@@ -9,7 +9,7 @@ from aurex_trade.backtest.sweep import ParameterSweep
 from aurex_trade.backtest.walk_forward import WalkForwardValidator
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.sma_crossover import SMACrossover
+from tests.conftest import StatelessTestStrategy
 
 
 def _make_trending_bars(count: int) -> list[BarData]:
@@ -35,8 +35,10 @@ def _make_trending_bars(count: int) -> list[BarData]:
     return bars
 
 
-def _sma_factory(params: dict[str, int]) -> SMACrossover:
-    return SMACrossover(short_window=params["short_window"], long_window=params["long_window"])
+def _sma_factory(params: dict[str, int]) -> StatelessTestStrategy:
+    return StatelessTestStrategy(
+        short_window=params["short_window"], long_window=params["long_window"]
+    )
 
 
 @pytest.mark.integration

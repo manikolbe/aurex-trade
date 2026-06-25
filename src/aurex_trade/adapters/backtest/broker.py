@@ -4,9 +4,9 @@ Tracks positions, capital, and P&L internally. Deterministic via seeded RNG.
 Satisfies BrokerPort Protocol.
 
 Supports two modes:
-- Simple: single net position per symbol (SMA, RSI strategies)
+- Simple: single net position per symbol (stateless strategies)
 - Grid: multiple individual open trades with pending limit orders and stop-loss
-  enforcement (ciby_hedged_grid and similar stateful strategies)
+  enforcement (ciby_sliding_grid, ciby_hedged_doubling_grid)
 """
 
 from __future__ import annotations
@@ -232,9 +232,9 @@ class SimulatedBrokerAdapter:
                     pending.side == OrderSide.BUY and bar.high >= pending.limit_price
                 ) or (pending.side == OrderSide.SELL and bar.low <= pending.limit_price)
             else:
-                triggered = (
-                    pending.side == OrderSide.BUY and bar.low <= pending.limit_price
-                ) or (pending.side == OrderSide.SELL and bar.high >= pending.limit_price)
+                triggered = (pending.side == OrderSide.BUY and bar.low <= pending.limit_price) or (
+                    pending.side == OrderSide.SELL and bar.high >= pending.limit_price
+                )
             if triggered:
                 orders_to_fill.append(pending)
 

@@ -55,7 +55,7 @@ def _start_session(
         engine=engine or FakeEngine(),  # type: ignore[arg-type]
         connection=connection or FakeConnection(),
         symbol="XAU_USD",
-        strategy_name="sma_crossover",
+        strategy_name="ciby_sliding_grid",
     )
 
 
@@ -69,7 +69,7 @@ class TestStart:
         assert isinstance(session, ActiveBotSession)
         assert session.user_id == "user-1"
         assert session.symbol == "XAU_USD"
-        assert session.strategy_name == "sma_crossover"
+        assert session.strategy_name == "ciby_sliding_grid"
 
     def test_start_records_utc_timestamp(self) -> None:
         manager = _make_manager()

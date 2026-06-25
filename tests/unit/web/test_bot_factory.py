@@ -54,7 +54,7 @@ def _live_creds() -> BrokerCredentials:
 
 
 def _valid_strategy_params() -> dict[str, int | float]:
-    return {"short_window": 10, "long_window": 30}
+    return {"grid_spacing": 10.0, "anchor_gap": 15.0, "grid_units": 20.0}
 
 
 def _valid_risk_params() -> dict[str, int | float | bool]:
@@ -79,7 +79,7 @@ class TestHappyPath:
 
         engine, connection = create_bot_engine(
             user_id="user-1",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
             strategy_params=_valid_strategy_params(),
             risk_params=_valid_risk_params(),
             symbol="XAU_USD",
@@ -101,7 +101,7 @@ class TestHappyPath:
 
         engine, _ = create_bot_engine(
             user_id="user-1",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
             strategy_params=_valid_strategy_params(),
             risk_params=_valid_risk_params(),
             symbol="EUR_USD",
@@ -115,7 +115,7 @@ class TestHappyPath:
 
     @patch("aurex_trade.web._bot_factory.SQLiteRepository")
     @patch("aurex_trade.web._bot_factory.OANDAConnection")
-    def test_works_with_rsi_strategy(
+    def test_works_with_doubling_grid_strategy(
         self, mock_conn_cls: MagicMock, mock_repo_cls: MagicMock
     ) -> None:
         mock_conn_cls.return_value = MagicMock()
@@ -123,15 +123,15 @@ class TestHappyPath:
 
         engine, _ = create_bot_engine(
             user_id="user-1",
-            strategy_name="rsi_mean_reversion",
-            strategy_params={"period": 14, "overbought": 70, "oversold": 30},
+            strategy_name="ciby_hedged_doubling_grid",
+            strategy_params={"spacing": 20.0, "units": 2.0, "trailing_stop_distance": 20.0},
             risk_params=_valid_risk_params(),
             symbol="XAU_USD",
             interval_seconds=60,
             credential_store=store,
         )
 
-        assert engine._strategy.name == "rsi_mean_reversion"
+        assert engine._strategy.name == "ciby_hedged_doubling_grid"
 
 
 class TestMissingCredentials:
@@ -143,7 +143,7 @@ class TestMissingCredentials:
         with pytest.raises(ValueError, match="No OANDA credentials found"):
             create_bot_engine(
                 user_id="user-1",
-                strategy_name="sma_crossover",
+                strategy_name="ciby_sliding_grid",
                 strategy_params=_valid_strategy_params(),
                 risk_params=_valid_risk_params(),
                 symbol="XAU_USD",
@@ -157,7 +157,7 @@ class TestMissingCredentials:
         with pytest.raises(ValueError, match="user-42"):
             create_bot_engine(
                 user_id="user-42",
-                strategy_name="sma_crossover",
+                strategy_name="ciby_sliding_grid",
                 strategy_params=_valid_strategy_params(),
                 risk_params=_valid_risk_params(),
                 symbol="XAU_USD",
@@ -175,7 +175,7 @@ class TestLiveServerRejected:
         with pytest.raises(ValueError, match="Live trading is not permitted"):
             create_bot_engine(
                 user_id="user-1",
-                strategy_name="sma_crossover",
+                strategy_name="ciby_sliding_grid",
                 strategy_params=_valid_strategy_params(),
                 risk_params=_valid_risk_params(),
                 symbol="XAU_USD",
@@ -189,7 +189,7 @@ class TestLiveServerRejected:
         with pytest.raises(ValueError, match="server='live'"):
             create_bot_engine(
                 user_id="user-1",
-                strategy_name="sma_crossover",
+                strategy_name="ciby_sliding_grid",
                 strategy_params=_valid_strategy_params(),
                 risk_params=_valid_risk_params(),
                 symbol="XAU_USD",
@@ -236,7 +236,7 @@ class TestUnknownStrategy:
     def test_error_lists_available_strategies(self) -> None:
         store = FakeCredentialStore(_practice_creds())
 
-        with pytest.raises(ValueError, match="sma_crossover"):
+        with pytest.raises(ValueError, match="ciby_sliding_grid"):
             create_bot_engine(
                 user_id="user-1",
                 strategy_name="bad",

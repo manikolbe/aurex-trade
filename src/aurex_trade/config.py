@@ -34,14 +34,24 @@ class RiskConfig(BaseSettings):
 
 
 class StrategyConfig(BaseSettings):
-    """Strategy parameters (SMA Crossover)."""
+    """Strategy parameters (Ciby Sliding Grid — the CLI local-mode default).
+
+    Defaults mirror ``CibySlidingGridStrategy.metadata()``.
+    """
 
     model_config = SettingsConfigDict(env_prefix="STRATEGY_", env_file=".env", extra="ignore")
 
-    sma_short_window: int = 10
-    sma_long_window: int = 30
-    atr_multiplier: float = 2.0
-    atr_period: int = 14
+    grid_spacing: float = 10.0
+    anchor_gap: float = 15.0
+    buy_sell_offset: float = 0.90
+    anchor_units: float = 10.0
+    grid_units: float = 20.0
+    stop_buffer: float = 1.0
+    max_levels_ahead: int = 2
+    max_levels_behind: int = 1
+    session_profit_target: float = 100.0
+    session_loss_limit: float = 50.0
+    daily_loss_limit: float = 200.0
 
 
 class AppConfig(BaseSettings):

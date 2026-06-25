@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 from aurex_trade.domain.enums import OrderSide, SignalType
 from aurex_trade.domain.models import OpenBrokerTrade, Signal
-from aurex_trade.domain.strategy.ciby_hedged_grid import CibyHedgedGridStrategy
+from aurex_trade.domain.strategy.ciby_sliding_grid import CibySlidingGridStrategy
 from aurex_trade.engine.trading_engine import TradingEngine
 
 _TEST_USER_ID = "test-user"
@@ -194,7 +194,7 @@ class TestCloseAllInProgress:
     """Fix #3: strategy emits FLAT but doesn't restart while close-all retrying."""
 
     def test_flag_set_on_trigger(self) -> None:
-        strategy = CibyHedgedGridStrategy(
+        strategy = CibySlidingGridStrategy(
             grid_spacing=15.0,
             session_profit_target=100.0,
         )
@@ -202,7 +202,7 @@ class TestCloseAllInProgress:
         assert strategy._close_all_in_progress is True
 
     def test_flag_cleared_on_notify_complete(self) -> None:
-        strategy = CibyHedgedGridStrategy(grid_spacing=15.0)
+        strategy = CibySlidingGridStrategy(grid_spacing=15.0)
         strategy._close_all_in_progress = True
         strategy._close_reason = "test"
         strategy.notify_close_all_complete()
@@ -211,7 +211,7 @@ class TestCloseAllInProgress:
     def test_generate_emits_flat_without_retrigger(self) -> None:
         from aurex_trade.domain.models import BarData
 
-        strategy = CibyHedgedGridStrategy(
+        strategy = CibySlidingGridStrategy(
             grid_spacing=15.0,
             session_profit_target=100.0,
         )
@@ -245,7 +245,7 @@ class TestCloseAllInProgress:
     def test_no_new_grid_placed_while_close_in_progress(self) -> None:
         from aurex_trade.domain.models import BarData
 
-        strategy = CibyHedgedGridStrategy(
+        strategy = CibySlidingGridStrategy(
             grid_spacing=15.0,
             session_profit_target=100.0,
         )

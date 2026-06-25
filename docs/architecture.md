@@ -37,7 +37,7 @@ nothing about OANDA, SQLite, or any other external system.
 
               Domain Core (center — no external deps):
               ├── models.py (BarData, Signal, Order, Trade, Position)
-              ├── strategy/ (Strategy Protocol, indicators, SMA Crossover, RSI Mean-Reversion)
+              ├── strategy/ (Strategy Protocol, Ciby Sliding Grid, Ciby Hedged Doubling Grid)
               └── risk/ (RiskEngine)
 ```
 
@@ -217,12 +217,13 @@ engine; `None` ⇒ no-op (CLI/tests). See `docs/log-analysis.md`.
 
 All strategies satisfy the `Strategy` Protocol (see `docs/strategies.md` for details):
 
-- **SMA Crossover** — trend-following, buys when short MA crosses above long MA
-- **RSI Mean-Reversion** — counter-trend, buys when RSI crosses below oversold
+- **Ciby Sliding Grid** — primary, live strategy; hedged-pair grid that slides its
+  active band as price trends
+- **Ciby Hedged Doubling Grid** — experimental; hedged grid with a doubling
+  mechanism at outer levels
 
 Strategies are pure — they take price bars in and return a signal.
 They have no side effects and no external dependencies.
-Shared indicators live in `domain/strategy/indicators.py`.
 
 ## Risk Engine
 
@@ -335,13 +336,15 @@ AppConfig
 │   ├── require_stop_loss, risk_per_trade
 │   └── max_drawdown_pct, max_consecutive_losses
 └── strategy: StrategyConfig
-    └── sma_short_window, sma_long_window, atr_multiplier, atr_period
+    └── grid_spacing, anchor_gap, buy_sell_offset, anchor_units, grid_units,
+        stop_buffer, max_levels_ahead, max_levels_behind, session_profit_target,
+        session_loss_limit, daily_loss_limit
 ```
 
 Environment variable mapping uses prefixes:
 - `OANDA_ACCESS_TOKEN` → `config.oanda.access_token`
 - `RISK_MAX_DAILY_LOSS` → `config.risk.max_daily_loss`
-- `STRATEGY_SMA_SHORT_WINDOW` → `config.strategy.sma_short_window`
+- `STRATEGY_GRID_SPACING` → `config.strategy.grid_spacing`
 
 ## Web Layer (`web/`)
 
@@ -404,7 +407,7 @@ def main():
             market_data = OANDAMarketDataAdapter(connection)
 
     repository = SQLiteRepository(config.db_path)
-    strategy = SMACrossover(config.strategy)
+    strategy = CibySlidingGridStrategy(config.strategy)
     risk_engine = RiskEngine(config.risk)
 
     engine = TradingEngine(

@@ -19,8 +19,8 @@ class TestBacktestSubmit:
                 "/api/backtest",
                 json={
                     "symbol": "XAU_USD",
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": 10, "long_window": 30},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": 10, "anchor_gap": 15},
                 },
             )
         assert resp.status_code == 202
@@ -33,23 +33,23 @@ class TestBacktestSubmit:
                 "/api/backtest",
                 json={
                     "symbol": "XAU_USD",
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": 10, "long_window": 30},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": 10, "anchor_gap": 15},
                 },
             ).json()
         assert "task_id" in data
         assert data["task_type"] == "backtest"
         assert data["status"] == "running"
 
-    def test_rsi_strategy_accepted(self, client: TestClient) -> None:
-        """RSI strategy with params returns 202."""
+    def test_doubling_grid_strategy_accepted(self, client: TestClient) -> None:
+        """Doubling-grid strategy with params returns 202."""
         with patch("aurex_trade.web.routers.backtest.api.create_backtest_runner") as mock:
             mock.return_value = lambda: None
             resp = client.post(
                 "/api/backtest",
                 json={
-                    "strategy": "rsi_mean_reversion",
-                    "params": {"period": 14, "overbought": 70, "oversold": 30},
+                    "strategy": "ciby_hedged_doubling_grid",
+                    "params": {"spacing": 20, "units": 2, "trailing_stop_distance": 20},
                 },
             )
         assert resp.status_code == 202
@@ -87,7 +87,7 @@ class TestBacktestPoll:
             mock.return_value = lambda: time.sleep(10)
             submit = client.post(
                 "/api/backtest",
-                json={"strategy": "sma_crossover", "params": {}},
+                json={"strategy": "ciby_sliding_grid", "params": {}},
             ).json()
 
         resp = client.get(f"/api/backtest/{submit['task_id']}")
@@ -131,8 +131,8 @@ class TestSweepSubmit:
             resp = client.post(
                 "/api/sweep",
                 json={
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": [5, 10], "long_window": [20, 30]},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": [5, 10], "anchor_gap": [15, 20]},
                 },
             )
         assert resp.status_code == 202
@@ -143,10 +143,10 @@ class TestSweepSubmit:
         resp = client.post(
             "/api/sweep",
             json={
-                "strategy": "sma_crossover",
+                "strategy": "ciby_sliding_grid",
                 "params": {
-                    "short_window": list(range(1, 52)),
-                    "long_window": list(range(1, 22)),
+                    "grid_spacing": list(range(1, 52)),
+                    "anchor_gap": list(range(1, 22)),
                 },
             },
         )
@@ -172,8 +172,8 @@ class TestWalkForwardSubmit:
             resp = client.post(
                 "/api/walk-forward",
                 json={
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": [5, 10], "long_window": [20, 30]},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": [5, 10], "anchor_gap": [15, 20]},
                     "train_bars": 100,
                     "test_bars": 100,
                 },
@@ -186,8 +186,8 @@ class TestWalkForwardSubmit:
         resp = client.post(
             "/api/walk-forward",
             json={
-                "strategy": "sma_crossover",
-                "params": {"short_window": [5, 10]},
+                "strategy": "ciby_sliding_grid",
+                "params": {"grid_spacing": [5, 10]},
                 "train_bars": 0,
                 "test_bars": 100,
             },
@@ -213,8 +213,8 @@ class TestStrategiesEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         names = [s["name"] for s in data["strategies"]]
-        assert "sma_crossover" in names
-        assert "rsi_mean_reversion" in names
+        assert "ciby_sliding_grid" in names
+        assert "ciby_hedged_doubling_grid" in names
 
     def test_response_includes_params_metadata(self, client: TestClient) -> None:
         """Each strategy includes params with full metadata."""
@@ -230,21 +230,21 @@ class TestStrategiesEndpoint:
                 assert "min_value" in param
                 assert "max_value" in param
 
-    def test_sma_has_expected_params(self, client: TestClient) -> None:
-        """SMA Crossover has short_window and long_window params."""
+    def test_sliding_grid_has_expected_params(self, client: TestClient) -> None:
+        """Ciby Sliding Grid has grid_spacing and anchor_gap params."""
         resp = client.get("/api/strategies")
         data = resp.json()
-        sma = next(s for s in data["strategies"] if s["name"] == "sma_crossover")
-        param_keys = [p["key"] for p in sma["params"]]
-        assert "short_window" in param_keys
-        assert "long_window" in param_keys
+        sliding = next(s for s in data["strategies"] if s["name"] == "ciby_sliding_grid")
+        param_keys = [p["key"] for p in sliding["params"]]
+        assert "grid_spacing" in param_keys
+        assert "anchor_gap" in param_keys
 
-    def test_rsi_has_expected_params(self, client: TestClient) -> None:
-        """RSI Mean Reversion has period, overbought, oversold params."""
+    def test_doubling_grid_has_expected_params(self, client: TestClient) -> None:
+        """Ciby Hedged Doubling Grid has spacing, units, trailing_stop_distance params."""
         resp = client.get("/api/strategies")
         data = resp.json()
-        rsi = next(s for s in data["strategies"] if s["name"] == "rsi_mean_reversion")
-        param_keys = [p["key"] for p in rsi["params"]]
-        assert "period" in param_keys
-        assert "overbought" in param_keys
-        assert "oversold" in param_keys
+        doubling = next(s for s in data["strategies"] if s["name"] == "ciby_hedged_doubling_grid")
+        param_keys = [p["key"] for p in doubling["params"]]
+        assert "spacing" in param_keys
+        assert "units" in param_keys
+        assert "trailing_stop_distance" in param_keys

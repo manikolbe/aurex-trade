@@ -5,27 +5,46 @@ from unittest.mock import MagicMock
 from aurex_trade.adapters.memory.repository import InMemoryRepository
 from aurex_trade.adapters.paper.broker import PaperBrokerAdapter
 from aurex_trade.domain.enums import OrderSide
-from aurex_trade.domain.models import OpenBrokerTrade
+from aurex_trade.domain.models import BarData, OpenBrokerTrade, Signal
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.simple_grid import SimpleGridStrategy
 from aurex_trade.engine.trading_engine import TradingEngine
 
 _TEST_USER_ID = "test-user"
 
 
+class _GridStub:
+    """Minimal grid strategy stub for closure-detection tests.
+
+    Exposes only what the engine's closure path touches: a float-keyed
+    ``_filled_levels`` map and a ``release_level`` callback. Decoupled from any
+    production strategy so this engine unit test exercises engine behavior alone.
+    """
+
+    def __init__(self) -> None:
+        self._filled_levels: dict[float, OrderSide] = {}
+
+    @property
+    def name(self) -> str:
+        return "grid_stub"
+
+    @property
+    def min_bars(self) -> int:
+        return 1
+
+    def generate(self, bars: list[BarData]) -> Signal | None:
+        return None
+
+    def release_level(self, price: float) -> None:
+        self._filled_levels.pop(price, None)
+
+
 def _build_grid_engine(
     seed: int = 42,
-) -> tuple[TradingEngine, PaperBrokerAdapter, SimpleGridStrategy]:
-    """Build a TradingEngine with grid strategy for closure detection tests."""
+) -> tuple[TradingEngine, PaperBrokerAdapter, _GridStub]:
+    """Build a TradingEngine with a grid stub for closure detection tests."""
     broker = PaperBrokerAdapter(base_price=2050.0, seed=seed)
     repository = InMemoryRepository()
-    strategy = SimpleGridStrategy(
-        grid_spacing=10.0,
-        stop_distance=30.0,
-        reward_ratio=2.0,
-        num_levels_above=3,
-        num_levels_below=3,
-    )
+    strategy = _GridStub()
     risk_engine = RiskEngine(
         max_position_size=10,
         max_daily_loss=5000.0,

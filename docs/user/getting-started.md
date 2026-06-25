@@ -78,8 +78,9 @@ The form has some fields already filled in with sensible defaults. **You don't n
 to change anything.** Here's what's there:
 
 - **Strategy** — The rules the bot will follow to decide when to buy and sell.
-  The default (SMA Crossover) is a simple approach that follows price trends.
-  Don't worry about understanding it yet — we'll explain it later.
+  The default (Ciby Sliding Grid) places hedged buy/sell orders around the current
+  price and slides them as the market moves. Don't worry about understanding it
+  yet — we'll explain it later.
 - **Symbol** — What the bot trades. It's set to gold (XAU/USD).
 - **Interval** — How often the bot checks for new opportunities. Default is
   every 60 seconds.

@@ -63,12 +63,12 @@ class TestSignal:
         signal = Signal(
             symbol="GLD",
             signal_type=SignalType.LONG,
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
             strength=0.8,
         )
         assert signal.symbol == "GLD"
         assert signal.signal_type == SignalType.LONG
-        assert signal.strategy_name == "sma_crossover"
+        assert signal.strategy_name == "ciby_sliding_grid"
 
     def test_immutability(self) -> None:
         signal = Signal()

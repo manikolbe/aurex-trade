@@ -22,8 +22,8 @@ class TestHtmxBacktest:
                 "/htmx/backtest/submit",
                 json={
                     "symbol": "XAU_USD",
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": 10, "long_window": 30},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": 10, "anchor_gap": 15},
                 },
             )
         assert response.status_code == 200
@@ -48,8 +48,8 @@ class TestHtmxBacktest:
                 "/htmx/backtest/submit",
                 json={
                     "symbol": "XAU_USD",
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": 10, "long_window": 30},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": 10, "anchor_gap": 15},
                 },
             )
 
@@ -94,8 +94,8 @@ class TestHtmxSweep:
             response = client.post(
                 "/htmx/sweep/submit",
                 json={
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": [5, 10], "long_window": [20, 30]},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": [5, 10], "anchor_gap": [15, 20]},
                 },
             )
         assert response.status_code == 200
@@ -120,8 +120,8 @@ class TestHtmxWalkForward:
             response = client.post(
                 "/htmx/walk-forward/submit",
                 json={
-                    "strategy": "sma_crossover",
-                    "params": {"short_window": [5, 10], "long_window": [20, 30]},
+                    "strategy": "ciby_sliding_grid",
+                    "params": {"grid_spacing": [5, 10], "anchor_gap": [15, 20]},
                     "train_bars": 100,
                     "test_bars": 100,
                 },

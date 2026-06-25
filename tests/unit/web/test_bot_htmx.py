@@ -48,9 +48,9 @@ class TestBotStatusPoll:
             engine=engine,
             connection=connection,
             symbol="XAU_USD",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
             granularity="M1",
-            strategy_params={"short_window": 10, "long_window": 30},
+            strategy_params={"grid_spacing": 10, "anchor_gap": 15},
             risk_params={"max_position_size": 10, "risk_per_trade": 0.02},
         )
         try:
@@ -58,7 +58,7 @@ class TestBotStatusPoll:
             assert resp.status_code == 200
             assert "Running" in resp.text
             # Template renders the strategy name title-cased for display.
-            assert "Sma Crossover" in resp.text
+            assert "Ciby Sliding Grid" in resp.text
             assert "XAU_USD" in resp.text
         finally:
             manager.stop("test-user-id")
@@ -76,7 +76,7 @@ class TestBotStopHtmx:
             engine=engine,
             connection=connection,
             symbol="XAU_USD",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
         )
         resp = client.post("/htmx/bot/stop", follow_redirects=False)
         assert resp.status_code == 200
@@ -121,7 +121,7 @@ class TestBotMetricsPoll:
             engine=engine,
             connection=connection,
             symbol="XAU_USD",
-            strategy_name="rsi_mean_reversion",
+            strategy_name="ciby_hedged_doubling_grid",
         )
         try:
             resp = client.get("/htmx/bot/metrics/poll")

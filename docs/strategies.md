@@ -23,115 +23,16 @@ class Strategy(Protocol):
 - Strategies live in `src/aurex_trade/domain/strategy/`
 - They import ONLY from stdlib and `aurex_trade.domain` (hexagonal boundary)
 - They are pure functions: bars in, signal out, no side effects
-- Stop-loss is calculated using ATR from the shared `indicators.py` module
 
-## Shared Indicators
+## Registered strategies
 
-`src/aurex_trade/domain/strategy/indicators.py` provides reusable calculations:
+Two strategies are registered, both stateful grids:
 
-- `calculate_atr(bars, period)` — Average True Range (volatility measure)
+- **Ciby Sliding Grid** (`ciby_sliding_grid`) — the primary, live strategy.
+- **Ciby Hedged Doubling Grid** (`ciby_hedged_doubling_grid`) — experimental.
 
-## SMA Crossover
-
-**File:** `src/aurex_trade/domain/strategy/sma_crossover.py`
-
-A trend-following strategy using two Simple Moving Averages. The "fast" average
-tracks recent price action while the "slow" average captures the longer-term trend.
-
-### Signal Logic
-
-- **LONG**: Short SMA crosses above Long SMA (upward momentum)
-- **SHORT**: Short SMA crosses below Long SMA (downward momentum)
-- Crossing = compare previous bar's SMA positions to current bar's
-
-### Parameters
-
-| Key | Default | Range | Description |
-|-----|---------|-------|-------------|
-| `short_window` | 10 | 2-100 | Fast moving average lookback |
-| `long_window` | 30 | 5-500 | Slow moving average lookback |
-| `atr_multiplier` | 2.0 | 0.5-5.0 | Stop-loss distance in ATR units |
-| `atr_period` | 14 | 2-50 | ATR calculation lookback |
-
-### Minimum Bars Required
-
-`long_window + 1` — needs previous + current SMA to detect crossing.
-
-### When It Works Best
-
-Trending markets with clear directional moves. Produces false signals in
-sideways/choppy conditions.
-
-## RSI Mean-Reversion
-
-**File:** `src/aurex_trade/domain/strategy/rsi_mean_reversion.py`
-
-A counter-trend strategy using the Relative Strength Index. Identifies when
-selling/buying pressure is exhausted and price is likely to revert to the mean.
-
-### Signal Logic
-
-- **LONG**: RSI crosses below the oversold threshold (selling exhausted, expect bounce)
-- **SHORT**: RSI crosses above the overbought threshold (buying exhausted, expect fall)
-- Crossing = previous RSI on one side of threshold, current RSI on the other
-
-### RSI Calculation (Wilder's Method)
-
-1. Compute price changes: `change[i] = close[i] - close[i-1]`
-2. First average: simple mean of first `period` gains/losses
-3. Subsequent: Wilder's smoothing `avg = (prev_avg * (period-1) + current) / period`
-4. RS = avg_gain / avg_loss
-5. RSI = 100 - (100 / (1 + RS))
-
-### Parameters
-
-| Key | Default | Range | Description |
-|-----|---------|-------|-------------|
-| `period` | 14 | 2-50 | RSI lookback period |
-| `overbought` | 70 | 50-95 | Level above which asset is overbought |
-| `oversold` | 30 | 5-50 | Level below which asset is oversold |
-| `atr_multiplier` | 2.0 | 0.5-5.0 | Stop-loss distance in ATR units |
-| `atr_period` | 14 | 2-50 | ATR calculation lookback |
-
-### Minimum Bars Required
-
-`period + 2` — needs two consecutive RSI values to detect crossing.
-
-### When It Works Best
-
-Ranging/sideways markets where price oscillates around a mean. May give false
-signals during strong trends (price can stay overbought/oversold for extended
-periods in trending markets).
-
-## Ciby Hedged Grid
-
-**File:** `src/aurex_trade/domain/strategy/ciby_hedged_grid.py`
-
-A stateful grid strategy that places hedged pairs (buy + sell) at grid levels.
-Unlike simple strategies, it uses callbacks to track fills and closures, and
-manages its own session/daily risk limits.
-
-### Signal Logic
-
-- On first bar: anchor at current price, place initial hedged pair (market)
-- When price crosses a grid level: place limit order at that level
-- When a limit fills: runner places opposite market order (forming a pair)
-- Each position gets a stop-loss just past the adjacent grid level
-- Session profit target or loss limit triggers FLAT/close_all signal
-
-### Parameters
-
-| Key | Default | Range | Description |
-|-----|---------|-------|-------------|
-| `grid_spacing` | 10.0 | 5-50 | Distance between grid levels ($) |
-| `grid_units` | 10.0 | 1-100 | Units per grid pair |
-| `session_profit_target` | 100.0 | 10-5000 | Close all & restart when hit ($) |
-| `session_loss_limit` | 50.0 | 10-5000 | Close all & restart when hit ($) |
-| `daily_loss_limit` | 200.0 | 50-10000 | Stop trading for the day ($) |
-
-### Grid Strategy Protocol Extensions
-
-Grid strategies extend the base `Strategy` Protocol with additional methods:
+Grid strategies extend the base `Strategy` Protocol with callbacks the backtest
+runner and live engine drive on fills/closures:
 
 ```python
 def report_fill(self, grid_level_key: str, fill_price: float) -> None: ...
@@ -142,23 +43,44 @@ def update_unrealized_pnl(self, unrealized_pnl: float) -> None: ...
 
 The backtest runner auto-detects grid strategies via `hasattr(strategy, "report_fill")`
 and switches to grid orchestration mode (signal drain loop, limit order simulation,
-stop-loss enforcement, strategy callbacks).
+stop-loss enforcement, strategy callbacks). The risk engine is **disabled** for grid
+backtests — each strategy manages its own risk via session/daily loss limits.
 
-### Risk Engine
+## Ciby Sliding Grid
 
-The risk engine is **disabled** for grid backtests — the strategy manages its own
-risk via session/daily loss limits. Detection is automatic via duck-typing.
+**File:** `src/aurex_trade/domain/strategy/ciby_sliding_grid.py`
+
+The primary strategy. A stateful grid that places hedged pairs (buy + sell) around
+an anchor, then *slides* the active band as price trends — keeping a bounded number
+of levels ahead of and behind the market. Each leg carries a stop just past the next
+level; session profit-target / loss-limit / daily-loss-limit trigger a close-all and
+re-anchor.
+
+### Parameters
+
+| Key | Default | Range | Description |
+|-----|---------|-------|-------------|
+| `grid_spacing` | 10.0 | 5-50 | Distance between consecutive levels beyond the first ($) |
+| `anchor_gap` | 15.0 | 5-50 | Anchor to the first level above/below ($) |
+| `buy_sell_offset` | 0.90 | 0-5 | Gap between buy and sell of a hedged pair ($) |
+| `anchor_units` | 10.0 | 1-100 | Units per side of the hedged pair at the anchor |
+| `grid_units` | 20.0 | 1-100 | Units per side at non-anchor levels |
+| `stop_buffer` | 1.0 | 0-10 | Extra distance past the next level for the stop ($) |
+| `max_levels_ahead` | 2 | 1-10 | Max active levels on the trending side |
+| `max_levels_behind` | 1 | 1-10 | Max active levels on the trailing side |
+| `session_profit_target` | 100.0 | 10-5000 | Close all & restart when hit ($) |
+| `session_loss_limit` | 50.0 | 10-5000 | Close all & restart when hit ($) |
+| `daily_loss_limit` | 200.0 | 50-10000 | Stop trading for the day ($) |
 
 ### When It Works Best
 
 Volatile instruments with sustained directional moves (gold/XAU_USD). Oscillating
-markets within one grid band cost nothing (no stops hit).
+markets within one grid band cost little.
 
 ### When It Struggles
 
-Whipsaw markets where price repeatedly reverses at exactly stop-loss distance,
-hitting stops on both sides of pairs. Strong trends with tight grid spacing can
-also bleed through rapid stop-outs.
+Whipsaw markets where price repeatedly reverses at stop-loss distance, hitting stops
+on both sides of pairs. Regime-dependent — see the walk-forward findings.
 
 ## Ciby Hedged Doubling Grid
 
@@ -213,23 +135,6 @@ Sustained trends beyond the outer level. The doubled position loses, and
 hedged-pair short legs accumulate unrealised loss until the session loss limit
 fires a close-all.
 
-## Simple Grid
-
-**File:** `src/aurex_trade/domain/strategy/simple_grid.py`
-
-A direction-neutral grid that places orders when price crosses levels. Unlike the
-hedged grid, it places single-direction orders (not pairs).
-
-### Parameters
-
-| Key | Default | Range | Description |
-|-----|---------|-------|-------------|
-| `grid_spacing` | 10.0 | 5-50 | Distance between grid levels ($) |
-| `max_levels` | 6 | 2-20 | Maximum active grid levels |
-| `stop_distance` | 30.0 | 5-100 | Stop-loss distance ($) |
-| `num_levels_above` | 3 | 1-10 | Grid levels above anchor |
-| `num_levels_below` | 3 | 1-10 | Grid levels below anchor |
-
 ## Adding a New Strategy
 
 1. Create `src/aurex_trade/domain/strategy/your_strategy.py`
@@ -239,8 +144,7 @@ hedged grid, it places single-direction orders (not pairs).
      (e.g., `max(lookback_window + 1, atr_period + 1)`)
    - `generate(bars)` method with your signal logic
    - `metadata()` classmethod returning `StrategyMetadata` with `ParamMeta` entries
-3. Use `calculate_atr` from `indicators.py` for stop-loss (recommended)
-4. Register in `backtest/cli.py`:
+3. Register in `backtest/cli.py`:
    - Add factory to `STRATEGY_REGISTRY`
    - Add validator to `PARAM_VALIDATORS` (for param constraints)
    - Add to `STRATEGY_METADATA`

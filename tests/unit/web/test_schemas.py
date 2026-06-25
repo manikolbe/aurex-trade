@@ -17,17 +17,17 @@ class TestBacktestRequestValidation:
         assert req.symbol == "XAU_USD"
         assert req.granularity == "M1"
         assert req.capital == 100_000.0
-        assert req.strategy == "sma_crossover"
+        assert req.strategy == "ciby_sliding_grid"
         assert req.params == {}
 
     def test_strategy_and_params(self) -> None:
         """Strategy and params fields are accepted."""
         req = BacktestRequest(
-            strategy="rsi_mean_reversion",
-            params={"period": 14, "overbought": 70, "oversold": 30},
+            strategy="ciby_hedged_doubling_grid",
+            params={"spacing": 20, "units": 2, "trailing_stop_distance": 20},
         )
-        assert req.strategy == "rsi_mean_reversion"
-        assert req.params["period"] == 14
+        assert req.strategy == "ciby_hedged_doubling_grid"
+        assert req.params["spacing"] == 20
 
     def test_valid_date_format(self) -> None:
         """YYYY-MM-DD dates are accepted."""
@@ -126,13 +126,13 @@ class TestSweepRequestValidation:
 
     def test_valid_params(self) -> None:
         """Normal parameter grid is accepted."""
-        req = SweepRequest(params={"short_window": [5, 10], "long_window": [20, 30]})
-        assert req.params == {"short_window": [5, 10], "long_window": [20, 30]}
+        req = SweepRequest(params={"grid_spacing": [5, 10], "anchor_gap": [15, 20]})
+        assert req.params == {"grid_spacing": [5, 10], "anchor_gap": [15, 20]}
 
     def test_too_many_values_per_param(self) -> None:
         """More than 50 values per parameter list is rejected."""
         with pytest.raises(ValidationError, match="at most 50"):
-            SweepRequest(params={"short_window": list(range(51))})
+            SweepRequest(params={"grid_spacing": list(range(51))})
 
     def test_too_many_combinations(self) -> None:
         """Total combinations exceeding 1000 is rejected."""
@@ -140,8 +140,8 @@ class TestSweepRequestValidation:
         with pytest.raises(ValidationError, match="exceeds limit"):
             SweepRequest(
                 params={
-                    "short_window": list(range(1, 51)),  # 50 values
-                    "long_window": list(range(1, 51)),  # 50 values
+                    "grid_spacing": list(range(1, 51)),  # 50 values
+                    "anchor_gap": list(range(1, 51)),  # 50 values
                     "extra": [1, 2],  # 2 values → 50*50*2 = 5000
                 }
             )
@@ -151,11 +151,11 @@ class TestSweepRequestValidation:
         # 50 * 20 = 1000
         req = SweepRequest(
             params={
-                "short_window": list(range(1, 51)),  # 50 values
-                "long_window": list(range(1, 21)),  # 20 values
+                "grid_spacing": list(range(1, 51)),  # 50 values
+                "anchor_gap": list(range(1, 21)),  # 20 values
             }
         )
-        assert len(req.params["short_window"]) == 50
+        assert len(req.params["grid_spacing"]) == 50
 
     def test_too_many_param_keys(self) -> None:
         """More than 10 parameter keys is rejected."""
@@ -172,7 +172,7 @@ class TestSweepRequestValidation:
         """SweepRequest uses the same date validation."""
         with pytest.raises(ValidationError, match="YYYY-MM-DD"):
             SweepRequest(
-                params={"short_window": [5, 10]},
+                params={"grid_spacing": [5, 10]},
                 start_date="not-a-date",
             )
 
@@ -180,7 +180,7 @@ class TestSweepRequestValidation:
         """SweepRequest uses the same granularity validation."""
         with pytest.raises(ValidationError, match="Unknown granularity"):
             SweepRequest(
-                params={"short_window": [5, 10]},
+                params={"grid_spacing": [5, 10]},
                 granularity="XX",
             )
 
@@ -191,7 +191,7 @@ class TestWalkForwardRequestValidation:
     def test_valid_request(self) -> None:
         """Normal walk-forward request is accepted."""
         req = WalkForwardRequest(
-            params={"short_window": [5, 10], "long_window": [20, 30]},
+            params={"grid_spacing": [5, 10], "anchor_gap": [20, 30]},
             train_bars=5000,
             test_bars=2000,
         )
@@ -202,7 +202,7 @@ class TestWalkForwardRequestValidation:
         """Train bars must be > 0."""
         with pytest.raises(ValidationError):
             WalkForwardRequest(
-                params={"short_window": [5, 10]},
+                params={"grid_spacing": [5, 10]},
                 train_bars=0,
             )
 
@@ -210,11 +210,11 @@ class TestWalkForwardRequestValidation:
         """Test bars must be > 0."""
         with pytest.raises(ValidationError):
             WalkForwardRequest(
-                params={"short_window": [5, 10]},
+                params={"grid_spacing": [5, 10]},
                 test_bars=0,
             )
 
     def test_inherits_param_validation(self) -> None:
         """WalkForwardRequest uses the same param grid limits."""
         with pytest.raises(ValidationError, match="at most 50"):
-            WalkForwardRequest(params={"short_window": list(range(51))})
+            WalkForwardRequest(params={"grid_spacing": list(range(51))})

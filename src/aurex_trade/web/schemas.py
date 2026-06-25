@@ -103,7 +103,7 @@ class MetricsResponse(BaseModel):
 class BacktestRequest(BaseModel):
     """Request to run a single backtest."""
 
-    strategy: str = "sma_crossover"
+    strategy: str = "ciby_sliding_grid"
     params: dict[str, int | float] = Field(default_factory=dict)
     symbol: Symbol = "XAU_USD"
     granularity: Granularity = "M1"
@@ -162,7 +162,7 @@ class BacktestResultResponse(BaseModel):
 class SweepRequest(BaseModel):
     """Request to run a parameter sweep."""
 
-    strategy: str = "sma_crossover"
+    strategy: str = "ciby_sliding_grid"
     params: dict[str, list[int | float]] = Field(..., max_length=10)
     symbol: Symbol = "XAU_USD"
     granularity: Granularity = "M1"
@@ -241,7 +241,7 @@ class SweepResultResponse(BaseModel):
 class WalkForwardRequest(BaseModel):
     """Request to run walk-forward validation."""
 
-    strategy: str = "sma_crossover"
+    strategy: str = "ciby_sliding_grid"
     params: dict[str, list[int | float]] = Field(..., max_length=10)
     symbol: Symbol = "XAU_USD"
     granularity: Granularity = "M1"

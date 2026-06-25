@@ -1,4 +1,4 @@
-"""Integration test — full SMA backtest on synthetic data, deterministic."""
+"""Integration test — full stateless backtest on synthetic data, deterministic."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -11,13 +11,13 @@ from aurex_trade.backtest.config import BacktestConfig
 from aurex_trade.backtest.runner import BacktestRunner
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
-from aurex_trade.domain.strategy.sma_crossover import SMACrossover
+from tests.conftest import StatelessTestStrategy
 
 
 def _make_trending_bars(count: int) -> list[BarData]:
     """Generate bars with a clear uptrend followed by downtrend.
 
-    This ensures the SMA crossover strategy will generate signals.
+    This ensures the stateless SMA-cross strategy will generate signals.
     """
     bars = []
     start = datetime(2025, 1, 1, tzinfo=UTC)
@@ -45,8 +45,8 @@ def _make_trending_bars(count: int) -> list[BarData]:
 
 @pytest.mark.integration
 class TestBacktestEndToEnd:
-    def test_sma_crossover_on_trending_data(self) -> None:
-        """Full backtest with real SMA strategy on synthetic trending data."""
+    def test_stateless_strategy_on_trending_data(self) -> None:
+        """Full backtest with the stateless SMA-cross strategy on trending data."""
         bars = _make_trending_bars(200)
         config = BacktestConfig(
             symbol="TEST",
@@ -59,7 +59,7 @@ class TestBacktestEndToEnd:
             bar_count=35,
         )
 
-        strategy = SMACrossover(short_window=10, long_window=30)
+        strategy = StatelessTestStrategy(short_window=10, long_window=30)
         risk_engine = RiskEngine(
             max_position_size=10,
             max_daily_loss=5000.0,
@@ -88,7 +88,7 @@ class TestBacktestEndToEnd:
         result = runner.run()
 
         # Verify structure
-        assert result.strategy_name == "sma_crossover"
+        assert result.strategy_name == "stateless_test"
         assert result.symbol == "TEST"
         assert len(result.trades) > 0  # Orders were executed
         assert result.metrics.initial_capital == 100_000.0

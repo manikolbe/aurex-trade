@@ -16,42 +16,42 @@ class TestStrategyDefaultsEndpoints:
 
     def test_put_and_get_strategy_defaults(self, client: TestClient) -> None:
         resp = client.put(
-            "/api/user-defaults/strategy/sma_crossover",
-            json={"params": {"short_window": 15, "long_window": 40}, "is_preferred": True},
+            "/api/user-defaults/strategy/ciby_sliding_grid",
+            json={"params": {"grid_spacing": 15, "anchor_gap": 40}, "is_preferred": True},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["preferred_strategy"] == "sma_crossover"
-        assert data["strategies"]["sma_crossover"] == {"short_window": 15, "long_window": 40}
+        assert data["preferred_strategy"] == "ciby_sliding_grid"
+        assert data["strategies"]["ciby_sliding_grid"] == {"grid_spacing": 15, "anchor_gap": 40}
 
         # Verify GET returns the same
         resp = client.get("/api/user-defaults/strategy")
         data = resp.json()
-        assert data["preferred_strategy"] == "sma_crossover"
-        assert data["strategies"]["sma_crossover"] == {"short_window": 15, "long_window": 40}
+        assert data["preferred_strategy"] == "ciby_sliding_grid"
+        assert data["strategies"]["ciby_sliding_grid"] == {"grid_spacing": 15, "anchor_gap": 40}
 
     def test_put_preferred_clears_old(self, client: TestClient) -> None:
         client.put(
-            "/api/user-defaults/strategy/sma_crossover",
-            json={"params": {"short_window": 10}, "is_preferred": True},
+            "/api/user-defaults/strategy/ciby_sliding_grid",
+            json={"params": {"grid_spacing": 10}, "is_preferred": True},
         )
         client.put(
-            "/api/user-defaults/strategy/rsi_mean_reversion",
-            json={"params": {"period": 14}, "is_preferred": True},
+            "/api/user-defaults/strategy/ciby_hedged_doubling_grid",
+            json={"params": {"spacing": 20}, "is_preferred": True},
         )
         data = client.get("/api/user-defaults/strategy").json()
-        assert data["preferred_strategy"] == "rsi_mean_reversion"
+        assert data["preferred_strategy"] == "ciby_hedged_doubling_grid"
 
     def test_delete_strategy_defaults(self, client: TestClient) -> None:
         client.put(
-            "/api/user-defaults/strategy/sma_crossover",
-            json={"params": {"short_window": 15}, "is_preferred": False},
+            "/api/user-defaults/strategy/ciby_sliding_grid",
+            json={"params": {"grid_spacing": 15}, "is_preferred": False},
         )
-        resp = client.delete("/api/user-defaults/strategy/sma_crossover")
+        resp = client.delete("/api/user-defaults/strategy/ciby_sliding_grid")
         assert resp.status_code == 204
 
         data = client.get("/api/user-defaults/strategy").json()
-        assert "sma_crossover" not in data["strategies"]
+        assert "ciby_sliding_grid" not in data["strategies"]
 
 
 class TestRiskDefaultsEndpoints:
@@ -125,8 +125,8 @@ class TestAllDefaultsEndpoint:
 
     def test_get_all_defaults_combined(self, client: TestClient) -> None:
         client.put(
-            "/api/user-defaults/strategy/sma_crossover",
-            json={"params": {"short_window": 15}, "is_preferred": True},
+            "/api/user-defaults/strategy/ciby_sliding_grid",
+            json={"params": {"grid_spacing": 15}, "is_preferred": True},
         )
         client.put(
             "/api/user-defaults/risk",
@@ -148,8 +148,8 @@ class TestAllDefaultsEndpoint:
         )
 
         data = client.get("/api/user-defaults/all").json()
-        assert data["preferred_strategy"] == "sma_crossover"
-        assert data["strategy_params"]["sma_crossover"] == {"short_window": 15}
+        assert data["preferred_strategy"] == "ciby_sliding_grid"
+        assert data["strategy_params"]["ciby_sliding_grid"] == {"grid_spacing": 15}
         assert data["risk_settings"]["max_position"] == 20
 
 

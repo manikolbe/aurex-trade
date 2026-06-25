@@ -32,95 +32,9 @@ steps, and you get a specific output (a buy or sell decision).
 
 ## The Strategies
 
-AurexTrade offers several strategies. They work in different ways, which means
-they perform best in different market conditions.
-
-### SMA Crossover (Trend-Following)
-
-**The idea:** Follow the trend. If the price has been going up, keep buying.
-If it's been going down, keep selling.
-
-**How it works:**
-
-Imagine smoothing out a bumpy price chart into two lines:
-
-- A **fast line** (short window) — reacts quickly to price changes
-- A **slow line** (long window) — moves more gradually
-
-When the fast line crosses *above* the slow line, the market is trending up — **buy**.
-When the fast line crosses *below* the slow line, the market is trending down — **sell**.
-
-**When it works best:** Markets that have clear upward or downward trends.
-
-**When it struggles:** Markets that bounce sideways without a clear direction.
-
-**Analogy:** It's like following a river's current. You don't fight the flow — you
-go where the water is already moving.
-
----
-
-### RSI Mean-Reversion (Counter-Trend)
-
-**The idea:** What goes up too far will come back down, and vice versa. Buy when
-the market has fallen too much. Sell when it has risen too much.
-
-**How it works:**
-
-The RSI (Relative Strength Index) measures how "exhausted" the price movement is
-on a scale of 0 to 100:
-
-- **Below 30** = oversold — the price has fallen too far, too fast. Expect a bounce. **Buy.**
-- **Above 70** = overbought — the price has risen too far, too fast. Expect a pullback. **Sell.**
-
-**When it works best:** Markets that bounce between a range (sideways/choppy markets).
-
-**When it struggles:** Strong trending markets where "overbought" keeps going higher.
-
-**Analogy:** It's like a rubber band. The further you stretch it from the middle,
-the harder it snaps back.
-
-### Ciby Hedged Grid (Direction-Neutral, Paired)
-
-**The idea:** A grid trading strategy developed by legendary gold trader Ciby.
-Don't predict direction — instead, open a **hedged pair** (one buy AND one sell)
-at each grid level. One side profits while the other gets stopped out. In a
-sustained trend, the winning sides accumulate while losers are capped. In a
-sideways market within one grid band, no stops are hit — zero cost optionality.
-
-**How it works:**
-
-When the bot starts a session, it takes the current price as the **anchor** and
-places a hedged pair (buy + sell) immediately. Then it draws grid levels at
-regular intervals above and below the anchor.
-
-- When price crosses **any grid level** — place a new hedged pair (buy + sell) at
-  that level
-- Each position gets a stop-loss just past the adjacent grid level
-
-The key insight: in a trending market, the winning sides of your pairs stay open
-and accumulate profit, while the losing sides get stopped out for a small,
-predictable loss. The net result is profit proportional to the trend's strength.
-
-**Session management:**
-
-- **Session profit target:** When total realized P&L hits the target, close
-  everything and restart fresh at the new price
-- **Session loss limit:** When losses exceed the limit, close everything and
-  restart fresh (prevents whipsaw damage)
-- **Daily loss limit:** When cumulative daily losses exceed this threshold, stop
-  trading entirely until the next day
-
-**When it works best:** Volatile instruments that trend (gold/XAU_USD is ideal).
-Any sustained directional move generates profit.
-
-**When it struggles:** Extreme whipsaw markets where price repeatedly reverses
-exactly at stop-loss distance, hitting stops on both sides of pairs.
-
-**Analogy:** It's like betting on both red and black at roulette — except in
-markets, one side can run far further than the other. You always lose one bet,
-but the winning bet can pay multiples of the losing one.
-
----
+AurexTrade offers two strategies, both **grid** strategies built for gold
+(XAU_USD). They don't try to predict direction — they place orders around the
+current price and manage risk through session and daily limits.
 
 ### Ciby Sliding Grid (Direction-Neutral, Sliding Window)
 
@@ -284,12 +198,8 @@ does the work.
 
 | Market Condition | Best Strategy |
 |-----------------|---------------|
-| Clear trends (up or down for weeks) | SMA Crossover |
-| Choppy, sideways, range-bound | RSI Mean-Reversion |
-| Volatile with sustained moves (gold) | Ciby Hedged Grid |
 | Sustained trends, with margin kept under control | Ciby Sliding Grid |
 | Quiet ranges followed by breakouts | Ciby Hedged Doubling Grid |
-| Uncertain direction, want to capture either way | Simple Grid |
 | Not sure | Test with a backtest and compare results |
 
 In practice, no one knows in advance what the market will do. That's why testing
@@ -380,7 +290,7 @@ won't work on future data either.
 ### Step 2: Parameter Sweep
 
 **What it does:** Tests every combination of strategy settings (e.g., different
-moving average lengths) and ranks them by performance.
+grid spacings and anchor gaps) and ranks them by performance.
 
 **Why it matters:** The same strategy can be profitable with one set of parameters
 and unprofitable with another. A sweep finds the best settings systematically.

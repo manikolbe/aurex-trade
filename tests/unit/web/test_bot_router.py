@@ -29,8 +29,8 @@ class TestBotStart:
         resp = client.post(
             "/api/bot/start",
             json={
-                "strategy_name": "sma_crossover",
-                "strategy_params": {"short_window": 10, "long_window": 30},
+                "strategy_name": "ciby_sliding_grid",
+                "strategy_params": {"grid_spacing": 10, "anchor_gap": 15},
                 "risk_params": {},
                 "symbol": "XAU_USD",
                 "interval_seconds": 60,
@@ -51,13 +51,13 @@ class TestBotStart:
             engine=engine,
             connection=connection,
             symbol="XAU_USD",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
         )
         try:
             resp = client.post(
                 "/api/bot/start",
                 json={
-                    "strategy_name": "sma_crossover",
+                    "strategy_name": "ciby_sliding_grid",
                     "strategy_params": {},
                     "risk_params": {},
                     "symbol": "XAU_USD",
@@ -102,8 +102,8 @@ class TestBotStart:
         resp = client.post(
             "/api/bot/start",
             json={
-                "strategy_name": "sma_crossover",
-                "strategy_params": {"short_window": 10, "long_window": 30},
+                "strategy_name": "ciby_sliding_grid",
+                "strategy_params": {"grid_spacing": 10, "anchor_gap": 15},
                 "risk_params": {},
                 "symbol": "XAU_USD",
                 "interval_seconds": 60,
@@ -112,7 +112,7 @@ class TestBotStart:
         assert resp.status_code == 200
         data = resp.json()
         assert data["running"] is True
-        assert data["strategy_name"] == "sma_crossover"
+        assert data["strategy_name"] == "ciby_sliding_grid"
         assert data["symbol"] == "XAU_USD"
 
         # Release the engine thread and cleanup
@@ -142,7 +142,7 @@ class TestBotStop:
             engine=engine,
             connection=connection,
             symbol="XAU_USD",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
         )
         resp = client.post("/api/bot/stop")
         assert resp.json()["running"] is False
@@ -179,7 +179,7 @@ class TestBotMetrics:
             engine=engine,
             connection=connection,
             symbol="XAU_USD",
-            strategy_name="sma_crossover",
+            strategy_name="ciby_sliding_grid",
         )
         try:
             resp = client.get("/api/bot/metrics")

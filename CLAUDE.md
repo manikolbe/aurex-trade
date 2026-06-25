@@ -40,9 +40,8 @@ src/aurex_trade/
 │   ├── models.py       # Frozen dataclasses: BarData, Signal, Order, Trade, Position
 │   ├── strategy/
 │   │   ├── base.py         # Strategy Protocol + StrategyMetadata
-│   │   ├── indicators.py   # Shared: calculate_atr()
-│   │   ├── sma_crossover.py    # SMA Crossover implementation
-│   │   └── rsi_mean_reversion.py  # RSI Mean-Reversion implementation
+│   │   ├── ciby_sliding_grid.py        # Ciby Sliding Grid (primary, live)
+│   │   └── ciby_hedged_doubling_grid.py  # Ciby Hedged Doubling Grid (experimental)
 │   └── risk/
 │       └── engine.py   # RiskEngine — gates ALL trade decisions
 ├── ports/              # Protocol interfaces (BrokerPort, MarketDataPort, RepositoryPort, HistoricalDataPort, CredentialStorePort)
@@ -168,10 +167,10 @@ ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs -f --tail=10 
 
 # Backtesting (see docs/backtesting.md for full details)
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
-just backtest --strategy sma_crossover --param short_window=10 --param long_window=30
-just backtest --strategy rsi_mean_reversion --param period=14 --param overbought=70 --param oversold=30
-just sweep --strategy sma_crossover --param short_window=5,10,20 --param long_window=20,30,50 --spread 0.6
-just walk-forward --strategy rsi_mean_reversion --param period=7,14,21 --param overbought=70,75 --param oversold=25,30
+just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param anchor_gap=15
+just backtest --strategy ciby_hedged_doubling_grid --param spacing=20 --param units=2
+just sweep --strategy ciby_sliding_grid --param grid_spacing=5,10,20 --param anchor_gap=10,15 --spread 0.6
+just walk-forward --strategy ciby_sliding_grid --param grid_spacing=5,10 --param stop_buffer=1,3
 ```
 
 ## Bot Configuration (Web UI)
@@ -188,8 +187,10 @@ Configuration is per-user (stored in SQLite via user preferences).
 | **Interval** | Seconds between cycles | `60` | 1 min for testing, 300+ for production |
 | **Granularity** | OANDA candle granularity | `M1` | Must align with interval |
 
-> The other registered strategies (`ciby_hedged_grid`, `ciby_hedged_doubling_grid`,
-> `simple_grid`, `sma_crossover`, `rsi_mean_reversion`) are stale and not used.
+> Only two strategies are registered: `ciby_sliding_grid` (primary, live) and
+> `ciby_hedged_doubling_grid` (experimental). The previously-registered
+> `ciby_hedged_grid`, `simple_grid`, `sma_crossover`, and `rsi_mean_reversion`
+> were removed as stale.
 
 ### Ciby Sliding Grid Strategy Parameters
 

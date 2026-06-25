@@ -198,8 +198,8 @@ Quick definitions of terms you'll encounter in AurexTrade.
     financial risk. Also called a "demo account".
 
 **Parameter**
-:   A setting that controls how a strategy behaves. For example, the "short window"
-    in SMA Crossover controls how quickly the fast moving average reacts.
+:   A setting that controls how a strategy behaves. For example, the "grid spacing"
+    in Ciby Sliding Grid controls how far apart the grid levels sit.
 
 **Parameter Sweep**
 :   Testing every combination of parameter values to find the best-performing
