@@ -406,6 +406,27 @@ class TestDisplayState:
         assert state["doubled_side"] == "long"
         assert state["doubled_active"] is True
 
+    def test_display_state_carries_no_financial_fields(self) -> None:
+        """Display state is positional/structural only — no headline P&L figures.
+        Those are engine-sourced (balance-delta truth) and rendered by the shared
+        UI chrome. Mixing the two sources was the split-brain bug (issue #74).
+        """
+        strategy = _make_strategy(spacing=10.0)
+        _drain_all(strategy, _bars(23.0))
+        state = strategy.get_display_state()
+        assert state is not None
+        forbidden = {
+            "session_pnl",
+            "session_realized_pnl",
+            "session_unrealized_pnl",
+            "daily_pnl",
+            "session_profit_target",
+            "session_loss_limit",
+            "daily_loss_limit",
+            "session_history",
+        }
+        assert forbidden.isdisjoint(state.keys())
+
 
 class TestNotifyCloseAllComplete:
     """Test session restart and whipsaw-stop behavior."""

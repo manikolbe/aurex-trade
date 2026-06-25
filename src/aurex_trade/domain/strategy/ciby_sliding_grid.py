@@ -789,23 +789,20 @@ class CibySlidingGridStrategy:
             grid_levels.append(self._level_display(level))
         grid_levels.reverse()  # Highest price first
 
+        # POSITIONAL / STRUCTURAL fields only. Headline financial figures
+        # (session/daily/realized P&L, session history) are sourced authoritatively
+        # from the engine's balance-delta truth (get_financials / get_metrics /
+        # get_session_history) and rendered by the shared UI chrome — never from
+        # here. Mixing the two sources was the split-brain bug (issue #74).
         return {
             "type": "paired_grid",
             "anchor_price": anchor,
             "current_price": self._current_price,
             "grid_levels": grid_levels,
-            "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
-            "session_realized_pnl": self._session_realized_pnl,
-            "session_unrealized_pnl": self._session_unrealized_pnl,
-            "session_profit_target": self._session_profit_target,
-            "session_loss_limit": self._session_loss_limit,
-            "daily_pnl": self._daily_realized_pnl + self._session_unrealized_pnl,
-            "daily_loss_limit": self._daily_loss_limit,
             "session_count": self._session_count,
             "session_active": self._session_active,
             "filled_count": sum(len(s) for s in self._filled.values()),
             "placed_count": sum(len(s) for s in self._placed.values()),
-            "session_history": list(self._session_history),
         }
 
     def _level_display(self, level: float) -> dict[str, object]:

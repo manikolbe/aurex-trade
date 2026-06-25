@@ -503,10 +503,10 @@ class TestAuthoritativeRealizedPnl:
         _drain_all(strategy, [_bar(4100.0)])
         strategy.set_realized_pnl(-40.0, -40.0)
         strategy.update_unrealized_pnl(50.0)
-        state = strategy.get_display_state()
-        assert state is not None
-        # Net session P&L is realized + unrealized = +10, NOT +50.
-        assert state["session_pnl"] == 10.0
+        # Net session P&L the strategy acts on is realized + unrealized = +10,
+        # NOT +50. (Display state no longer carries P&L figures — issue #74 —
+        # so assert on the internal tally the profit-target check reads.)
+        assert strategy._session_realized_pnl + strategy._session_unrealized_pnl == 10.0
 
     def test_authoritative_realized_triggers_loss_limit(self) -> None:
         strategy = _new()
@@ -546,22 +546,30 @@ class TestDisplayState:
         strategy = _new()
         assert strategy.get_display_state() is None
 
-    def test_session_pnl_split_into_realized_and_unrealized(self) -> None:
-        """Display state exposes realized and unrealized P&L separately so the UI
-        can show banked (closed-trade) losses, not just open floating cells.
+    def test_display_state_carries_no_financial_fields(self) -> None:
+        """Display state is positional/structural only — it must NOT carry any
+        headline financial figures. Those are engine-sourced (balance-delta truth)
+        and rendered by the shared UI chrome. Mixing the two sources was the
+        split-brain bug (issue #74).
         """
         strategy = _new()
         _drain_all(strategy, [_bar(4100.0)])
-        # Bank a closed-trade loss and set current floating P&L.
         strategy.report_trade_closed("4115.00_long", -40.0, "close_sl")
         strategy.update_unrealized_pnl(12.0)
 
         state = strategy.get_display_state()
         assert state is not None
-        assert state["session_realized_pnl"] == -40.0
-        assert state["session_unrealized_pnl"] == 12.0
-        # The combined gauge value is the sum of the two halves.
-        assert state["session_pnl"] == -28.0
+        forbidden = {
+            "session_pnl",
+            "session_realized_pnl",
+            "session_unrealized_pnl",
+            "daily_pnl",
+            "session_profit_target",
+            "session_loss_limit",
+            "daily_loss_limit",
+            "session_history",
+        }
+        assert forbidden.isdisjoint(state.keys())
 
     def test_order_type_in_display_state(self) -> None:
         """Each side reports its entry order type (limit/stop/market) for the UI."""

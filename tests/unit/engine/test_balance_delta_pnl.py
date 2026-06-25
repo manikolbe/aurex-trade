@@ -23,6 +23,7 @@ def _build_engine(
 ) -> tuple[TradingEngine, MagicMock, CibySlidingGridStrategy]:
     broker = MagicMock()
     broker.equity = start_balance
+    broker.get_positions.return_value = None  # flat — get_metrics reads this
     broker.get_account_summary.return_value = {
         "balance": start_balance,
         "unrealized_pnl": 0.0,
@@ -83,10 +84,10 @@ class TestBalanceDeltaPush:
         engine, _broker, strategy = _build_engine(100_000.0)
         _seed_balance_anchors(engine, 100_000.0)
         engine._push_realized_pnl(99_940.0)  # -60 < -50 session loss limit
+        # Below the -50 loss limit purely from realized P&L. The strategy acts on
+        # its internal tally; the UI reads the engine's balance-delta truth.
+        # (Display state no longer carries P&L figures — issue #74.)
         assert strategy._session_realized_pnl == -60.0
-        state = strategy.get_display_state()
-        # Below the -50 loss limit purely from realized P&L.
-        assert state is None or state["session_realized_pnl"] == -60.0
 
     def test_day_rollover_reanchors_daily_baseline(self) -> None:
         engine, _broker, strategy = _build_engine(100_000.0)
@@ -105,3 +106,65 @@ class TestBalanceDeltaPush:
         del broker.get_account_summary
         # Anchors never seeded; calling the strategy push path is a no-op guard.
         assert engine._session_start_balance is None
+
+
+class TestAuthoritativeFinancials:
+    """get_financials()/get_metrics() expose balance-delta truth for the UI.
+
+    These are the single authoritative source for headline P&L (issue #74); the
+    strategy display state no longer carries any financial figures.
+    """
+
+    def test_metrics_report_balance_delta_pnl(self) -> None:
+        engine, broker, _strategy = _build_engine(100_000.0)
+        _seed_balance_anchors(engine, 100_000.0)
+        # Session started at 99_950 (already -50 on the day before this session),
+        # day started at 99_900. Current balance 99_930.
+        engine._session_start_balance = 99_950.0
+        engine._day_start_balance = 99_900.0
+        broker.get_account_summary.return_value = {
+            "balance": 99_930.0,
+            "unrealized_pnl": 12.0,
+            "open_position_count": 1,
+        }
+        engine._last_balance = 99_930.0
+
+        metrics = engine.get_metrics()
+        assert metrics["realized_pnl"] == -70.0  # run delta: 99_930 - 100_000
+        assert metrics["session_realized_pnl"] == -20.0  # 99_930 - 99_950
+        assert metrics["daily_pnl"] == 30.0  # 99_930 - 99_900
+
+    def test_financials_combine_realized_and_floating(self) -> None:
+        engine, broker, _strategy = _build_engine(100_000.0)
+        _seed_balance_anchors(engine, 100_000.0)
+        broker.get_account_summary.return_value = {
+            "balance": 99_960.0,  # -40 realized this session
+            "unrealized_pnl": 15.0,  # floating
+            "open_position_count": 1,
+        }
+        engine._last_balance = 99_960.0
+
+        fin = engine.get_financials()
+        # Net session P&L = banked (-40) + floating (+15) = -25.
+        assert fin["session_realized_pnl"] == -40.0
+        assert fin["session_unrealized_pnl"] == 15.0
+        assert fin["session_pnl"] == -25.0
+        # Configured limits come from the strategy.
+        assert fin["session_loss_limit"] == 50.0
+        assert fin["session_profit_target"] == 30.0
+        assert fin["daily_loss_limit"] == 200.0
+
+    def test_financials_omit_missing_limits(self) -> None:
+        # A strategy without a profit target reports None for it (the UI then
+        # renders a one-sided gauge). Simulate by clearing the attribute.
+        engine, broker, strategy = _build_engine(100_000.0)
+        _seed_balance_anchors(engine, 100_000.0)
+        del strategy._session_profit_target
+        broker.get_account_summary.return_value = {
+            "balance": 100_000.0,
+            "unrealized_pnl": 0.0,
+            "open_position_count": 0,
+        }
+        fin = engine.get_financials()
+        assert fin["session_profit_target"] is None
+        assert fin["session_loss_limit"] == 50.0

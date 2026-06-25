@@ -101,6 +101,8 @@ class EngineMetrics(TypedDict):
     open_units: float
     open_side: str
     realized_pnl: float
+    session_realized_pnl: float
+    daily_pnl: float
     win_rate: float | None
     avg_slippage: float | None
     current_price: float | None
@@ -537,6 +539,46 @@ class TradingEngine:
 
         return result
 
+    def get_financials(self) -> dict[str, float | None]:
+        """Return the AUTHORITATIVE headline financial figures for the UI.
+
+        This is the single source the bot UI must use for session / daily /
+        realized P&L. Current values are balance-delta truth (computed in
+        get_metrics from the run/session/day balance anchors); the gauge bounds
+        are the strategy's configured limits, read here so the strategy's own
+        display state never has to carry P&L figures. A strategy without a
+        given limit (e.g. the doubling grid has no profit target) reports None
+        for it, and the UI omits that bound.
+        """
+        metrics = self.get_metrics()
+        session_loss_limit = getattr(self._strategy, "_session_loss_limit", None)
+        session_profit_target = getattr(self._strategy, "_session_profit_target", None)
+        daily_loss_limit = getattr(self._strategy, "_daily_loss_limit", None)
+        session_realized = metrics["session_realized_pnl"]
+        unrealized = metrics["unrealized_pnl"]
+        return {
+            # Net session P&L = banked (balance-delta) + floating (open positions).
+            # The gauge bound it against the profit target / loss limit below.
+            "session_pnl": session_realized + unrealized,
+            "session_realized_pnl": session_realized,
+            "session_unrealized_pnl": unrealized,
+            # Daily P&L (balance-delta realized) + floating, mirroring session.
+            "daily_pnl": metrics["daily_pnl"] + unrealized,
+            "realized_pnl": metrics["realized_pnl"],
+            "unrealized_pnl": unrealized,
+            "session_loss_limit": (
+                float(session_loss_limit) if session_loss_limit is not None else None
+            ),
+            "session_profit_target": (
+                float(session_profit_target)
+                if session_profit_target is not None
+                else None
+            ),
+            "daily_loss_limit": (
+                float(daily_loss_limit) if daily_loss_limit is not None else None
+            ),
+        }
+
     def get_risk_summary(self) -> dict[str, float]:
         """Return risk summary calculations for UI display.
 
@@ -661,8 +703,22 @@ class TradingEngine:
         else:
             open_side = "flat"
 
-        # Realized P&L from broker
+        # Realized P&L — AUTHORITATIVE balance-delta truth (balance excludes
+        # unrealized, so a delta is exactly realized P&L). These are the single
+        # source the UI must use for headline figures; per-strategy tallies are
+        # display-only. When the broker exposes no balance (paper/backtest),
+        # the anchors stay None and we fall back to the broker's per-position
+        # realized figure / zero so the metric is still well-defined.
         realized_pnl = position.realized_pnl if position else 0.0
+        session_realized_pnl = 0.0
+        daily_pnl = 0.0
+        if self._last_balance is not None:
+            if self._run_start_balance is not None:
+                realized_pnl = self._last_balance - self._run_start_balance
+            if self._session_start_balance is not None:
+                session_realized_pnl = self._last_balance - self._session_start_balance
+            if self._day_start_balance is not None:
+                daily_pnl = self._last_balance - self._day_start_balance
 
         # Win rate from session trade P&Ls
         win_rate: float | None = None
@@ -691,6 +747,8 @@ class TradingEngine:
             open_units=abs(open_units),
             open_side=open_side,
             realized_pnl=realized_pnl,
+            session_realized_pnl=session_realized_pnl,
+            daily_pnl=daily_pnl,
             win_rate=win_rate,
             avg_slippage=avg_slippage,
             current_price=self._last_price,
@@ -1094,11 +1152,12 @@ class TradingEngine:
         if session_realized is not None:
             session_pnl = session_realized
         else:
-            get_state = getattr(self._strategy, "get_display_state", None)
-            if get_state is not None:
-                state = get_state()
-                if state and "session_pnl" in state:
-                    session_pnl = float(state["session_pnl"])
+            # Balance unavailable — fall back to the strategy's own realized tally.
+            # Read the attribute directly: get_display_state() no longer carries
+            # financial figures (issue #74), only positional state.
+            strat_realized = getattr(self._strategy, "_session_realized_pnl", None)
+            if isinstance(strat_realized, (int, float)):
+                session_pnl = float(strat_realized)
 
         self._session_history.append(SessionSummary(
             session_number=len(self._session_history) + 1,

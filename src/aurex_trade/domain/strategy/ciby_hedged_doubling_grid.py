@@ -473,15 +473,15 @@ class CibyHedgedDoublingGridStrategy:
 
         max_whipsaw = max(self._level_trigger_counts.values()) if self._level_trigger_counts else 0
 
+        # POSITIONAL / STRUCTURAL fields only. Headline financial figures
+        # (session/daily/realized P&L) are sourced authoritatively from the
+        # engine's balance-delta truth (get_financials / get_metrics) and rendered
+        # by the shared UI chrome — never from here. See issue #74.
         return {
             "type": "doubled_grid",
             "anchor_price": self._anchor_price,
             "current_price": self._current_price,
             "grid_levels": grid_levels,
-            "session_pnl": self._session_realized_pnl + self._session_unrealized_pnl,
-            "session_realized_pnl": self._session_realized_pnl,
-            "session_unrealized_pnl": self._session_unrealized_pnl,
-            "session_loss_limit": self._session_loss_limit,
             "doubled_level": self._doubled_level,
             "doubled_side": self._doubled_side,
             "doubled_active": self._doubled_active,

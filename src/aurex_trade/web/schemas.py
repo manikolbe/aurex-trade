@@ -378,6 +378,8 @@ class BotMetricsResponse(BaseModel):
     open_units: float = 0.0
     open_side: str = "flat"
     realized_pnl: float = 0.0
+    session_realized_pnl: float = 0.0
+    daily_pnl: float = 0.0
     win_rate: float | None = None
     avg_slippage: float | None = None
     current_price: float | None = None

@@ -115,6 +115,10 @@
             <!-- Sticky live-price ticker: stays pinned to the top while the grid
                  scrolls, so the current price is always visible on mobile. -->
             <div id="bot-price-ticker" class="sticky top-0 z-10 bg-base-100/95 backdrop-blur py-2 mb-2 border-b border-base-content/10 empty:hidden"></div>
+            <!-- Shared financial chrome — session/daily P&L gauges, engine-sourced
+                 (balance-delta truth). Identical for every strategy. The per-strategy
+                 grid body below NEVER renders P&L figures. -->
+            <div id="bot-financials" class="empty:hidden mb-2"></div>
             <div id="bot-grid-content"></div>
           </div>
           <div id="bot-risk-summary">
@@ -617,13 +621,14 @@
     return html;
   }
 
-  function renderSessionPnlBreakdown(state) {
-    // The per-cell P&L below shows only OPEN positions' floating gain/loss.
-    // Trades already closed (stop-losses) have left the grid but their realized
-    // result is banked into the session. Surface both halves so the green open
-    // cells are never mistaken for the true session P&L.
-    var realized = state.session_realized_pnl;
-    var unrealized = state.session_unrealized_pnl;
+  function renderSessionPnlBreakdown(fin) {
+    // The per-cell P&L in the grid below shows only OPEN positions' floating
+    // gain/loss. Trades already closed (stop-losses) have left the grid but their
+    // realized result is banked into the session. Surface both halves — sourced
+    // from the engine (balance-delta truth) — so the green open cells are never
+    // mistaken for the true session P&L.
+    var realized = fin.session_realized_pnl;
+    var unrealized = fin.session_unrealized_pnl;
     if (realized === undefined || unrealized === undefined) return '';
     var net = realized + unrealized;
     function money(v) {
@@ -636,6 +641,29 @@
     html += '<div class="flex justify-between border-t border-base-content/10 pt-0.5 mt-0.5"><span class="text-base-content/80 font-semibold">Net session P&L</span>' + money(net) + '</div>';
     html += '</div>';
     return html;
+  }
+
+  // Shared financial chrome. ALL figures come from the engine (balance-delta
+  // truth) via /api/bot/strategy-state -> financials. Strategy display state is
+  // NEVER read here — that split-brain was the bug this panel fixes.
+  function renderFinancials(fin) {
+    var el = document.getElementById('bot-financials');
+    if (!el) return;
+    if (!fin) { el.innerHTML = ''; return; }
+
+    var html = '';
+    // Session gauge: two-sided when a profit target exists (sliding grid),
+    // one-sided loss gauge otherwise (doubling grid has loss limit only).
+    if (fin.session_loss_limit != null && fin.session_profit_target != null) {
+      html += renderPnlGauge('Session P&L', fin.session_pnl, fin.session_loss_limit, fin.session_profit_target);
+    } else if (fin.session_loss_limit != null) {
+      html += renderDailyLossGauge('Session P&L', fin.session_pnl, fin.session_loss_limit);
+    }
+    html += renderSessionPnlBreakdown(fin);
+    if (fin.daily_loss_limit != null) {
+      html += renderDailyLossGauge('Daily P&L', fin.daily_pnl, fin.daily_loss_limit);
+    }
+    el.innerHTML = html;
   }
 
   function renderDailyLossGauge(label, current, lossLimit) {
@@ -688,10 +716,8 @@
     html += ' &middot; Session #' + state.session_count;
     html += ' &middot; Pairs: <span class="font-mono">' + state.filled_count + '</span></div>';
 
-    // P&L Gauges
-    html += renderPnlGauge('Session P&L', state.session_pnl, state.session_loss_limit, state.session_profit_target);
-    html += renderSessionPnlBreakdown(state);
-    html += renderDailyLossGauge('Daily P&L', state.daily_pnl, state.daily_loss_limit);
+    // Financial gauges are rendered by the shared #bot-financials chrome above
+    // (engine-sourced). This per-strategy body renders structure only.
 
     // Grid levels table — show active levels + 3 empty on each side
     html += '<table class="table table-xs w-full mt-3 [&_td]:border [&_td]:border-base-content/10 [&_th]:border [&_th]:border-base-content/10"><thead><tr><th>Level</th><th>Buy</th><th>Sell</th></tr></thead><tbody>';
@@ -777,22 +803,8 @@
     }
     html += '</tbody></table>';
 
-    // Session history
-    if (state.session_history && state.session_history.length > 0) {
-      html += '<div class="mt-4"><h3 class="text-xs font-semibold text-base-content/70 mb-2">Session History</h3>';
-      html += '<table class="table table-xs w-full"><thead><tr><th>#</th><th>Reason</th><th>P&L</th></tr></thead><tbody>';
-      for (var j = 0; j < state.session_history.length; j++) {
-        var sess = state.session_history[j];
-        var pnlClass = sess.pnl >= 0 ? 'text-success' : 'text-error';
-        html += '<tr>';
-        html += '<td>' + sess.session + '</td>';
-        var sessReasonMap = {'doubled_tp': 'TP hit — breakout captured', 'doubled_ts': 'Trailing stop hit', 'take_profit': 'TP hit — breakout captured', 'session_loss_limit': 'Loss limit reached', 'whipsaw_pause': 'Whipsaw — paused', 'doubled_closed': 'Doubled position closed'};
-        html += '<td class="text-xs">' + (sessReasonMap[sess.reason] || sess.reason.replace(/_/g, ' ')) + '</td>';
-        html += '<td class="font-mono ' + pnlClass + '">' + (sess.pnl >= 0 ? '+' : '') + '$' + sess.pnl.toFixed(2) + '</td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table></div>';
-    }
+    // Session history is rendered once by the shared #bot-session-history card
+    // (engine-sourced via get_session_history) — not duplicated here.
 
     gridContent.innerHTML = html;
   }
@@ -819,9 +831,8 @@
       html += '<div class="text-xs text-base-content/50 mb-2">Whipsaw: ' + state.whipsaw_count + '/' + state.whipsaw_limit + '</div>';
     }
 
-    // Session P&L gauge (loss-limit only, no profit target)
-    html += renderDailyLossGauge('Session P&L', state.session_pnl, state.session_loss_limit);
-    html += renderSessionPnlBreakdown(state);
+    // Financial gauges are rendered by the shared #bot-financials chrome above
+    // (engine-sourced). This per-strategy body renders structure only.
     // Live price now shown by the sticky #bot-price-ticker in the card header.
 
     // Grid levels table — 3 columns, zone label inside price cell
@@ -976,8 +987,10 @@
     if (state.session_paused && state.whipsaw_count >= state.whipsaw_limit) {
       label = 'Session Paused — Whipsaw';
       badgeClass = 'badge-warning';
-    } else if (state.session_paused && state.session_pnl <= -state.session_loss_limit) {
-      label = 'Session Paused — Loss Limit';
+    } else if (state.session_paused) {
+      // Paused for a non-whipsaw reason (e.g. loss limit). The specific P&L
+      // figure lives in the engine-sourced financials chrome, not here.
+      label = 'Session Paused';
       badgeClass = 'badge-error';
     } else if (state.doubled_active) {
       label = 'Doubled Active';
@@ -1054,7 +1067,7 @@
     fetch('/api/bot/strategy-state')
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(data) {
-        if (!data) { panel.style.display = 'none'; renderStateBanner(null); return; }
+        if (!data) { panel.style.display = 'none'; renderStateBanner(null); renderFinancials(null); return; }
 
         var hasContent = data.strategy_state || data.risk_summary;
         panel.style.display = hasContent ? '' : 'none';
@@ -1068,6 +1081,7 @@
           renderGridLevels(data.strategy_state);
           renderStateBanner(data.strategy_state);
         }
+        renderFinancials(data.financials);
         renderRiskSummary(data.risk_summary);
         if (data.strategy_state && data.strategy_state.anchor_price) {
           window.__aurexGridLevels = {

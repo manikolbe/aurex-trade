@@ -153,5 +153,6 @@ def bot_strategy_state(
         content={
             "strategy_state": session.engine.get_strategy_state(),
             "risk_summary": session.engine.get_risk_summary(),
+            "financials": session.engine.get_financials(),
         }
     )

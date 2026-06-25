@@ -153,3 +153,20 @@ fires a close-all.
 7. **Web UI**: No template changes needed — the UI renders dynamically from
    `StrategyMetadata`. New strategies automatically appear in dropdowns with
    correct parameter fields, tooltips, and valid ranges.
+
+### `get_display_state()` — positional/structural state ONLY
+
+If a strategy implements the optional `get_display_state()` for live UI rendering
+(grid ladder, doubled-position view, whipsaw counter, etc.), it must return
+**positional / structural** fields only. It must **never** carry headline
+financial figures — session/daily/realized P&L, P&L gauge bounds, or session
+history. The bot UI sources all of those authoritatively from the engine's
+balance-delta truth (`get_financials()`, `get_metrics()`, `get_session_history()`)
+and renders them once in shared chrome, identical for every strategy.
+
+Carrying P&L in both places caused a "split-brain" where the strategy's internal
+tally disagreed with the engine's balance-delta total (issue #74). A guardrail
+test (`test_display_state_carries_no_financial_fields`) asserts the forbidden keys
+never reappear in display state. The strategy still keeps its internal
+`_session_realized_pnl` etc. for its own session-exit logic in `generate()` — it
+just doesn't surface them for display.
