@@ -180,4 +180,5 @@ class ParameterSweep:
             start_date=result.start_date,
             end_date=result.end_date,
             parameters={k: str(v) for k, v in params.items()},
+            trade_pnls=result.trade_pnls,
         )

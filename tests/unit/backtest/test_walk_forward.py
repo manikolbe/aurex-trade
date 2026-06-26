@@ -73,16 +73,11 @@ def _sma_factory(params: dict[str, int]) -> StatelessTestStrategy:
     )
 
 
-class TestAggregateMetricsEqualWinsLosses:
-    """Regression test for #42: metrics incorrect when wins == losses."""
+class TestAggregateFromRealTradePnls:
+    """Aggregate OOS metrics derive from REAL per-trade P&L, not synthetics."""
 
-    def test_pnl_preserved_when_wins_equal_losses(self) -> None:
-        """Aggregate total_pnl must reflect actual P&L, not collapse to zero."""
-        # Use enough bars and cycles so SMA crossover generates equal wins/losses
-        # We test indirectly via the synthetic PnL logic by using a large dataset
-        # where it's likely wins ~= losses in some windows.
-        # Direct unit test of the branch: create a validator, run it, check
-        # that aggregate total_pnl == sum of window test_pnl values.
+    def test_aggregate_total_pnl_equals_sum_of_window_pnls(self) -> None:
+        """Aggregate total_pnl must reflect actual P&L (regression for #42)."""
         bars = _make_trending_bars(400)
 
         validator = WalkForwardValidator(
@@ -98,9 +93,45 @@ class TestAggregateMetricsEqualWinsLosses:
         )
         result = validator.run()
 
-        # The aggregate total_pnl must equal the sum of per-window test PnLs
         expected_pnl = sum(w.test_result.metrics.total_pnl for w in result.windows)
         assert result.aggregate_test_metrics.total_pnl == pytest.approx(expected_pnl, abs=0.01)
+
+    def test_aggregate_trade_count_matches_concatenated_window_trades(self) -> None:
+        """Aggregate trade_count equals the sum of each window's real trade count.
+
+        With synthetic reconstruction this still held, but the aggregate
+        profit_factor was forced to a degenerate two-value distribution. Here we
+        also assert the aggregate matches a direct metrics computation over the
+        concatenated real per-trade P&L — i.e. the true distribution is used.
+        """
+        from aurex_trade.metrics import calculate_metrics
+
+        bars = _make_trending_bars(800)
+        validator = WalkForwardValidator(
+            strategy_factory=_sma_factory,
+            param_grid={"short_window": [5, 10], "long_window": [20, 30]},
+            bars=bars,
+            config=_config(),
+            risk_engine=_risk_engine(),
+            train_bars=200,
+            test_bars=200,
+            param_validator=lambda p: p["short_window"] < p["long_window"],
+            user_id="test",
+        )
+        result = validator.run()
+
+        real_pnls = [p for w in result.windows for p in w.test_result.trade_pnls]
+        agg = result.aggregate_test_metrics
+        assert agg.trade_count == len(real_pnls)
+        # profit_factor is computed from the real distribution, not a synthetic one.
+        direct = calculate_metrics(
+            equity_curve=[100_000.0, agg.final_capital],
+            trade_pnls=real_pnls,
+            initial_capital=100_000.0,
+        )
+        assert agg.profit_factor == pytest.approx(direct.profit_factor, abs=0.01)
+        assert agg.win_count == direct.win_count
+        assert agg.loss_count == direct.loss_count
 
 
 class TestWalkForwardValidator:

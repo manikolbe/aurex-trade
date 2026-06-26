@@ -132,3 +132,42 @@ class TestSlidingGridEndToEnd:
         result, _strategy = _run()
         # A clean run yields finite final capital.
         assert result.metrics.final_capital > 0
+
+    def test_open_positions_force_closed_at_end(self) -> None:
+        # Re-run with direct broker access to assert the terminal flatten.
+        bars = _trending_bars()
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.90,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_profit_target=100000.0, session_loss_limit=100000.0,
+            daily_loss_limit=100000.0,
+        )
+        config = BacktestConfig(
+            symbol="XAU_USD", initial_capital=100_000.0,
+            spread_pips=0.2, slippage_pips=0.0, bar_count=BAR_COUNT,
+        )
+        broker = SimulatedBrokerAdapter(
+            initial_capital=config.initial_capital, spread=config.spread_pips,
+            slippage=config.slippage_pips, seed=config.deterministic_seed,
+            grid_mode=True,
+        )
+        runner = BacktestRunner(
+            strategy=strategy,
+            risk_engine=RiskEngine(
+                max_position_size=1000, max_daily_loss=50000.0,
+                max_trades_per_day=10000, enabled=False,
+            ),
+            market_data=HistoricalMarketDataAdapter(bars, BAR_COUNT),
+            broker=broker, repository=InMemoryRepository(), config=config,
+            user_id="test",
+        )
+        result = runner.run()
+
+        # Nothing left open after the run — every position was flattened.
+        assert broker.get_open_trades("XAU_USD") == []
+        # Every closure is a recorded trade: the per-trade list reconciles with
+        # the win/loss counts (no open mark silently inflating P&L).
+        assert result.trade_pnls
+        assert len(result.trade_pnls) == (
+            result.metrics.win_count + result.metrics.loss_count
+        )

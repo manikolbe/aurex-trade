@@ -182,7 +182,15 @@ just walk-forward --strategy ciby_hedged_doubling_grid \
 - Non-overlapping windows: Train [Wk1] -> Test [Wk2], Train [Wk3] -> Test [Wk4], ...
 - Default: 7200 bars train + 7200 bars test = 1 week each (M1)
 - Configurable via `--train-bars` and `--test-bars` for different strategies
-- Aggregates out-of-sample metrics across all test windows
+- Aggregates out-of-sample metrics across all test windows from the **real**
+  per-trade P&L of every window (concatenated), so aggregate win rate, profit
+  factor and expectancy reflect the true trade distribution — not a reconstruction
+  from win/loss counts.
+
+> **Open positions are flattened at each window's (and each run's) data boundary.**
+> A grid normally ends mid-trade; force-closing at the end means realized P&L,
+> trade count and win rate reconcile, with no open unrealized mark leaking into
+> total P&L.
 
 ## Web UI
 

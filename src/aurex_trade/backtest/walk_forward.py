@@ -212,6 +212,7 @@ class WalkForwardValidator:
             start_date=result.start_date,
             end_date=result.end_date,
             parameters={k: str(v) for k, v in params.items()},
+            trade_pnls=result.trade_pnls,
         )
 
     def _aggregate_test_metrics(self, windows: list[WalkForwardWindow]) -> PerformanceMetrics:
@@ -223,55 +224,26 @@ class WalkForwardValidator:
                 initial_capital=self._config.initial_capital,
             )
 
-        # Concatenate equity curves (chain them — each starts where prior ended)
+        # Chain the per-window test equity curves (each scaled to start where the
+        # prior left off) and concatenate the REAL per-trade P&L from every window.
+        # Earlier code fabricated synthetic +/- placeholders to match win/loss
+        # counts, which made aggregate profit_factor and expectancy meaningless;
+        # the true distribution comes straight from each window's trade_pnls.
         combined_equity: list[float] = [self._config.initial_capital]
+        combined_pnls: list[float] = []
         total_commission = 0.0
-        total_wins = 0
-        total_losses = 0
         running_capital = self._config.initial_capital
 
         for window in windows:
             test_metrics = window.test_result.metrics
-            # Adjust equity curve relative to running capital
             if len(window.test_result.equity_curve) > 1:
                 scale = running_capital / test_metrics.initial_capital
                 for eq in window.test_result.equity_curve[1:]:
                     combined_equity.append(eq * scale)
 
-            # Accumulate real win/loss counts from each window
-            total_wins += test_metrics.win_count
-            total_losses += test_metrics.loss_count
+            combined_pnls.extend(window.test_result.trade_pnls)
             total_commission += test_metrics.total_commission
             running_capital += test_metrics.total_pnl
-
-        # Build trade_pnls that reflect actual win/loss distribution
-        combined_pnls: list[float] = []
-        total_trades = total_wins + total_losses
-        total_pnl = running_capital - self._config.initial_capital
-        if total_trades > 0:
-            if total_wins > 0 and total_losses > 0:
-                # Scale +1/-1 placeholders so sum matches total_pnl
-                raw_sum = total_wins - total_losses
-                if raw_sum != 0:
-                    scale = total_pnl / raw_sum
-                    combined_pnls = [scale] * total_wins + [-scale] * total_losses
-                else:
-                    # Equal wins/losses — distribute asymmetrically
-                    # so sum equals total_pnl and signs stay correct
-                    # (wins positive, losses negative).
-                    # Constraint: n*avg_win - n*avg_loss = total_pnl
-                    n = total_wins  # == total_losses
-                    if total_pnl >= 0:
-                        avg_loss = 1.0
-                        avg_win = 1.0 + total_pnl / n
-                    else:
-                        avg_win = 1.0
-                        avg_loss = 1.0 + abs(total_pnl) / n
-                    combined_pnls = [avg_win] * total_wins + [-avg_loss] * total_losses
-            elif total_wins > 0:
-                combined_pnls = [total_pnl / total_wins] * total_wins
-            else:
-                combined_pnls = [total_pnl / total_losses] * total_losses
 
         return calculate_metrics(
             equity_curve=combined_equity,

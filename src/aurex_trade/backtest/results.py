@@ -34,6 +34,10 @@ class BacktestResult:
     start_date: datetime | None = None
     end_date: datetime | None = None
     parameters: dict[str, str] = field(default_factory=dict)
+    # Realized P&L of every closed trade, in close order. Lets downstream
+    # consumers (e.g. walk-forward aggregation) work from the true per-trade
+    # distribution instead of reconstructing it from win/loss counts.
+    trade_pnls: list[float] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

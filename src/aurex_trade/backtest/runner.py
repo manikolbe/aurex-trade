@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import structlog
+
 from aurex_trade.adapters.backtest.broker import SimulatedBrokerAdapter, _OpenTrade
 from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapter
 from aurex_trade.backtest.config import BacktestConfig
@@ -23,6 +25,11 @@ from aurex_trade.domain.risk.engine import RiskEngine
 from aurex_trade.domain.strategy.base import Strategy
 from aurex_trade.metrics import calculate_metrics
 from aurex_trade.ports.repository import RepositoryPort
+
+log = structlog.get_logger()
+
+# Max signals drained from the strategy per bar — mirrors the live engine's cap.
+_MAX_SIGNAL_DRAIN = 50
 
 
 class BacktestRunner:
@@ -64,12 +71,14 @@ class BacktestRunner:
         equity_curve: list[float] = [self._config.initial_capital]
         equity_timestamps: list[datetime] = []
         trade_records: list[BacktestTradeRecord] = []
+        first_bar: BarData | None = None
         bar_index = 0
 
         while not self._market_data.is_exhausted:
             current_bar = self._market_data.current_bar
             self._broker.set_current_bar(current_bar)
-            if not equity_timestamps:
+            if first_bar is None:
+                first_bar = current_bar
                 # Align the seed equity point (initial_capital) to the first bar.
                 equity_timestamps.append(current_bar.timestamp)
 
@@ -97,6 +106,16 @@ class BacktestRunner:
             # Advance to next bar
             self._market_data.advance()
 
+        # Close any grid positions still open at the data boundary, so realized
+        # P&L, trade_count and win_rate reflect every trade — not an optimistic
+        # open mark left dangling in the equity curve. Append the post-flatten
+        # equity as a final point. Simple mode keeps a net position whose mark is
+        # already in the curve, so it is untouched.
+        if bar_index > 0 and self._is_grid:
+            self._close_open_positions_at_end()
+            equity_curve.append(self._broker.equity)
+            equity_timestamps.append(current_bar.timestamp)
+
         # Calculate metrics. Timestamps let Sharpe use daily-resampled returns.
         metrics = calculate_metrics(
             equity_curve=equity_curve,
@@ -106,19 +125,16 @@ class BacktestRunner:
             equity_timestamps=equity_timestamps,
         )
 
-        # Determine date range from data
-        bars = self._market_data.get_latest_bars(self._config.symbol, 1)
-        start_date = bars[0].timestamp if bars else None
-
         return BacktestResult(
             metrics=metrics,
             equity_curve=equity_curve,
             trades=trade_records,
             strategy_name=self._strategy.name,
             symbol=self._config.symbol,
-            start_date=start_date,
+            start_date=first_bar.timestamp if first_bar else None,
             end_date=current_bar.timestamp if bar_index > 0 else None,
             parameters={},
+            trade_pnls=list(self._trade_pnls),
         )
 
     # ──────────────────────────────────────────────────────────────────────
@@ -151,12 +167,19 @@ class BacktestRunner:
 
         signal_count = 0
         signal = self._strategy.generate(bars)
-        while signal is not None and signal_count < 50:
+        while signal is not None and signal_count < _MAX_SIGNAL_DRAIN:
             signal_count += 1
             record = self._process_grid_signal(signal, bar_index, bars)
             if record is not None:
                 records.append(record)
             signal = self._strategy.generate(bars)
+        if signal is not None:
+            # Cap hit with the strategy still emitting — queued placements/closures
+            # are dropped this bar. Surface it (live logs the same) so a truncated
+            # run isn't mistaken for a complete one.
+            log.warning(
+                "signal_drain_limit_reached", max=_MAX_SIGNAL_DRAIN, bar_index=bar_index
+            )
 
         # 6. Trim levels the strategy retired for margin (close trades + cancel orders)
         self._handle_levels_to_close()
@@ -406,6 +429,24 @@ class BacktestRunner:
         notify = getattr(self._strategy, "notify_close_all_complete", None)
         if notify:
             notify()
+
+    def _close_open_positions_at_end(self) -> None:
+        """Force-close every open grid trade at the final bar, banking realized P&L.
+
+        A sliding grid normally ends a window mid-trade; without this, those open
+        legs' unrealized marks leak into total P&L while never appearing in
+        trade_count/win_rate. Flattening them (as a real account would be) makes
+        realized P&L, trade count and win rate reconcile. Grid mode only — the
+        caller guarantees it; it owns the per-trade ledger close_trade operates on.
+        """
+        for trade in list(self._broker._open_trades):
+            if trade.symbol != self._config.symbol:
+                continue
+            self._broker.close_trade(trade.broker_trade_id)
+            closed = self._broker.get_closed_trade_details(trade.broker_trade_id)
+            if closed is not None:
+                self._trade_pnls.append(closed.realized_pnl)
+        self._grid_trade_map.clear()
 
     def _calculate_grid_unrealized(self) -> float:
         """Calculate total unrealized P&L across all open grid trades."""
