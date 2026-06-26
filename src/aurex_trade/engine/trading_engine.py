@@ -86,18 +86,24 @@ class SessionSummary(TypedDict):
 class RealizedLedgerEntry(TypedDict):
     """A single per-trade realized closure for the UI's Realized P&L card.
 
-    One discrete moment money was banked: a margin trim or a stop-out. Session
-    rollups are deliberately excluded — a session's balance-delta already
-    includes the trims it contains, so listing both would double-count.
+    One discrete moment money was banked: a margin trim, a stop-out, or one leg
+    liquidated by a session close-all (profit-target / loss-limit). Each row is a
+    distinct broker trade — never a session rollup. A close-all closes many trades
+    at once, but each closes exactly once and only through this path (the normal
+    closure-detection loop never re-sees them, since the grid map is cleared
+    first), so there is no double-listing. The card's header total is the
+    authoritative account-balance delta, NOT the row sum, so itemizing every
+    closure here can't inflate the headline figure either.
 
     ``basis`` records how ``realized_pnl`` was derived: ``"exact"`` for trims and
-    close-all (taken straight from the broker close response), ``"stop_price"`` /
-    ``"last_price"`` for stop-outs (estimated locally from entry vs stop), and
-    ``"unknown"`` when no estimate was possible (``realized_pnl is None``).
+    session close-all (taken straight from the broker close response),
+    ``"stop_price"`` / ``"last_price"`` for stop-outs (estimated locally from
+    entry vs stop), and ``"unknown"`` when no estimate was possible
+    (``realized_pnl is None``).
     """
 
     timestamp: str
-    kind: str  # "trim" | "stop_out"
+    kind: str  # "trim" | "stop_out" | "session_close"
     realized_pnl: float | None
     basis: str  # "exact" | "stop_price" | "last_price" | "unknown"
     grid_level: str
@@ -1243,11 +1249,15 @@ class TradingEngine:
         history lookup, which 504s on long-lived OANDA accounts). The normal
         closure-detection loop (_check_closures) never sees close-all'd trades
         because the grid map is cleared before it runs, so we mirror its
-        trade_closed_by_broker event here. Per-trade realized P&L still feeds
-        _trade_pnls (win rate + risk-engine consecutive-loss tracking); the
-        authoritative session/run P&L comes from balance deltas elsewhere.
+        trade_closed_by_broker event here — and likewise append a per-trade row to
+        _realized_ledger so each liquidated leg shows up on the UI's Realized P&L
+        card (tagged ``kind="session_close"``), instead of vanishing into the
+        session balance-delta. Per-trade realized P&L still feeds _trade_pnls (win
+        rate + risk-engine consecutive-loss tracking); the authoritative
+        session/run P&L comes from balance deltas elsewhere.
         """
         grid_key = trade_id_to_grid.get(broker_id, "")
+        now_iso = datetime.now(UTC).isoformat()
         if details is None:
             # No closing fill in the response — count the closure but with no P&L.
             self._log.info(
@@ -1258,6 +1268,14 @@ class TradingEngine:
                 close_price=None,
                 realized_pnl=None,
             )
+            self._realized_ledger.append(RealizedLedgerEntry(
+                timestamp=now_iso,
+                kind="session_close",
+                realized_pnl=None,
+                basis="unknown",
+                grid_level=grid_key,
+                broker_trade_id=broker_id,
+            ))
             return
 
         realized_pnl = details.realized_pnl
@@ -1272,6 +1290,14 @@ class TradingEngine:
             close_price=details.close_price,
             realized_pnl=realized_pnl,
         )
+        self._realized_ledger.append(RealizedLedgerEntry(
+            timestamp=now_iso,
+            kind="session_close",
+            realized_pnl=realized_pnl,
+            basis="exact",
+            grid_level=grid_key,
+            broker_trade_id=broker_id,
+        ))
 
     def _record_trade_entry(
         self,

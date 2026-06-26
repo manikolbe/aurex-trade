@@ -148,7 +148,8 @@
       </div>
     </div>
 
-    <!-- Realized P&L — every banked gain/loss (margin trims + stop-outs). -->
+    <!-- Realized P&L — every banked gain/loss (margin trims + stop-outs +
+         session close-all legs, one row per closed trade). -->
     <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
       <div class="card-body p-3 md:p-4">
         <div class="flex items-center justify-between">
@@ -176,9 +177,9 @@
           <p class="text-base-content/60 text-sm">No realized closures yet...</p>
         </div>
         <p class="text-xs text-base-content/40 mt-1 leading-tight">
-          Per-trade figures: exact for margin trims; stop-outs estimated from stop
-          vs entry. The authoritative run total above comes from the
-          account-balance delta, so it may differ slightly from the row sum.
+          Per-trade figures: exact for margin trims and session closes; stop-outs
+          estimated from stop vs entry. The authoritative run total above comes
+          from the account-balance delta, so it may differ slightly from the row sum.
         </p>
       </div>
     </div>
@@ -213,7 +214,8 @@
   }
 
   // Render the Realized P&L card: a ledger of per-trade closures (margin trims +
-  // stop-outs), summary tiles, and the authoritative balance-delta run total.
+  // stop-outs + session close-all legs), summary tiles, and the authoritative
+  // balance-delta run total.
   function renderRealizedLedger(ledger, runRealized) {
     // Header total: authoritative balance-delta figure (not the row sum).
     var totalEl = document.getElementById('rpnl-total');
@@ -253,7 +255,11 @@
       el.innerHTML = '<p class="text-base-content/60 text-sm">No realized closures yet...</p>';
       return;
     }
-    var kindMap = {'trim': {label: 'Margin trim', badge: 'badge-info'}, 'stop_out': {label: 'Stop-out', badge: 'badge-error'}};
+    var kindMap = {
+      'trim': {label: 'Margin trim', badge: 'badge-info'},
+      'stop_out': {label: 'Stop-out', badge: 'badge-error'},
+      'session_close': {label: 'Session close', badge: 'badge-warning'}
+    };
     var html = '';
     for (var i = ledger.length - 1; i >= 0; i--) {
       var e = ledger[i];

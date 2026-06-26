@@ -101,6 +101,18 @@ def test_close_all_logs_per_trade_realized_pnl() -> None:
     # The winning leg's P&L is now in the ledger (was previously invisible).
     assert sum(e["realized_pnl"] for e in events) == 376.50
 
+    # Each liquidated leg is also a per-trade row on the UI's Realized P&L card,
+    # tagged session_close with exact P&L — one row per trade, not a rollup.
+    ledger = engine.get_realized_ledger()
+    assert len(ledger) == 2
+    rows = {r["broker_trade_id"]: r for r in ledger}
+    assert rows["7253"]["kind"] == "session_close"
+    assert rows["7253"]["basis"] == "exact"
+    assert rows["7253"]["realized_pnl"] == 417.50
+    assert rows["7253"]["grid_level"] == "4321.41_short"
+    assert rows["7440"]["kind"] == "session_close"
+    assert rows["7440"]["realized_pnl"] == -41.00
+
 
 def test_close_all_pnl_feeds_consecutive_loss_tracking() -> None:
     """Realized P&L from close-all is appended to _trade_pnls (risk-engine input)."""
@@ -144,3 +156,11 @@ def test_close_all_with_no_parsed_fill_still_completes() -> None:
     events = _closed_events(engine._log)
     assert len(events) == 1
     assert events[0]["realized_pnl"] is None
+
+    # A ledger row is still emitted (so the closure is visible on the card), but
+    # with no P&L / unknown basis since the close response carried no fill.
+    ledger = engine.get_realized_ledger()
+    assert len(ledger) == 1
+    assert ledger[0]["kind"] == "session_close"
+    assert ledger[0]["realized_pnl"] is None
+    assert ledger[0]["basis"] == "unknown"
