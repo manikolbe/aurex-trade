@@ -190,3 +190,49 @@ class TestBotMetrics:
             assert data["peak_equity"] == 10500.0
         finally:
             manager.stop("test-user-id")
+
+
+class TestBotEquity:
+    """Tests for GET /api/bot/equity (charts + realized P&L card data)."""
+
+    def test_not_running_returns_404(self, client: TestClient) -> None:
+        resp = client.get("/api/bot/equity")
+        assert resp.status_code == 404
+
+    def test_running_returns_ledger_and_realized_total(
+        self, client: TestClient
+    ) -> None:
+        manager: BotSessionManager = client.app.state.bot_session_manager  # type: ignore[union-attr]
+        engine = MagicMock()
+        engine.get_equity_history.return_value = []
+        engine.get_trade_markers.return_value = []
+        engine.get_event_log.return_value = []
+        engine.get_session_history.return_value = []
+        engine.get_realized_ledger.return_value = [
+            {
+                "timestamp": "2026-06-26T13:42:00+00:00",
+                "kind": "trim",
+                "realized_pnl": 8.4,
+                "basis": "exact",
+                "grid_level": "2418.00_long",
+                "broker_trade_id": "10231",
+            }
+        ]
+        engine.get_realized_pnl.return_value = 71.4
+        connection = MagicMock()
+        manager.start(
+            user_id="test-user-id",
+            engine=engine,
+            connection=connection,
+            symbol="XAU_USD",
+            strategy_name="ciby_sliding_grid",
+        )
+        try:
+            resp = client.get("/api/bot/equity")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "realized_ledger" in data
+            assert data["realized_ledger"][0]["kind"] == "trim"
+            assert data["realized_pnl"] == 71.4
+        finally:
+            manager.stop("test-user-id")

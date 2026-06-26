@@ -83,6 +83,27 @@ class SessionSummary(TypedDict):
     realized_pnl: float
 
 
+class RealizedLedgerEntry(TypedDict):
+    """A single per-trade realized closure for the UI's Realized P&L card.
+
+    One discrete moment money was banked: a margin trim or a stop-out. Session
+    rollups are deliberately excluded — a session's balance-delta already
+    includes the trims it contains, so listing both would double-count.
+
+    ``basis`` records how ``realized_pnl`` was derived: ``"exact"`` for trims and
+    close-all (taken straight from the broker close response), ``"stop_price"`` /
+    ``"last_price"`` for stop-outs (estimated locally from entry vs stop), and
+    ``"unknown"`` when no estimate was possible (``realized_pnl is None``).
+    """
+
+    timestamp: str
+    kind: str  # "trim" | "stop_out"
+    realized_pnl: float | None
+    basis: str  # "exact" | "stop_price" | "last_price" | "unknown"
+    grid_level: str
+    broker_trade_id: str
+
+
 class EngineMetrics(TypedDict):
     """Snapshot of engine state, safe to read from any thread (GIL-protected)."""
 
@@ -202,6 +223,8 @@ class TradingEngine:
         self._pending_order_meta: dict[str, dict[str, str]] = {}
         # Event log for UI
         self._event_log: list[EventLogEntry] = []
+        # Per-trade realized closures (trims + stop-outs) for the Realized P&L card
+        self._realized_ledger: list[RealizedLedgerEntry] = []
         # Close-all circuit breaker state
         self._close_all_failed_count: int = 0
         self._close_all_next_retry_at: datetime | None = None
@@ -478,6 +501,22 @@ class TradingEngine:
     def get_event_log(self) -> list[EventLogEntry]:
         """Return event log for UI display. Thread-safe (GIL)."""
         return list(self._event_log)
+
+    def get_realized_ledger(self) -> list[RealizedLedgerEntry]:
+        """Return per-trade realized closures for UI display. Thread-safe (GIL)."""
+        return list(self._realized_ledger)
+
+    def get_realized_pnl(self) -> float:
+        """Return run realized P&L (balance delta) from cached state — no broker I/O.
+
+        Reads the cycle-maintained ``_last_balance`` anchor (refreshed every cycle
+        by ``_push_realized_pnl``), so the equity poll can surface the authoritative
+        run total without the live ``get_account_summary``/``get_positions`` calls
+        that ``get_metrics`` makes. Thread-safe (GIL — simple float reads).
+        """
+        if self._last_balance is not None and self._run_start_balance is not None:
+            return self._last_balance - self._run_start_balance
+        return 0.0
 
     def get_session_history(self) -> list[SessionSummary]:
         """Return completed session summaries for UI display. Thread-safe (GIL)."""
@@ -1358,10 +1397,19 @@ class TradingEngine:
             )
 
             pnl_label = "?" if realized_pnl is None else f"{realized_pnl:+.2f}"
+            now_iso = datetime.now(UTC).isoformat()
             self._event_log.append(EventLogEntry(
-                timestamp=datetime.now(UTC).isoformat(),
+                timestamp=now_iso,
                 event=side,
                 details=f"SL @ {close_price:.2f} (#{broker_id}) P&L {pnl_label}",
+            ))
+            self._realized_ledger.append(RealizedLedgerEntry(
+                timestamp=now_iso,
+                kind="stop_out",
+                realized_pnl=realized_pnl,
+                basis=pnl_basis,
+                grid_level=grid_key,
+                broker_trade_id=broker_id,
             ))
 
             self._log.info(
@@ -1452,13 +1500,25 @@ class TradingEngine:
                     realized_pnl=realized_pnl,
                 )
                 pnl_label = "?" if realized_pnl is None else f"{realized_pnl:+.2f}"
+                now_iso = datetime.now(UTC).isoformat()
                 self._event_log.append(EventLogEntry(
-                    timestamp=datetime.now(UTC).isoformat(),
+                    timestamp=now_iso,
                     event="trim",
                     details=(
                         f"Level trimmed for margin: {grid_key} (#{trade_id})"
                         f" P&L {pnl_label}"
                     ),
+                ))
+                # Trim closes carry the EXACT P&L from the broker close response —
+                # but close_trade returns None when the response lacks a per-trade
+                # fill (trade already gone / missing fields), so the P&L is unknown.
+                self._realized_ledger.append(RealizedLedgerEntry(
+                    timestamp=now_iso,
+                    kind="trim",
+                    realized_pnl=realized_pnl,
+                    basis="exact" if realized_pnl is not None else "unknown",
+                    grid_level=grid_key,
+                    broker_trade_id=trade_id,
                 ))
 
     def _check_deferred_trailing_stop(

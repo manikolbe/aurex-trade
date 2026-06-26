@@ -12,6 +12,8 @@ Covers fixes found by code review of the first cut:
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
+import pytest
+
 from aurex_trade.domain.models import ClosedTradeInfo
 from aurex_trade.engine.trading_engine import TradeEntry, TradingEngine
 
@@ -137,6 +139,92 @@ class TestMarginTrimBanksPnl:
         engine._check_closures([])
         # Still only the single trim P&L -- no phantom SL closure appended.
         assert engine._trade_pnls == [24.0]
+
+
+class TestRealizedLedger:
+    """The Realized P&L card's per-trade ledger (trims + stop-outs).
+
+    Distinct from _trade_pnls (win-rate / risk gate): the ledger keeps every
+    closure including those with unknown P&L, and records kind + basis for the UI.
+    """
+
+    def test_stop_out_appends_ledger_entry_with_basis(self) -> None:
+        engine, _ = _engine()
+        engine._grid_trade_map = {"4000.00_long": "T1"}
+        engine._trade_entry = {"T1": _entry("buy", 4000.0, 3990.0, qty=2.0)}
+        engine._check_closures([])
+        ledger = engine.get_realized_ledger()
+        assert len(ledger) == 1
+        assert ledger[0]["kind"] == "stop_out"
+        assert ledger[0]["realized_pnl"] == -20.0  # (3990 - 4000) * 2
+        assert ledger[0]["basis"] == "stop_price"
+        assert ledger[0]["broker_trade_id"] == "T1"
+        assert ledger[0]["grid_level"] == "4000.00_long"
+
+    def test_stop_out_with_no_entry_records_unknown_basis(self) -> None:
+        # No entry record -> P&L unknown, but the closure is still ledgered.
+        engine, _ = _engine()
+        engine._grid_trade_map = {"4000.00_long": "T9"}
+        engine._trade_entry = {}
+        engine._last_price = None
+        engine._check_closures([])
+        ledger = engine.get_realized_ledger()
+        assert len(ledger) == 1
+        assert ledger[0]["kind"] == "stop_out"
+        assert ledger[0]["realized_pnl"] is None
+        assert ledger[0]["basis"] == "unknown"
+
+    def test_trim_appends_exact_ledger_entry(self) -> None:
+        engine, broker = _engine()
+        engine._strategy.get_levels_to_close.return_value = ["4000.00_long"]
+        engine._grid_trade_map = {"4000.00_long": "TT"}
+        engine._trade_entry = {"TT": _entry("buy", 4000.0, 3990.0)}
+        broker.close_trade.return_value = ClosedTradeInfo(
+            broker_trade_id="TT", close_price=4012.0, realized_pnl=24.0,
+            close_reason="MARKET_ORDER",
+        )
+        engine._check_levels_to_close()
+        ledger = engine.get_realized_ledger()
+        assert len(ledger) == 1
+        assert ledger[0]["kind"] == "trim"
+        assert ledger[0]["realized_pnl"] == 24.0
+        assert ledger[0]["basis"] == "exact"
+        assert ledger[0]["broker_trade_id"] == "TT"
+
+    def test_trim_with_none_close_response_records_unknown_basis(self) -> None:
+        # close_trade returns None (trade already gone / no per-trade fill) ->
+        # P&L unknown, so basis must be "unknown", not "exact".
+        engine, broker = _engine()
+        engine._strategy.get_levels_to_close.return_value = ["4000.00_long"]
+        engine._grid_trade_map = {"4000.00_long": "TT"}
+        engine._trade_entry = {"TT": _entry("buy", 4000.0, 3990.0)}
+        broker.close_trade.return_value = None
+        engine._check_levels_to_close()
+        ledger = engine.get_realized_ledger()
+        assert len(ledger) == 1
+        assert ledger[0]["kind"] == "trim"
+        assert ledger[0]["realized_pnl"] is None
+        assert ledger[0]["basis"] == "unknown"
+
+    def test_session_end_does_not_append_ledger_entry(self) -> None:
+        # close_all banks a session rollup; it must NOT add a per-trade ledger row
+        # (the session delta already contains the trims -> avoid double-count).
+        engine, broker = _engine()
+        broker.get_open_trades.return_value = []
+        engine._session_start_balance = 100_000.0
+        engine._close_all_trades("session_profit_target")
+        assert engine.get_realized_ledger() == []
+
+    def test_get_realized_pnl_reads_cached_balance_delta(self) -> None:
+        # The card header reads this cheap getter (no broker I/O), not get_metrics.
+        engine, broker = _engine()
+        engine._run_start_balance = 100_000.0
+        engine._last_balance = 100_071.4
+        assert engine.get_realized_pnl() == pytest.approx(71.4)
+        # Falls back to 0.0 before anchors are seeded -- never touches the broker.
+        engine._run_start_balance = None
+        assert engine.get_realized_pnl() == 0.0
+        broker.get_account_summary.assert_not_called()
 
 
 class TestEntryCaptureAllOrderTypes:

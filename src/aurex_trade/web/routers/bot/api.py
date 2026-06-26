@@ -136,6 +136,11 @@ def bot_equity(
             "trade_markers": trade_markers,
             "event_log": session.engine.get_event_log(),
             "session_history": session.engine.get_session_history(),
+            "realized_ledger": session.engine.get_realized_ledger(),
+            # Authoritative run realized P&L (balance delta) for the card header.
+            # Cheap cached read — avoids get_metrics()'s live broker calls on every
+            # equity poll (the metrics poll already surfaces this figure).
+            "realized_pnl": session.engine.get_realized_pnl(),
         }
     )
 

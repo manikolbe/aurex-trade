@@ -148,6 +148,41 @@
       </div>
     </div>
 
+    <!-- Realized P&L — every banked gain/loss (margin trims + stop-outs). -->
+    <div class="card bg-base-100 shadow-md col-span-1 md:col-span-2">
+      <div class="card-body p-3 md:p-4">
+        <div class="flex items-center justify-between">
+          <h2 class="card-title text-lg">Realized P&amp;L</h2>
+          <div class="text-right">
+            <div id="rpnl-total" class="font-mono font-bold text-2xl">—</div>
+            <div class="text-xs text-base-content/50">net realized this run</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 my-2">
+          <div class="rounded-lg bg-base-200 px-3 py-2 text-center">
+            <div id="rpnl-gains" class="font-mono font-semibold text-success">+$0.00</div>
+            <div id="rpnl-gains-label" class="text-xs text-base-content/50">0 gains</div>
+          </div>
+          <div class="rounded-lg bg-base-200 px-3 py-2 text-center">
+            <div id="rpnl-losses" class="font-mono font-semibold text-error">-$0.00</div>
+            <div id="rpnl-losses-label" class="text-xs text-base-content/50">0 losses</div>
+          </div>
+          <div class="rounded-lg bg-base-200 px-3 py-2 text-center">
+            <div id="rpnl-winrate" class="font-mono font-semibold">—</div>
+            <div class="text-xs text-base-content/50">win rate</div>
+          </div>
+        </div>
+        <div id="rpnl-ledger" class="overflow-y-auto max-h-64 space-y-1.5">
+          <p class="text-base-content/60 text-sm">No realized closures yet...</p>
+        </div>
+        <p class="text-xs text-base-content/40 mt-1 leading-tight">
+          Per-trade figures: exact for margin trims; stop-outs estimated from stop
+          vs entry. The authoritative run total above comes from the
+          account-balance delta, so it may differ slightly from the row sum.
+        </p>
+      </div>
+    </div>
+
     <div id="bot-session-history" class="card bg-base-100 shadow-md col-span-1 md:col-span-2 hidden">
       <div class="card-body p-3 md:p-4">
         <h2 class="card-title text-lg">Session History</h2>
@@ -171,6 +206,74 @@
   function toTimeLabel(ts) {
     var d = new Date(ts);
     return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+  }
+
+  function fmtSigned(v) {
+    return (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2);
+  }
+
+  // Render the Realized P&L card: a ledger of per-trade closures (margin trims +
+  // stop-outs), summary tiles, and the authoritative balance-delta run total.
+  function renderRealizedLedger(ledger, runRealized) {
+    // Header total: authoritative balance-delta figure (not the row sum).
+    var totalEl = document.getElementById('rpnl-total');
+    if (totalEl) {
+      if (typeof runRealized === 'number') {
+        totalEl.textContent = fmtSigned(runRealized);
+        totalEl.className = 'font-mono font-bold text-2xl ' + (runRealized >= 0 ? 'text-success' : 'text-error');
+      } else {
+        totalEl.textContent = '—';
+        totalEl.className = 'font-mono font-bold text-2xl';
+      }
+    }
+
+    // Summary tiles from the per-trade rows (known P&L only).
+    var gains = 0, losses = 0, gainCount = 0, lossCount = 0, decided = 0;
+    // Classify strictly: > 0 is a win, < 0 a loss (matches the engine's win-rate,
+    // which uses p > 0 — a break-even close is neither, so it's excluded).
+    ledger.forEach(function(e) {
+      if (typeof e.realized_pnl !== 'number' || e.realized_pnl === 0) return;
+      decided++;
+      if (e.realized_pnl > 0) { gains += e.realized_pnl; gainCount++; }
+      else { losses += e.realized_pnl; lossCount++; }
+    });
+    var gainsEl = document.getElementById('rpnl-gains');
+    var lossesEl = document.getElementById('rpnl-losses');
+    var winrateEl = document.getElementById('rpnl-winrate');
+    if (gainsEl) gainsEl.textContent = '+$' + gains.toFixed(2);
+    if (lossesEl) lossesEl.textContent = '-$' + Math.abs(losses).toFixed(2);
+    document.getElementById('rpnl-gains-label').textContent = gainCount + (gainCount === 1 ? ' gain' : ' gains');
+    document.getElementById('rpnl-losses-label').textContent = lossCount + (lossCount === 1 ? ' loss' : ' losses');
+    if (winrateEl) winrateEl.textContent = decided > 0 ? Math.round((gainCount / decided) * 100) + '%' : '—';
+
+    // Ledger rows, newest first.
+    var el = document.getElementById('rpnl-ledger');
+    if (!el) return;
+    if (ledger.length === 0) {
+      el.innerHTML = '<p class="text-base-content/60 text-sm">No realized closures yet...</p>';
+      return;
+    }
+    var kindMap = {'trim': {label: 'Margin trim', badge: 'badge-info'}, 'stop_out': {label: 'Stop-out', badge: 'badge-error'}};
+    var html = '';
+    for (var i = ledger.length - 1; i >= 0; i--) {
+      var e = ledger[i];
+      var k = kindMap[e.kind] || {label: e.kind, badge: 'badge-ghost'};
+      var time = toTimeLabel(e.timestamp);
+      var hasPnl = typeof e.realized_pnl === 'number';
+      var pnlClass = hasPnl ? (e.realized_pnl >= 0 ? 'text-success' : 'text-error') : 'text-base-content/50';
+      var pnlStr = hasPnl ? fmtSigned(e.realized_pnl) : '?';
+      // Mark estimated stop-outs (not exact / stop_price) with a subtle '~'.
+      var approx = (e.basis !== 'exact' && e.basis !== 'stop_price') ? '<span class="text-base-content/30" title="estimated">~</span>' : '';
+      html += '<div class="flex items-center justify-between border border-base-300 rounded-lg px-3 py-2">';
+      html +=   '<div class="flex items-center gap-2 min-w-0">';
+      html +=     '<span class="font-mono text-xs text-base-content/50">' + time + '</span>';
+      html +=     '<span class="badge badge-sm ' + k.badge + ' badge-outline">' + k.label + '</span>';
+      html +=     '<span class="text-xs text-base-content/50 truncate">' + e.grid_level + ' (#' + e.broker_trade_id + ')</span>';
+      html +=   '</div>';
+      html +=   '<span class="font-mono font-semibold ' + pnlClass + ' whitespace-nowrap pl-2">' + approx + pnlStr + '</span>';
+      html += '</div>';
+    }
+    el.innerHTML = html;
   }
 
   function buildTradeDatasets(tradeMarkers, labels) {
@@ -357,6 +460,9 @@
           }
           logEl.innerHTML = html;
         }
+
+        // Update realized P&L card (per-trade closures + authoritative total)
+        renderRealizedLedger(resp.realized_ledger || [], resp.realized_pnl);
 
         // Update session history panel
         var sessions = resp.session_history || [];

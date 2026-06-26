@@ -110,6 +110,14 @@ Once started, the page changes to show you what's happening:
 - **Peak Equity** — The highest your practice balance has reached
 - **Uptime** — How long the bot has been running
 
+Further down the page you'll also find:
+
+- **Realized P&L** — A running ledger of every moment the bot actually *banked*
+  money: each closed position shows up as a green gain or a red loss, with a
+  running total at the top. This is money locked in, not paper gains on positions
+  still open. Note that not every closure is a win — even routine ones can land on
+  either side — so expect to see both colours here.
+
 !!! tip "Be patient"
     The bot only trades when its rules are triggered. It might run for several
     cycles before making its first trade — that's completely normal. It's being
