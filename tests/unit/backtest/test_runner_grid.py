@@ -238,9 +238,9 @@ class TestLimitFillAndOpposite:
 
         # Should have 2 fills: the limit fill + the opposite market
         assert len(strategy._fills) == 2
-        # First fill: buy limit at 4560
+        # First fill: buy limit at 4560, crossing the spread (+half-spread 0.25).
         assert strategy._fills[0][0] == "4560.00_long"
-        assert strategy._fills[0][1] == 4560.0
+        assert strategy._fills[0][1] == 4560.25
         # Second fill: opposite sell (market)
         assert strategy._fills[1][0] == "4560.00_short"
 
@@ -266,7 +266,10 @@ class TestStopLossClosure:
             (c for c in strategy._closures if c[0] == "4560.00_long"), None
         )
         assert buy_closure is not None
-        assert buy_closure[1] == -100.0
+        # Entry crosses spread (+0.25) and the stop exit crosses it too (-0.25),
+        # so the loss is wider than the frictionless 10*(4550-4560) = -100:
+        # 10 * (4549.75 - 4560.25) = -105.
+        assert buy_closure[1] == -105.0
 
 
 class TestCloseAll:

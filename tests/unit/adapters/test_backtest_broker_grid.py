@@ -14,11 +14,16 @@ def _bar(
     low: float | None = None,
     high: float | None = None,
     ts: datetime | None = None,
+    open_: float | None = None,
 ) -> BarData:
-    """Helper to create a BarData with sensible defaults."""
+    """Helper to create a BarData with sensible defaults.
+
+    ``open_`` controls the bar open independently of close — needed to exercise
+    (or avoid) gap-through fills on stop entries and stop-loss exits.
+    """
     return BarData(
         symbol="XAU_USD",
-        open=close,
+        open=open_ if open_ is not None else close,
         high=high if high is not None else close + 1.0,
         low=low if low is not None else close - 1.0,
         close=close,
@@ -102,7 +107,8 @@ class TestProcessBarLimitFills:
         newly_filled, _ = broker.process_bar(fill_bar)
 
         assert len(newly_filled) == 1
-        assert newly_filled[0].open_price == 4560.0  # Exact limit price, no slippage
+        # Buy limit crosses the spread: fills above the limit by half-spread + slip.
+        assert 4560.0075 <= newly_filled[0].open_price <= 4560.0125
         assert newly_filled[0].side == OrderSide.BUY
 
         # Pending cleared, open trade created
@@ -128,7 +134,8 @@ class TestProcessBarLimitFills:
         newly_filled, _ = broker.process_bar(fill_bar)
 
         assert len(newly_filled) == 1
-        assert newly_filled[0].open_price == 4580.0
+        # Sell limit crosses the spread: fills below the limit by half-spread + slip.
+        assert 4579.9875 <= newly_filled[0].open_price <= 4579.9925
         assert newly_filled[0].side == OrderSide.SELL
 
     def test_limit_does_not_fill_when_bar_misses(self) -> None:
@@ -188,13 +195,14 @@ class TestProcessBarStopFills:
         )
         broker.place_order(order)
 
-        # Price breaks up through the trigger.
-        fill_bar = _bar(close=4116.0, low=4112.0, high=4117.0)
+        # Price breaks up through the trigger intrabar (open below it — no gap).
+        fill_bar = _bar(close=4116.0, low=4112.0, high=4117.0, open_=4113.0)
         broker.set_current_bar(fill_bar)
         newly_filled, _ = broker.process_bar(fill_bar)
 
         assert len(newly_filled) == 1
-        assert newly_filled[0].open_price == 4115.90
+        # Buy stop crosses the spread above the trigger.
+        assert 4115.9075 <= newly_filled[0].open_price <= 4115.9125
         assert newly_filled[0].side == OrderSide.BUY
 
     def test_sell_stop_fills_when_bar_low_reaches_trigger(self) -> None:
@@ -211,12 +219,14 @@ class TestProcessBarStopFills:
         )
         broker.place_order(order)
 
-        fill_bar = _bar(close=4084.0, low=4083.0, high=4090.0)
+        # Open above the trigger (no gap); price breaks down through it intrabar.
+        fill_bar = _bar(close=4084.0, low=4083.0, high=4090.0, open_=4088.0)
         broker.set_current_bar(fill_bar)
         newly_filled, _ = broker.process_bar(fill_bar)
 
         assert len(newly_filled) == 1
-        assert newly_filled[0].open_price == 4085.00
+        # Sell stop crosses the spread below the trigger.
+        assert 4084.9875 <= newly_filled[0].open_price <= 4084.9925
         assert newly_filled[0].side == OrderSide.SELL
 
     def test_buy_stop_does_not_fill_when_price_stays_below(self) -> None:
@@ -289,14 +299,14 @@ class TestProcessBarStopLoss:
         )
         broker.place_order(order)
 
-        # Bar breaches stop-loss
-        sl_bar = _bar(close=4555.0, low=4553.0, high=4568.0)
+        # Bar breaches stop-loss intrabar but opens above it (no gap-through).
+        sl_bar = _bar(close=4555.0, low=4553.0, high=4568.0, open_=4565.0)
         broker.set_current_bar(sl_bar)
         _, newly_closed = broker.process_bar(sl_bar)
 
         assert len(newly_closed) == 1
         assert newly_closed[0].close_reason == "STOP_LOSS"
-        # P&L: 10 * (4560 - 4570) = -100
+        # No gap + zero friction => fills exactly at the stop. 10 * (4560 - 4570) = -100
         assert newly_closed[0].realized_pnl == -100.0
         assert newly_closed[0].close_price == 4560.0
 
@@ -318,13 +328,14 @@ class TestProcessBarStopLoss:
         )
         broker.place_order(order)
 
-        sl_bar = _bar(close=4582.0, low=4568.0, high=4583.0)
+        # Breaches the stop intrabar but opens below it (no gap-through).
+        sl_bar = _bar(close=4582.0, low=4568.0, high=4583.0, open_=4575.0)
         broker.set_current_bar(sl_bar)
         _, newly_closed = broker.process_bar(sl_bar)
 
         assert len(newly_closed) == 1
         assert newly_closed[0].close_reason == "STOP_LOSS"
-        # P&L: 10 * (4570 - 4580) = -100
+        # No gap + zero friction => fills exactly at the stop. 10 * (4570 - 4580) = -100
         assert newly_closed[0].realized_pnl == -100.0
 
     def test_sl_does_not_trigger_when_bar_misses(self) -> None:
@@ -479,8 +490,8 @@ class TestEquityAfterClosures:
             Order(symbol="XAU_USD", side=OrderSide.SELL, quantity=10.0, stop_loss=4580.0)
         )
 
-        # Price drops — triggers BUY SL
-        sl_bar = _bar(close=4555.0, low=4553.0, high=4568.0)
+        # Price drops — triggers BUY SL intrabar (opens above the stop, no gap).
+        sl_bar = _bar(close=4555.0, low=4553.0, high=4568.0, open_=4565.0)
         broker.set_current_bar(sl_bar)
         broker.process_bar(sl_bar)
 
@@ -500,6 +511,50 @@ class TestEquityAfterClosures:
         # capital = 10000 - 100 + 150 = 10050
         assert broker.equity == pytest.approx(10050.0, abs=0.01)
         assert len(broker.get_open_trades("XAU_USD")) == 0
+
+
+class TestGapThroughFills:
+    """Stops and stop-entries that gap past their level fill at the worse open."""
+
+    def test_long_stop_loss_gaps_through_to_open(self) -> None:
+        broker = SimulatedBrokerAdapter(
+            initial_capital=10000.0, spread=0.0, slippage=0.0, grid_mode=True
+        )
+        broker.set_current_bar(_bar(close=4570.0))
+        broker.place_order(
+            Order(symbol="XAU_USD", side=OrderSide.BUY, quantity=10.0, stop_loss=4560.0)
+        )
+
+        # Bar gaps DOWN: opens 4550, well below the 4560 stop.
+        gap_bar = _bar(close=4548.0, low=4545.0, high=4552.0, open_=4550.0)
+        broker.set_current_bar(gap_bar)
+        _, newly_closed = broker.process_bar(gap_bar)
+
+        assert len(newly_closed) == 1
+        # Fills at the open (4550), not the stop (4560): 10 * (4550 - 4570) = -200.
+        assert newly_closed[0].close_price == 4550.0
+        assert newly_closed[0].realized_pnl == -200.0
+
+    def test_buy_stop_entry_gaps_through_to_open(self) -> None:
+        broker = SimulatedBrokerAdapter(
+            initial_capital=10000.0, spread=0.0, slippage=0.0, grid_mode=True
+        )
+        broker.set_current_bar(_bar(close=4100.0))
+        broker.place_order(
+            Order(
+                symbol="XAU_USD", side=OrderSide.BUY, order_type=OrderType.STOP,
+                quantity=20.0, limit_price=4115.90,
+            )
+        )
+
+        # Bar gaps UP through the trigger: opens 4120, above the 4115.90 trigger.
+        gap_bar = _bar(close=4122.0, low=4119.0, high=4123.0, open_=4120.0)
+        broker.set_current_bar(gap_bar)
+        newly_filled, _ = broker.process_bar(gap_bar)
+
+        assert len(newly_filled) == 1
+        # Fills at the open (4120), worse than the trigger (4115.90).
+        assert newly_filled[0].open_price == 4120.0
 
 
 class TestBackwardCompatibility:

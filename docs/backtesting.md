@@ -45,6 +45,38 @@ just backtest --strategy ciby_hedged_doubling_grid \
 - **Grid mode**: Auto-detected for strategies with `report_fill` — limit order simulation, stop-loss enforcement, signal drain loop, risk engine disabled (strategy manages own risk)
 - **Dynamic position sizing**: Risk-based sizing `units = (equity * risk_pct) / stop_distance`
 
+## Fill Model & Known Limitations
+
+The price feed is **mid-only** (one close-derived price per bar, no bid/ask), so the
+simulator approximates execution cost rather than reproducing it exactly. As of the
+fill-realism pass, **every fill crosses the spread**:
+
+| Fill path | Modelled cost |
+|-----------|---------------|
+| Market orders (anchor pair, opposite legs, close-all) | half-spread + uniform slippage `[0, --slippage]`, adverse direction |
+| Resting **LIMIT** entries | half-spread + slippage applied to the limit price |
+| Resting **STOP** entries | half-spread + slippage; **gap-through** modelled — fills at `worse_of(trigger, bar.open)` |
+| **Stop-loss** exits | half-spread + slippage; **gap-through** — fills at `worse_of(stop, bar.open)`, no longer the exact stop |
+
+A grid strategy lives almost entirely on resting orders, so charging spread on them
+is the dominant correction — earlier results that filled resting orders at the exact
+price were materially optimistic.
+
+**Still idealized (do not treat backtest P&L as a live predictor to the dollar):**
+
+- **Intrabar fill ordering** — fills are resolved from OHLC only; when one bar touches
+  both a stop and an entry, the true intrabar sequence is unknowable at M1 resolution.
+- **Mark-to-close equity** — open positions are marked at each bar's close; this is not
+  the live balance-delta accounting (financing/margin/rounding).
+- **Slippage is uniform `[0, --slippage]`** (mean ≈ half the parameter) and never
+  models a fat tail.
+
+**Deferred parity gaps** (tracked, not yet closed — backtest still diverges from the
+live engine here): same-bar close-all re-anchor vs live's next-cycle re-anchor; the
+live RiskEngine position-size cap and gates are not run in the grid backtest path; and
+live-only order management (two-phase fill detection, max-open-trades cap, wrong-sided
+stop rejection) is unmodelled.
+
 ## CLI: `run` Subcommand
 
 ```bash

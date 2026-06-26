@@ -185,11 +185,13 @@ class BacktestRunner:
         report_fill = getattr(self._strategy, "report_fill", None)
 
         for trade in newly_filled:
-            # Find which grid key this fill belongs to
-            grid_key = self._find_grid_key_for_order(trade.broker_trade_id)
-            if not grid_key:
-                # Try matching by the pending order that created this trade
-                grid_key = self._find_grid_key_by_pending_fill(trade)
+            # The broker stamps the grid key onto the filled trade (copied from
+            # the pending order), so use it directly — robust to the spread/slippage
+            # now applied to resting fills. Fall back to price-matching only if a
+            # fill arrives without a stamped key.
+            grid_key = trade.grid_level_key or self._find_grid_key_by_pending_fill(trade)
+            if grid_key:
+                self._pending_order_map.pop(grid_key, None)
 
             if grid_key:
                 # Update tracking: move from pending to active
@@ -224,29 +226,23 @@ class BacktestRunner:
                 self._trade_pnls.append(closed.realized_pnl)
                 del self._grid_trade_map[grid_key]
 
-    def _find_grid_key_for_order(self, broker_trade_id: str) -> str | None:
-        """Find grid key from pending_order_map where order filled into this trade."""
-        # The broker generates a new trade ID on fill, but the pending order had
-        # its own broker_order_id. We need to match by checking which pending
-        # orders disappeared.
-        return None  # Matching done in _find_grid_key_by_pending_fill
-
     def _find_grid_key_by_pending_fill(self, trade: _OpenTrade) -> str | None:
-        """Match a newly filled trade to a grid key via pending order map.
+        """Fallback: match a fill to a grid key when it carries no stamped key.
 
-        After process_bar fills a limit, the pending order is gone. We match
-        by comparing: the fill's limit_price + side against our tracked orders.
+        The primary path uses ``trade.grid_level_key`` (stamped by the broker).
+        This is only reached for an unstamped fill: match the pending order that
+        just disappeared whose price is within one fill's worth of friction
+        (half-spread + max slippage + gap) of the fill price.
         """
+        tolerance = self._broker._spread / 2.0 + self._broker._slippage + 0.01
         for grid_key, broker_order_id in list(self._pending_order_map.items()):
-            # Check if this order is still in the broker's pending list
             still_pending = any(
                 p.broker_order_id == broker_order_id for p in self._broker._pending_orders
             )
             if not still_pending:
-                # This order was filled — check if it matches this trade
                 meta = self._pending_order_meta.get(grid_key, {})
                 expected_price = float(meta.get("limit_price", "0"))
-                if abs(trade.open_price - expected_price) < 0.01:
+                if abs(trade.open_price - expected_price) <= tolerance:
                     del self._pending_order_map[grid_key]
                     return grid_key
         return None

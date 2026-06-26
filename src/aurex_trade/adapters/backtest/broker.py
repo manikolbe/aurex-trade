@@ -201,10 +201,19 @@ class SimulatedBrokerAdapter:
                 trades_to_close.append(trade)
 
         for trade in trades_to_close:
-            close_price = trade.stop_loss or 0.0
+            stop = trade.stop_loss or 0.0
+            # Model gap-through: if the bar opened beyond the stop, the exit fills
+            # at the (worse) open, not the stop price. Then cross the spread and
+            # take adverse slippage — a protective stop is a market-on-trigger exit.
             if trade.side == OrderSide.BUY:
+                # Long stopped out -> SELL exit; gaps down fill worse (lower).
+                base = min(stop, bar.open)
+                close_price = self._apply_friction(OrderSide.SELL, base)
                 pnl = trade.quantity * (close_price - trade.open_price)
             else:
+                # Short stopped out -> BUY exit; gaps up fill worse (higher).
+                base = max(stop, bar.open)
+                close_price = self._apply_friction(OrderSide.BUY, base)
                 pnl = trade.quantity * (trade.open_price - close_price)
 
             pnl = round(pnl, 2)
@@ -239,8 +248,19 @@ class SimulatedBrokerAdapter:
                 orders_to_fill.append(pending)
 
         for pending in orders_to_fill:
-            # Limit orders fill at exact limit price (no spread/slippage)
-            fill_price = pending.limit_price
+            # Resting entries cross the spread like any real fill (the feed is
+            # mid-only, so every fill pays half-spread + slippage). STOP entries
+            # also model gap-through: a breakout that gaps past the trigger fills
+            # at the (worse) bar open, not the exact trigger.
+            if pending.is_stop:
+                base = (
+                    max(pending.limit_price, bar.open)
+                    if pending.side == OrderSide.BUY
+                    else min(pending.limit_price, bar.open)
+                )
+            else:
+                base = pending.limit_price
+            fill_price = self._apply_friction(pending.side, base)
             commission = self._commission_per_trade
             self._total_commission += commission
             self._capital -= commission
@@ -359,16 +379,22 @@ class SimulatedBrokerAdapter:
         return self._total_commission
 
     def _calculate_fill_price(self, side: OrderSide) -> float:
-        """Calculate fill price with spread and slippage (market orders only)."""
+        """Calculate a market-order fill price from the current bar's close."""
         assert self._current_bar is not None
-        mid_price = self._current_bar.close
+        return self._apply_friction(side, self._current_bar.close)
+
+    def _apply_friction(self, side: OrderSide, base_price: float) -> float:
+        """Worsen a fill price by half-spread + slippage, in the adverse direction.
+
+        A BUY always fills higher than ``base_price``; a SELL always lower. Used
+        for every fill — market, resting limit/stop entries, and stop-loss exits —
+        because the price feed is mid-only and carries no bid/ask.
+        """
         half_spread = self._spread / 2.0
         slip = self._rng.uniform(0, self._slippage)
-
         if side == OrderSide.BUY:
-            return round(mid_price + half_spread + slip, 5)
-        else:
-            return round(mid_price - half_spread - slip, 5)
+            return round(base_price + half_spread + slip, 5)
+        return round(base_price - half_spread - slip, 5)
 
     def get_open_trades(self, symbol: str) -> list[OpenBrokerTrade]:
         """Return all currently open individual trades for a symbol."""
