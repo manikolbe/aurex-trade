@@ -127,7 +127,7 @@ If no `--param` flags are provided, strategy metadata defaults are used.
 | Expectancy | Average $ per completed trade |
 | Profit Factor | Gross profit / gross loss (>1 = profitable) |
 | Max Drawdown | Largest peak-to-trough equity drop |
-| Sharpe Ratio | Risk-adjusted return (annualized) |
+| Sharpe Ratio | Risk-adjusted return, computed on **daily-resampled** returns (annualized ×√252). Informational — not the default ranking metric. |
 
 ## Parameter Sweep (Grid Search)
 
@@ -151,10 +151,11 @@ just sweep --strategy ciby_hedged_doubling_grid \
 - Deterministic — same inputs always produce identical rankings
 - Strategy registry in `backtest/cli.py` maps names to factory callables
 
-**Ranking (`--rank-by`, default `total_pnl`).** Earlier the default was
-`sharpe_ratio`, but the Sharpe here is computed on per-bar returns over sparse M1
-data and is easily dominated by idle bars — a poor selector. Ranking now defaults
-to `total_pnl`. Two guards keep noise from winning:
+**Ranking (`--rank-by`, default `total_pnl`).** The default used to be
+`sharpe_ratio`, computed on per-bar returns over sparse M1 data — dominated by idle
+bars and a poor selector. Sharpe is now computed on daily-resampled returns (see the
+metrics table above) and kept as an informational column, while ranking defaults to
+`total_pnl`. Two guards keep noise from winning:
 
 - `--min-trades` (default 30): combos with fewer trades are a sample too small to
   trust, so they rank **below** every combo that clears the floor (they're kept for

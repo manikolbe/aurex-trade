@@ -1,5 +1,8 @@
 """Tests for the shared performance metrics calculator."""
 
+import math
+from datetime import UTC, datetime, timedelta
+
 from aurex_trade.metrics import PerformanceMetrics, calculate_metrics
 
 
@@ -76,6 +79,49 @@ class TestCalculateMetrics:
         pnls = [10.0] * 99
         result = calculate_metrics(curve, pnls, initial_capital=100_000.0)
         assert result.sharpe_ratio > 0
+
+    def test_sharpe_uses_daily_returns_when_timestamps_given(self) -> None:
+        """With timestamps, Sharpe is computed on daily closes, annualized by sqrt(252).
+
+        Three trading days with flat idle bars in between. Resampling keeps the
+        daily close of each day, giving two daily returns — and the result matches
+        a hand-computed daily Sharpe, proving the per-bar idle drag is gone.
+        """
+        days = [datetime(2025, 1, d, tzinfo=UTC) for d in (2, 3, 6)]
+        closes = [100_400.0, 100_900.0, 101_200.0]
+        curve = [100_000.0]
+        timestamps = [days[0]]
+        for day, close in zip(days, closes, strict=True):
+            for i in range(5):  # 5 intraday points per day; close carried flat
+                curve.append(close)
+                timestamps.append(day + timedelta(minutes=i))
+
+        with_ts = calculate_metrics(
+            curve, [400.0, 500.0, 300.0], initial_capital=100_000.0,
+            equity_timestamps=timestamps,
+        )
+        without_ts = calculate_metrics(curve, [400.0, 500.0, 300.0], initial_capital=100_000.0)
+
+        # Hand-computed: daily closes 100_400 -> 100_900 -> 101_200.
+        r1 = (100_900.0 - 100_400.0) / 100_400.0
+        r2 = (101_200.0 - 100_900.0) / 100_900.0
+        mean = (r1 + r2) / 2
+        std = math.sqrt(((r1 - mean) ** 2 + (r2 - mean) ** 2) / 2)
+        expected = (mean / std) * math.sqrt(252)
+        assert with_ts.sharpe_ratio == round(expected, 4)
+        # And it genuinely differs from the (meaningless) per-bar fallback.
+        assert with_ts.sharpe_ratio != without_ts.sharpe_ratio
+
+    def test_mismatched_timestamps_fall_back_to_per_step(self) -> None:
+        """A timestamp list of the wrong length is ignored (legacy path used)."""
+        curve = [100_000.0 + i * 10.0 for i in range(100)]
+        pnls = [10.0] * 99
+        bad_ts = [datetime(2025, 1, 2, tzinfo=UTC)]  # len 1, curve len 100
+        with_bad = calculate_metrics(
+            curve, pnls, initial_capital=100_000.0, equity_timestamps=bad_ts
+        )
+        legacy = calculate_metrics(curve, pnls, initial_capital=100_000.0)
+        assert with_bad.sharpe_ratio == legacy.sharpe_ratio
 
     def test_commission_tracked(self) -> None:
         curve = [100_000.0, 99_990.0]

@@ -11,6 +11,8 @@ Mode is auto-detected via `hasattr(strategy, "report_fill")`.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from aurex_trade.adapters.backtest.broker import SimulatedBrokerAdapter, _OpenTrade
 from aurex_trade.adapters.backtest.market_data import HistoricalMarketDataAdapter
 from aurex_trade.backtest.config import BacktestConfig
@@ -60,12 +62,16 @@ class BacktestRunner:
     def run(self) -> BacktestResult:
         """Execute the full backtest and return results."""
         equity_curve: list[float] = [self._config.initial_capital]
+        equity_timestamps: list[datetime] = []
         trade_records: list[BacktestTradeRecord] = []
         bar_index = 0
 
         while not self._market_data.is_exhausted:
             current_bar = self._market_data.current_bar
             self._broker.set_current_bar(current_bar)
+            if not equity_timestamps:
+                # Align the seed equity point (initial_capital) to the first bar.
+                equity_timestamps.append(current_bar.timestamp)
 
             if self._is_grid:
                 records = self._run_grid_step(bar_index)
@@ -85,17 +91,19 @@ class BacktestRunner:
             if current_equity > self._peak_equity:
                 self._peak_equity = current_equity
             equity_curve.append(current_equity)
+            equity_timestamps.append(current_bar.timestamp)
             bar_index += 1
 
             # Advance to next bar
             self._market_data.advance()
 
-        # Calculate metrics
+        # Calculate metrics. Timestamps let Sharpe use daily-resampled returns.
         metrics = calculate_metrics(
             equity_curve=equity_curve,
             trade_pnls=self._trade_pnls,
             initial_capital=self._config.initial_capital,
             total_commission=self._broker.total_commission,
+            equity_timestamps=equity_timestamps,
         )
 
         # Determine date range from data

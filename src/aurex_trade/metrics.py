@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date, datetime
+
+TRADING_DAYS_PER_YEAR = 252
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,7 @@ def calculate_metrics(
     initial_capital: float,
     total_commission: float = 0.0,
     risk_free_rate: float = 0.0,
+    equity_timestamps: list[datetime] | None = None,
 ) -> PerformanceMetrics:
     """Calculate performance metrics from an equity curve and trade P&L list.
 
@@ -49,6 +53,10 @@ def calculate_metrics(
         initial_capital: Starting capital.
         total_commission: Total commission paid across all trades.
         risk_free_rate: Annualized risk-free rate for Sharpe calculation.
+        equity_timestamps: Optional timestamps aligned to ``equity_curve``. When
+            provided, Sharpe is computed on daily-resampled returns (the only
+            statistically meaningful basis for sparse intraday data). When omitted,
+            Sharpe falls back to per-step returns annualized over the curve length.
 
     Returns:
         Frozen PerformanceMetrics dataclass.
@@ -70,7 +78,7 @@ def calculate_metrics(
     profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
 
     max_dd, max_dd_pct = _max_drawdown(equity_curve)
-    sharpe = _sharpe_ratio(equity_curve, risk_free_rate)
+    sharpe = _sharpe_ratio(equity_curve, risk_free_rate, equity_timestamps)
 
     return PerformanceMetrics(
         total_pnl=round(total_pnl, 2),
@@ -114,21 +122,60 @@ def _max_drawdown(equity_curve: list[float]) -> tuple[float, float]:
     return max_dd, max_dd_pct
 
 
-def _sharpe_ratio(equity_curve: list[float], risk_free_rate: float = 0.0) -> float:
-    """Calculate annualized Sharpe ratio from an equity curve.
+def _sharpe_ratio(
+    equity_curve: list[float],
+    risk_free_rate: float = 0.0,
+    equity_timestamps: list[datetime] | None = None,
+) -> float:
+    """Annualized Sharpe ratio from an equity curve.
 
-    Uses per-step returns. Assumes each step is equal in duration.
-    Annualizes assuming 252 trading days x 1440 minutes (M1 bars).
+    Preferred basis: daily-resampled returns. Per-bar M1 returns are dominated by
+    idle (zero-return) bars, which deflates the ratio and makes it near-meaningless;
+    resampling to one return per calendar day fixes that. Daily returns annualize by
+    sqrt(252).
+
+    Falls back to per-step returns (annualized over the curve length) when no
+    timestamps are supplied — e.g. synthetic test curves or chained aggregate curves
+    that carry no time axis.
     """
     if len(equity_curve) < 2:
         return 0.0
 
-    returns = [
-        (equity_curve[i] - equity_curve[i - 1]) / equity_curve[i - 1]
-        for i in range(1, len(equity_curve))
-        if equity_curve[i - 1] != 0
+    if equity_timestamps is not None and len(equity_timestamps) == len(equity_curve):
+        daily = _resample_daily(equity_curve, equity_timestamps)
+        returns = _step_returns(daily)
+        periods_per_year = TRADING_DAYS_PER_YEAR
+        rf_per_period = risk_free_rate / periods_per_year
+    else:
+        returns = _step_returns(equity_curve)
+        # No time axis: keep the legacy per-minute-bar annualization.
+        periods_per_year = TRADING_DAYS_PER_YEAR * 1440
+        rf_per_period = risk_free_rate / periods_per_year
+
+    return _annualized_sharpe(returns, rf_per_period, periods_per_year)
+
+
+def _step_returns(values: list[float]) -> list[float]:
+    """Simple period-over-period returns, skipping zero denominators."""
+    return [
+        (values[i] - values[i - 1]) / values[i - 1]
+        for i in range(1, len(values))
+        if values[i - 1] != 0
     ]
 
+
+def _resample_daily(equity_curve: list[float], timestamps: list[datetime]) -> list[float]:
+    """Reduce an equity curve to one (closing) value per UTC calendar day."""
+    by_day: dict[date, float] = {}
+    for equity, ts in zip(equity_curve, timestamps, strict=True):
+        by_day[ts.date()] = equity  # later value on a day overwrites — daily close
+    return [by_day[day] for day in sorted(by_day)]
+
+
+def _annualized_sharpe(
+    returns: list[float], rf_per_period: float, periods_per_year: int
+) -> float:
+    """Annualized Sharpe from a list of equal-spaced periodic returns."""
     if not returns:
         return 0.0
 
@@ -139,10 +186,5 @@ def _sharpe_ratio(equity_curve: list[float], risk_free_rate: float = 0.0) -> flo
     if std_return == 0:
         return 0.0
 
-    # Per-step risk-free rate (annualized rate / steps per year)
-    steps_per_year = 252 * 1440  # trading days x minutes
-    rf_per_step = risk_free_rate / steps_per_year
-
-    sharpe_per_step = (mean_return - rf_per_step) / std_return
-    annualized_sharpe = sharpe_per_step * math.sqrt(steps_per_year)
-    return annualized_sharpe
+    sharpe_per_period = (mean_return - rf_per_period) / std_return
+    return sharpe_per_period * math.sqrt(periods_per_year)
