@@ -3,9 +3,11 @@
 from datetime import UTC, datetime, timedelta
 
 from aurex_trade.backtest.config import BacktestConfig
+from aurex_trade.backtest.results import BacktestResult
 from aurex_trade.backtest.sweep import ParameterSweep
 from aurex_trade.domain.models import BarData
 from aurex_trade.domain.risk.engine import RiskEngine
+from aurex_trade.metrics import calculate_metrics
 from tests.conftest import StatelessTestStrategy
 
 
@@ -132,6 +134,56 @@ class TestParameterSweep:
         assert pnls == sorted(pnls, reverse=True)
         assert result.rank_metric == "total_pnl"
 
+    def test_min_trades_floor_sinks_undertraded_combos(self) -> None:
+        """A combo below the min-trades floor ranks below any qualifying combo."""
+        bars = _make_trending_bars(200)
+
+        sweep = ParameterSweep(
+            strategy_factory=_sma_factory,
+            param_grid={"short_window": [5, 10], "long_window": [20, 30]},
+            bars=bars,
+            config=_config(),
+            risk_engine=_risk_engine(),
+            rank_by="total_pnl",
+            # Set the floor above every combo's trade count: all are "under-traded",
+            # so none qualifies and they simply rank among themselves by total_pnl.
+            min_trades=10_000,
+            user_id="test",
+        )
+        result = sweep.run()
+
+        assert all(r.metrics.trade_count < 10_000 for r in result.results)
+        pnls = [r.metrics.total_pnl for r in result.results]
+        assert pnls == sorted(pnls, reverse=True)
+
+    def test_qualifying_combo_outranks_higher_metric_undertraded(self) -> None:
+        """A qualifying combo beats a higher-metric combo that misses the floor."""
+        bars = _make_trending_bars(200)
+
+        sweep = ParameterSweep(
+            strategy_factory=_sma_factory,
+            param_grid={"short_window": [5, 10], "long_window": [20, 30]},
+            bars=bars,
+            config=_config(),
+            risk_engine=_risk_engine(),
+            rank_by="total_pnl",
+            user_id="test",
+        )
+        result = sweep.run()
+
+        # With a floor in force, every qualifying result must precede every
+        # non-qualifying one regardless of the rank metric value.
+        min_trades = 30
+        qualifies = [r.metrics.trade_count >= min_trades for r in result.results]
+        # Once we see the first non-qualifying combo, no qualifying one follows.
+        seen_unqualified = False
+        for q in qualifies:
+            if not q:
+                seen_unqualified = True
+            elif seen_unqualified:
+                msg = "a qualifying combo ranked below a non-qualifying one"
+                raise AssertionError(msg)
+
     def test_deterministic_results(self) -> None:
         """Same inputs produce identical results."""
         bars = _make_trending_bars(200)
@@ -148,6 +200,43 @@ class TestParameterSweep:
             return [r.metrics.final_capital for r in sweep.run().results]
 
         assert run_sweep() == run_sweep()
+
+    def _result(self, *, pnl: float, trades: int, has_losers: bool) -> BacktestResult:
+        """Synthesize a BacktestResult with a controlled trade count / profit factor.
+
+        ``has_losers=False`` yields profit_factor == inf (no losing trades), which
+        the ranking must treat as degenerate.
+        """
+        # has_losers=False -> all wins -> profit_factor == inf
+        pnls = (
+            [pnl + trades] + [-1.0] * (trades - 1)
+            if has_losers
+            else [pnl / trades] * trades
+        )
+        curve = [100_000.0, 100_000.0 + pnl]
+        metrics = calculate_metrics(curve, pnls, initial_capital=100_000.0)
+        return BacktestResult(metrics=metrics)
+
+    def test_inf_profit_factor_sunk_below_qualifying(self) -> None:
+        """A no-loser (inf profit_factor) combo ranks below a qualifying one."""
+        sweep = ParameterSweep(
+            strategy_factory=_sma_factory,
+            param_grid={"short_window": [5], "long_window": [20]},
+            bars=_make_trending_bars(60),
+            config=_config(),
+            risk_engine=_risk_engine(),
+            rank_by="total_pnl",
+            min_trades=30,
+            user_id="test",
+        )
+        # Degenerate: huge P&L but no losers (inf PF). Qualifying: smaller P&L,
+        # enough trades, finite PF. The qualifying one must sort first.
+        degenerate = self._result(pnl=10_000.0, trades=40, has_losers=False)
+        qualifying = self._result(pnl=100.0, trades=40, has_losers=True)
+        ranked = sorted([degenerate, qualifying], key=sweep._sort_key, reverse=True)
+        assert ranked[0] is qualifying
+        assert not sweep._qualifies(degenerate)
+        assert sweep._qualifies(qualifying)
 
     def test_parameters_attached_to_results(self) -> None:
         """Each result has its parameter combination attached."""

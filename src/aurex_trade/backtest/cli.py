@@ -189,9 +189,15 @@ def main() -> None:
     sweep_parser.add_argument("--no-require-stop-loss", action="store_true")
     sweep_parser.add_argument(
         "--rank-by",
-        default="sharpe_ratio",
+        default="total_pnl",
         choices=RANKABLE_METRICS,
-        help="Metric to rank by",
+        help="Metric to rank by (default: total_pnl)",
+    )
+    sweep_parser.add_argument(
+        "--min-trades",
+        type=int,
+        default=30,
+        help="Combos with fewer trades rank below all qualifying ones (default: 30)",
     )
 
     # walk-forward subcommand
@@ -229,9 +235,15 @@ def main() -> None:
     wf_parser.add_argument("--no-require-stop-loss", action="store_true")
     wf_parser.add_argument(
         "--rank-by",
-        default="sharpe_ratio",
+        default="total_pnl",
         choices=RANKABLE_METRICS,
-        help="Metric to rank by",
+        help="Metric to rank by (default: total_pnl)",
+    )
+    wf_parser.add_argument(
+        "--min-trades",
+        type=int,
+        default=30,
+        help="Per-window combos with fewer trades rank below qualifying ones (default: 30)",
     )
     wf_parser.add_argument(
         "--train-bars",
@@ -383,6 +395,14 @@ def _load_bars(config: BacktestConfig, db_path: Path) -> list[BarData]:
         sys.exit(1)
 
     print(f"Loaded {len(bars)} bars for {config.symbol}")
+    if start is None and end is None:
+        span = f"{bars[0].timestamp.date()} to {bars[-1].timestamp.date()}"
+        print(
+            f"  WARNING: no --start/--end given — replaying the ENTIRE stored "
+            f"history ({span}, {len(bars)} bars).\n"
+            f"  This may span multiple market regimes. Pass --start/--end to "
+            f"target a specific period."
+        )
     return bars
 
 
@@ -484,6 +504,7 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
         risk_engine=risk_engine,
         rank_by=args.rank_by,
         param_validator=PARAM_VALIDATORS.get(strategy_name),
+        min_trades=args.min_trades,
         user_id="cli",
     )
 
@@ -546,6 +567,7 @@ def _cmd_walk_forward(args: argparse.Namespace) -> None:
         test_bars=args.test_bars,
         rank_by=args.rank_by,
         param_validator=PARAM_VALIDATORS.get(strategy_name),
+        min_trades=args.min_trades,
         user_id="cli",
     )
 

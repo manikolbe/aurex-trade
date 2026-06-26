@@ -181,7 +181,8 @@ class SweepRequest(BaseModel):
     max_drawdown_pct: float = Field(default=0.20, gt=0, le=1.0)
     max_consecutive_losses: int = Field(default=5, gt=0)
     require_stop_loss: bool = True
-    rank_by: str = "sharpe_ratio"
+    rank_by: str = "total_pnl"
+    min_trades: int = Field(default=30, ge=0)
 
     @field_validator("start_date", "end_date")
     @classmethod
@@ -260,7 +261,8 @@ class WalkForwardRequest(BaseModel):
     max_drawdown_pct: float = Field(default=0.20, gt=0, le=1.0)
     max_consecutive_losses: int = Field(default=5, gt=0)
     require_stop_loss: bool = True
-    rank_by: str = "sharpe_ratio"
+    rank_by: str = "total_pnl"
+    min_trades: int = Field(default=30, ge=0)
 
     @field_validator("start_date", "end_date")
     @classmethod

@@ -359,6 +359,7 @@ def create_sweep_runner(
             risk_engine=risk_engine,
             rank_by=req.rank_by,
             param_validator=PARAM_VALIDATORS.get(req.strategy),
+            min_trades=req.min_trades,
             user_id=user_id,
         )
         return sweep.run()
@@ -449,6 +450,7 @@ def create_walk_forward_runner(
             test_bars=req.test_bars,
             rank_by=req.rank_by,
             param_validator=PARAM_VALIDATORS.get(req.strategy),
+            min_trades=req.min_trades,
             user_id=user_id,
         )
         return validator.run()

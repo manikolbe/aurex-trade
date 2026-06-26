@@ -7,6 +7,7 @@ by a configurable metric. Deterministic via shared seed.
 from __future__ import annotations
 
 import itertools
+import math
 from collections.abc import Callable
 
 import structlog
@@ -38,8 +39,9 @@ class ParameterSweep:
         bars: list[BarData],
         config: BacktestConfig,
         risk_engine: RiskEngine,
-        rank_by: str = "sharpe_ratio",
+        rank_by: str = "total_pnl",
         param_validator: Callable[[dict[str, int | float]], bool] | None = None,
+        min_trades: int = 30,
         *,
         user_id: str,
     ) -> None:
@@ -50,6 +52,7 @@ class ParameterSweep:
         self._risk_engine = risk_engine
         self._rank_by = rank_by
         self._param_validator = param_validator
+        self._min_trades = min_trades
         self._user_id = user_id
 
     def run(self) -> SweepResult:
@@ -74,10 +77,20 @@ class ParameterSweep:
                 pnl=result.metrics.total_pnl,
             )
 
-        # Sort by metric (descending — higher is better)
-        results.sort(key=lambda r: getattr(r.metrics, self._rank_by), reverse=True)
+        # Rank descending (higher is better), but sink statistically meaningless
+        # combos to the bottom so they can't win on noise:
+        #   - fewer than min_trades trades (too small a sample to trust)
+        #   - profit_factor == inf (no losing trades — a degenerate edge case)
+        # Such combos are kept (for inspection) but ranked below all qualifying ones.
+        results.sort(key=self._sort_key, reverse=True)
 
-        log.info("sweep_complete", total_results=len(results))
+        underqualified = sum(1 for r in results if not self._qualifies(r))
+        log.info(
+            "sweep_complete",
+            total_results=len(results),
+            ranked_below_floor=underqualified,
+            min_trades=self._min_trades,
+        )
 
         return SweepResult(
             results=results,
@@ -85,6 +98,19 @@ class ParameterSweep:
             symbol=self._config.symbol,
             total_combinations=len(combinations),
         )
+
+    def _qualifies(self, result: BacktestResult) -> bool:
+        """True if a result has enough trades and a finite profit factor to trust."""
+        m = result.metrics
+        return m.trade_count >= self._min_trades and math.isfinite(m.profit_factor)
+
+    def _sort_key(self, result: BacktestResult) -> tuple[bool, float]:
+        """Rank qualifying combos above non-qualifying; within each, by rank_by."""
+        metric = getattr(result.metrics, self._rank_by)
+        if not math.isfinite(metric):
+            # inf/nan rank metric can't be compared meaningfully — floor it.
+            metric = float("-inf")
+        return (self._qualifies(result), metric)
 
     def _generate_combinations(self) -> list[dict[str, int | float]]:
         """Generate all valid parameter combinations from the grid."""

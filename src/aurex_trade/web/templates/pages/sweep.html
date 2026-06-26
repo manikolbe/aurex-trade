@@ -14,7 +14,7 @@
   <div class="collapse-content text-sm text-base-content/70">
     <p class="mb-2">You've confirmed the strategy works in principle (Step 1). Now instead of manually guessing which settings are best, let the computer try every combination and rank them for you.</p>
     <p class="mb-2"><strong>What to do:</strong> Select a strategy and set the range of values to try for each parameter (start, end, step). The sweep tries every pairing and shows you which scored highest.</p>
-    <p class="mb-2"><strong>Reading the results:</strong> The table shows every combination ranked by your chosen metric (Sharpe Ratio by default). The top row is the "winner" — but be cautious. Just because settings scored highest on past data doesn't guarantee they'll keep working. That's what Step 3 is for.</p>
+    <p class="mb-2"><strong>Reading the results:</strong> The table shows every combination ranked by your chosen metric (Total P&L by default). The top row is the "winner" — but be cautious. Just because settings scored highest on past data doesn't guarantee they'll keep working. That's what Step 3 is for.</p>
     <p class="mb-2"><strong>Tips:</strong></p>
     <ul class="list-disc list-inside mb-2 text-base-content/60">
       <li>Start with wide ranges and big steps (fast exploration), then narrow in on promising areas</li>
@@ -53,8 +53,8 @@
         <div class="form-control mb-2">
           <label class="label label-text tooltip tooltip-top" data-tip="How to sort results (best at top)">Rank By</label>
           <select name="rank_by" class="select select-bordered select-sm">
-            <option value="sharpe_ratio" selected>Sharpe Ratio</option>
-            <option value="total_pnl">Total P&L</option>
+            <option value="total_pnl" selected>Total P&L</option>
+            <option value="sharpe_ratio">Sharpe Ratio</option>
             <option value="profit_factor">Profit Factor</option>
             <option value="win_rate">Win Rate</option>
           </select>

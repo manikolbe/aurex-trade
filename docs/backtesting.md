@@ -137,7 +137,7 @@ Automatically tests all parameter combinations and ranks by a metric:
 # Ciby Sliding Grid sweep
 just sweep --strategy ciby_sliding_grid \
     --param grid_spacing=5,10,20 --param anchor_gap=10,15 \
-    --param stop_buffer=1,3 --spread 0.6 --slippage 0.2 --rank-by sharpe_ratio
+    --param stop_buffer=1,3 --spread 0.6 --slippage 0.2 --rank-by total_pnl
 
 # Ciby Hedged Doubling Grid sweep
 just sweep --strategy ciby_hedged_doubling_grid \
@@ -150,6 +150,17 @@ just sweep --strategy ciby_hedged_doubling_grid \
 - Invalid combos filtered automatically by each strategy's `PARAM_VALIDATORS` entry
 - Deterministic — same inputs always produce identical rankings
 - Strategy registry in `backtest/cli.py` maps names to factory callables
+
+**Ranking (`--rank-by`, default `total_pnl`).** Earlier the default was
+`sharpe_ratio`, but the Sharpe here is computed on per-bar returns over sparse M1
+data and is easily dominated by idle bars — a poor selector. Ranking now defaults
+to `total_pnl`. Two guards keep noise from winning:
+
+- `--min-trades` (default 30): combos with fewer trades are a sample too small to
+  trust, so they rank **below** every combo that clears the floor (they're kept for
+  inspection, not discarded).
+- A `profit_factor` of `inf` (a combo with no losing trades) is treated as a
+  degenerate edge case and sunk below qualifying combos rather than crowned.
 
 ## Walk-Forward Validation
 
