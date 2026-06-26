@@ -481,7 +481,10 @@ def backtest_result_to_response(r: BacktestResult) -> BacktestResultResponse:
         start_date=r.start_date,
         end_date=r.end_date,
         parameters=r.parameters,
-        trade_count=len(r.trades),
+        # Use metrics.trade_count (counts realized trade P&L, incl. grid limit/stop
+        # fills and the terminal flatten) to match the CLI's Total Trades — not
+        # len(r.trades), which only holds the subset that produced trade records.
+        trade_count=r.metrics.trade_count,
         equity_curve_length=len(r.equity_curve),
         equity_curve=_downsample_curve(r.equity_curve),
     )

@@ -129,6 +129,15 @@ class TestSweepRequestValidation:
         req = SweepRequest(params={"grid_spacing": [5, 10], "anchor_gap": [15, 20]})
         assert req.params == {"grid_spacing": [5, 10], "anchor_gap": [15, 20]}
 
+    def test_ranking_defaults(self) -> None:
+        """Web defaults match the engine: rank by total_pnl with a 30-trade floor."""
+        sweep = SweepRequest(params={"grid_spacing": [5, 10]})
+        wf = WalkForwardRequest(params={"grid_spacing": [5, 10]})
+        assert sweep.rank_by == "total_pnl"
+        assert sweep.min_trades == 30
+        assert wf.rank_by == "total_pnl"
+        assert wf.min_trades == 30
+
     def test_too_many_values_per_param(self) -> None:
         """More than 50 values per parameter list is rejected."""
         with pytest.raises(ValidationError, match="at most 50"):
@@ -218,3 +227,30 @@ class TestWalkForwardRequestValidation:
         """WalkForwardRequest uses the same param grid limits."""
         with pytest.raises(ValidationError, match="at most 50"):
             WalkForwardRequest(params={"grid_spacing": list(range(51))})
+
+
+class TestBacktestResultConverter:
+    """The web converter must report the same trade count as the CLI."""
+
+    def test_trade_count_uses_metrics_not_records(self) -> None:
+        """Web badge reads metrics.trade_count, not len(trades).
+
+        Grid limit/stop fills and the terminal flatten add to realized P&L
+        (metrics.trade_count) without producing BacktestTradeRecords, so the
+        record list under-counts. The web response must match the CLI.
+        """
+        from aurex_trade.backtest.results import BacktestResult
+        from aurex_trade.metrics import calculate_metrics
+        from aurex_trade.web.schemas import backtest_result_to_response
+
+        # 5 realized trades, but no trade records attached (the grid case).
+        metrics = calculate_metrics(
+            equity_curve=[100_000.0, 100_050.0],
+            trade_pnls=[10.0, -5.0, 20.0, -3.0, 8.0],
+            initial_capital=100_000.0,
+        )
+        result = BacktestResult(metrics=metrics, trades=[])
+        response = backtest_result_to_response(result)
+
+        assert response.trade_count == 5
+        assert response.trade_count == metrics.trade_count
