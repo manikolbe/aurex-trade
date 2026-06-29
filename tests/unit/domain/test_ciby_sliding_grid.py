@@ -401,11 +401,135 @@ class TestSessionExits:
         assert strategy._anchor_price is None  # reset for fresh start
 
     def test_daily_loss_limit_stops_trading(self) -> None:
-        strategy = _new()
+        # High session limit so the DAILY limit is the binding one. The trigger is
+        # evaluated in generate() (netting open P&L), not in report_trade_closed.
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
         _drain_all(strategy, [_bar(4100.0)])
-        # A large realized loss breaches the daily limit (default 200).
         strategy.report_trade_closed("4115.00_long", -250.0, "close_sl")
+        sig = strategy.generate([_bar(4099.0)])
+        assert sig is not None
+        assert sig.signal_type == SignalType.FLAT
+        assert sig.metadata["reason"] == "daily_loss_limit"
         assert strategy._session_active is False
+
+
+class TestDailyLossLimit:
+    """The daily-loss limit nets the open position's floating P&L, mirroring the
+    session-loss check. A hedged grid always has an offsetting open leg, so a
+    realized-only check trips on a transient dip the hedge more than covers
+    (the prod incident on run 56798821: realized -$210, floating +$163, true -$47).
+    """
+
+    def test_phantom_realized_dip_does_not_trip(self) -> None:
+        """Realized -$210 but +$170 floating → true -$40, well inside the -$200
+        limit. The daily limit must NOT fire."""
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(-210.0, -210.0)
+        strategy.update_unrealized_pnl(170.0)
+        sig = strategy.generate([_bar(4099.0)])
+        # No daily-loss FLAT (any signal must be ordinary grid maintenance).
+        if sig is not None:
+            assert sig.metadata.get("reason") != "daily_loss_limit"
+        assert strategy._session_active is True
+
+    def test_true_daily_loss_trips(self) -> None:
+        """Realized -$180 plus -$30 floating → true -$210, breaching -$200."""
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.set_realized_pnl(-180.0, -180.0)
+        strategy.update_unrealized_pnl(-30.0)
+        sig = strategy.generate([_bar(4099.0)])
+        assert sig is not None
+        assert sig.signal_type == SignalType.FLAT
+        assert sig.metadata["reason"] == "daily_loss_limit"
+        assert strategy._session_active is False
+
+    def test_backtest_path_also_nets_unrealized(self) -> None:
+        """Non-authoritative (backtest) path: realized accrues via
+        report_trade_closed, and the netted daily check still lives in generate()."""
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.report_trade_closed("4115.00_long", -210.0, "close_sl")
+        strategy.update_unrealized_pnl(170.0)  # hedge leg covers most of it
+        sig = strategy.generate([_bar(4099.0)])
+        if sig is not None:
+            assert sig.metadata.get("reason") != "daily_loss_limit"
+        assert strategy._session_active is True
+
+    def test_daily_pause_clears_positions_but_keeps_ladder(self) -> None:
+        """On a daily-loss pause the bot is flat (position maps cleared) but the
+        anchor/ladder are kept so the UI still renders the empty grid + banner."""
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
+        _drain_all(strategy, [_bar(4100.0)])
+        strategy.report_fill("4100.00_long", 4100.0)
+        anchor_before = strategy._anchor_price
+        session_before = strategy._session_count
+
+        # Trip the daily limit and let the engine acknowledge the close-all.
+        strategy.set_realized_pnl(-250.0, -250.0)
+        sig = strategy.generate([_bar(4099.0)])
+        assert sig is not None and sig.metadata["reason"] == "daily_loss_limit"
+        strategy.notify_close_all_complete()
+
+        # Flat: position bookkeeping cleared.
+        assert strategy._filled == {}
+        assert strategy._placed == {}
+        assert strategy._fill_prices == {}
+        assert strategy._session_active is False
+        # Ladder preserved for display; session not advanced.
+        assert strategy._anchor_price == anchor_before
+        assert strategy._levels != []
+        assert strategy._session_count == session_before
+        # Display still renders the (now empty) grid.
+        state = strategy.get_display_state()
+        assert state is not None
+        assert state["session_active"] is False
+        assert state["filled_count"] == 0
+
+    def test_daily_halt_blocks_new_session_when_limit_already_breached(self) -> None:
+        """A session-loss close-all that also tips the daily total must NOT let a
+        fresh session open. After the close-all + restart the anchor is None for a
+        cycle; the daily halt is checked BEFORE the session-init block, so no new
+        grid is placed on a day the limit has already breached.
+        """
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=80.0, daily_loss_limit=200.0,
+        )
+        _drain_all(strategy, [_bar(4100.0)])
+        # Daily already deep in the red from earlier sessions; flat right now.
+        strategy.set_realized_pnl(0.0, -250.0)
+        strategy.notify_close_all_complete()  # session restarted: anchor is None
+        assert strategy._anchor_price is None
+
+        # Next cycle must NOT open a new grid — it must stay paused.
+        sig = strategy.generate([_bar(4099.0)])
+        assert sig is None
+        assert strategy._session_active is False
+        assert strategy._anchor_price is None  # no fresh anchor placed
+        assert len(strategy._signal_queue) == 0  # no orders queued
 
 
 class TestDayBoundary:
@@ -442,23 +566,68 @@ class TestDayBoundary:
         assert "long" in strategy._filled.get(4100.0, set())
 
     def test_day_boundary_re_enables_trading_after_daily_halt(self) -> None:
-        strategy = _new()
+        # High session limit so the daily limit is the one that halts trading.
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
         _drain_all(strategy, [_bar(4100.0, day="2025-05-01")])
-        # Breach the daily loss limit → trading halted for the day.
+        # Breach the daily loss limit. The trigger fires in generate() (netting
+        # open P&L), so accumulate the loss then advance a cycle to halt.
         strategy.report_trade_closed("4115.00_long", -250.0, "close_sl")
-        assert strategy._session_active is False
-
-        # Engine processes the resulting close-all, then acknowledges it. (Without
-        # this the strategy keeps re-emitting the FLAT close-all every cycle, so we
-        # advance one generate() then notify — never drain a pending close-all.)
         sig = strategy.generate([_bar(4100.0, day="2025-05-01")])
         assert sig is not None and sig.signal_type == SignalType.FLAT
+        assert strategy._session_active is False
+
+        # Engine processes the resulting close-all, then acknowledges it.
         strategy.notify_close_all_complete()
 
-        # New day re-enables trading and zeroes the daily counter.
+        # New day re-enables trading, zeroes the daily counter, and re-anchors on a
+        # clean grid (the stale ladder from yesterday is dropped, not resumed).
         sig = strategy.generate([_bar(4101.0, day="2025-05-02")])
         assert strategy._session_active is True
         assert strategy._daily_realized_pnl == 0.0
+        assert strategy._anchor_price == 4101.0
+
+    def test_day_boundary_does_not_abandon_inflight_close_all(self) -> None:
+        """If a daily-loss close-all is still being retried when the UTC day rolls
+        over, the day-boundary must NOT restart the session — that would null the
+        anchor and open a fresh grid over trades the engine hasn't closed yet.
+        Trading re-enables, but the in-flight close-all keeps re-emitting until the
+        engine acks it via notify_close_all_complete().
+        """
+        strategy = CibySlidingGridStrategy(
+            grid_spacing=10.0, anchor_gap=15.0, buy_sell_offset=0.9,
+            anchor_units=10.0, grid_units=20.0, stop_buffer=1.0,
+            session_loss_limit=10_000.0, daily_loss_limit=200.0,
+        )
+        _drain_all(strategy, [_bar(4100.0, day="2025-05-01")])
+        strategy.report_fill("4100.00_long", 4100.0)  # an open broker trade
+        anchor_before = strategy._anchor_price
+
+        # Trip the daily limit → FLAT close-all, but the engine has NOT acked it yet
+        # (close_all_in_progress stays True; notify_close_all_complete not called).
+        strategy.report_trade_closed("4115.00_long", -250.0, "close_sl")
+        sig = strategy.generate([_bar(4099.0, day="2025-05-01")])
+        assert sig is not None and sig.signal_type == SignalType.FLAT
+        assert strategy._close_all_in_progress is True
+
+        # Day rolls over while the close-all is still mid-flight.
+        sig = strategy.generate([_bar(4099.5, day="2025-05-02")])
+        # Must keep re-emitting the close-all FLAT, not open a new grid.
+        assert sig is not None and sig.signal_type == SignalType.FLAT
+        assert sig.metadata["reason"] == "daily_loss_limit"
+        # Anchor/positions untouched — the retry is still owned by the engine.
+        assert strategy._anchor_price == anchor_before
+        assert "long" in strategy._filled.get(4100.0, set())
+
+        # Engine finally finishes the close-all → clean restart, fresh anchor.
+        strategy.notify_close_all_complete()
+        sig = strategy.generate([_bar(4102.0, day="2025-05-02")])
+        assert strategy._session_active is True
+        assert strategy._anchor_price == 4102.0
+        assert strategy._filled.get(4100.0) in (None, set())
 
 
 class TestAuthoritativeRealizedPnl:
@@ -521,7 +690,14 @@ class TestAuthoritativeRealizedPnl:
     def test_authoritative_daily_loss_limit_stops_trading(self) -> None:
         strategy = _new()
         _drain_all(strategy, [_bar(4100.0)])
+        # set_realized_pnl only records the numbers; the daily trigger is evaluated
+        # in generate() so it can net the open position's floating P&L.
         strategy.set_realized_pnl(-10.0, -250.0)  # daily breaches default 200
+        assert strategy._session_active is True  # not tripped inside the setter
+        sig = strategy.generate([_bar(4099.0)])
+        assert sig is not None
+        assert sig.signal_type == SignalType.FLAT
+        assert sig.metadata["reason"] == "daily_loss_limit"
         assert strategy._session_active is False
 
 

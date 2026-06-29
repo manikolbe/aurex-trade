@@ -116,7 +116,6 @@ class CibySlidingGridStrategy:
         # Session / day orchestration
         self._session_active: bool = True
         self._current_date: str = ""
-        self._close_all_pending: bool = False
         self._close_all_in_progress: bool = False
         self._close_reason: str = ""
         self._session_count: int = 1
@@ -273,8 +272,9 @@ class CibySlidingGridStrategy:
                     key="daily_loss_limit",
                     label="Daily Loss Limit ($)",
                     tooltip=(
-                        "When cumulative P&L across all sessions for the day drops below "
-                        "this negative threshold, stop trading entirely. Resumes the next "
+                        "When cumulative P&L for the day — realized plus the floating "
+                        "P&L of open positions — drops below this negative threshold, "
+                        "close everything and stop trading entirely. Resumes the next "
                         "day."
                     ),
                     default=200.0,
@@ -295,17 +295,17 @@ class CibySlidingGridStrategy:
         only when P&L is realized), because OANDA's per-trade history endpoints are
         unreliable for long-lived accounts. Calling this marks realized P&L as
         engine-supplied, so report_trade_closed() stops accumulating dollars and
-        does grid-state bookkeeping only. Also re-evaluates the daily-loss-limit
-        trigger that previously lived in report_trade_closed().
+        does grid-state bookkeeping only.
+
+        The daily-loss-limit trigger is NOT evaluated here: it must net the open
+        position's floating P&L (a hedged grid always has an offsetting leg with an
+        unrealized gain), and that lives in generate() alongside the session check.
+        Triggering on realized P&L alone fired the limit on a transient dip that the
+        open hedge legs more than covered.
         """
         self._realized_authoritative = True
         self._session_realized_pnl = session_realized
         self._daily_realized_pnl = daily_realized
-
-        if self._daily_realized_pnl <= -self._daily_loss_limit:
-            self._close_reason = "daily_loss_limit"
-            self._close_all_pending = True
-            self._session_active = False
 
     def generate(self, bars: list[BarData]) -> Signal | None:
         """Generate signals: drain queue, check P&L exits, place/grow the grid."""
@@ -316,14 +316,23 @@ class CibySlidingGridStrategy:
         self._current_price = current_bar.close
         current_date = current_bar.timestamp.strftime("%Y-%m-%d")
 
-        # Day boundary reset. Reset ONLY the daily loss counter and re-enable
-        # trading (a daily-loss-limit halt should not persist into the new day).
-        # Do NOT restart the session here: the grid is healthy and mid-flight, and
+        # Day boundary reset. Reset the daily loss counter and re-enable trading
+        # (a daily-loss-limit halt should not persist into the new day).
+        # If the session is ACTIVE (grid healthy, mid-flight) do NOT restart it:
         # _restart_session() would null the anchor WITHOUT a close-all, orphaning
-        # the open broker trades. A session ends only via an explicit close-all
-        # (profit target / loss limit), which re-anchors the balance baseline too.
+        # the open broker trades. A session ends only via an explicit close-all.
+        # If the session is PAUSED (daily-loss limit was hit yesterday) the broker
+        # is normally already flat — the close-all ran when the limit tripped — so
+        # restart to drop the stale in-memory ladder and re-anchor fresh.
+        # EXCEPTION: if a close-all is still mid-flight (the engine is retrying a
+        # partially-failed liquidation that spanned midnight), do NOT restart — that
+        # would abandon the retry and open a fresh grid over still-open trades.
+        # Re-enable trading and let _close_all_in_progress keep re-emitting the FLAT
+        # below; notify_close_all_complete() restarts cleanly once the broker is flat.
         if self._current_date and current_date != self._current_date:
             self._daily_realized_pnl = 0.0
+            if not self._session_active and not self._close_all_in_progress:
+                self._restart_session()
             self._session_active = True
         self._current_date = current_date
 
@@ -331,15 +340,32 @@ class CibySlidingGridStrategy:
         if self._signal_queue:
             return self._signal_queue.popleft()
 
-        if self._close_all_pending:
-            self._close_all_pending = False
-            return self._flat_close_all(current_bar, self._close_reason)
-
         # Re-emit FLAT while close-all is being retried by the engine
         if self._close_all_in_progress:
             return self._flat_close_all(current_bar, self._close_reason)
 
         if not self._session_active:
+            return None
+
+        # Daily-loss halt. Net the open position's floating P&L just like the
+        # session check below — in a hedged grid the realized leg of a pair always
+        # has an offsetting open leg, so realized-only would trip on a transient dip
+        # the hedge covers. Daily unrealized == session unrealized (only one grid is
+        # open at a time; 0 when flat). This is checked BEFORE the anchor gate and
+        # the session-init block so a fresh session can NEVER open on a day the limit
+        # has already breached — e.g. a session-loss close-all that also tipped the
+        # daily total leaves anchor=None for one cycle, and gating the halt behind
+        # `anchor is not None` would let that cycle re-open and place orders.
+        # Unlike the session exits, this pauses trading for the rest of the day
+        # (_session_active = False); the day-boundary block re-enables it tomorrow.
+        total_daily_pnl = self._daily_realized_pnl + self._session_unrealized_pnl
+        if total_daily_pnl <= -self._daily_loss_limit:
+            self._session_active = False
+            if self._anchor_price is not None:
+                # Positions/orders are live — liquidate them.
+                self._trigger_close_all("daily_loss_limit")
+                return self._flat_close_all(current_bar, "daily_loss_limit")
+            # Already flat (no anchor) — just stay paused, nothing to close.
             return None
 
         # Session P&L exits (realized + unrealized)
@@ -652,17 +678,14 @@ class CibySlidingGridStrategy:
 
         Realized-P&L accounting: when realized P&L is supplied authoritatively by
         the engine (set_realized_pnl, balance-delta based) we do NOT accumulate
-        dollars here or re-check the daily limit — that path owns those numbers.
+        dollars here — that path owns those numbers. The backtest path (never
+        authoritative) accumulates here. Neither path checks the daily limit here:
+        that check nets open floating P&L and lives in generate() for both paths.
         We always do the grid-state bookkeeping below regardless.
         """
         if not self._realized_authoritative:
             self._session_realized_pnl += realized_pnl
             self._daily_realized_pnl += realized_pnl
-
-            if self._daily_realized_pnl <= -self._daily_loss_limit:
-                self._close_reason = "daily_loss_limit"
-                self._close_all_pending = True
-                self._session_active = False
 
         parsed = self._parse_key(grid_level_key)
         if parsed is None:
@@ -737,15 +760,28 @@ class CibySlidingGridStrategy:
         })
 
     def notify_close_all_complete(self) -> None:
-        """Called by engine after all positions are closed. Restarts the session."""
+        """Called by engine after all positions are closed.
+
+        If the session is still active this was a profit-target / session-loss
+        close-all, so start a fresh session (new anchor next cycle). If it is
+        paused (daily-loss limit hit) we must NOT re-anchor today — clear only the
+        position bookkeeping so the bot is genuinely flat, but keep the anchor and
+        ladder so the UI still renders the (now empty) grid under the pause banner.
+        """
         self._close_all_in_progress = False
         if self._session_active:
             self._restart_session()
+        else:
+            self._clear_grid_positions()
 
-    def _restart_session(self) -> None:
-        """Reset session state for a fresh start. Preserves daily P&L and history."""
-        self._anchor_price = None
-        self._levels = []
+    def _clear_grid_positions(self) -> None:
+        """Clear open/resting position bookkeeping — the bot is flat at the broker.
+
+        Resets the per-trade maps and the queued signals, but preserves
+        _anchor_price / _levels (so the ladder still displays), _session_count,
+        and _daily_realized_pnl. Shared by _restart_session() and the daily-loss
+        pause path.
+        """
         self._signal_queue = deque()
         self._placed = {}
         self._filled = {}
@@ -754,10 +790,15 @@ class CibySlidingGridStrategy:
         self._order_types = {}
         self._pending_close = set()
         self._retired = set()
-        self._session_realized_pnl = 0.0
         self._session_unrealized_pnl = 0.0
-        self._close_all_pending = False
         self._close_all_in_progress = False
+
+    def _restart_session(self) -> None:
+        """Reset session state for a fresh start. Preserves daily P&L and history."""
+        self._clear_grid_positions()
+        self._anchor_price = None
+        self._levels = []
+        self._session_realized_pnl = 0.0
         self._session_count += 1
 
     # --- Display ---

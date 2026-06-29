@@ -209,7 +209,7 @@ The web UI renders these dynamically from `StrategyMetadata`; defaults below com
 | `max_levels_behind` | Max active levels kept on the trailing side | `1` |
 | `session_profit_target` | Close all & restart when session P&L hits this ($) | `100` |
 | `session_loss_limit` | Close all & restart when session P&L drops below this ($) | `50` |
-| `daily_loss_limit` | Stop trading for the day when cumulative P&L drops below this ($) | `200` |
+| `daily_loss_limit` | Stop trading for the day when cumulative P&L — realized **plus** open-position floating — drops below this ($). Netting the floating leg matters in a hedged grid: a realized-only check trips on a transient dip the open hedge leg covers. | `200` |
 
 ### Risk Engine Settings (environment variables)
 

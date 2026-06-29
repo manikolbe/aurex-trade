@@ -91,7 +91,11 @@ were deliberately closed for margin are *not* reopened.
 
 **Session management:** Same safety net as the hedged grid — a session profit target
 and session loss limit (close everything and restart fresh), plus a daily loss limit
-that stops trading until the next day.
+that stops trading until the next day. All three limits measure your **true** profit
+or loss — what you have actually banked from closed trades *plus* the current floating
+value of any positions still open. This matters for a hedged grid, where a stop-loss on
+one side is usually paired with an open winning position on the other: the limit only
+trips when your real, net position breaches it, not when one half dips on its own.
 
 **When it works best:** Volatile instruments that trend (gold/XAU_USD is ideal). A
 sustained directional move lets the anchor leg run while the window keeps margin
