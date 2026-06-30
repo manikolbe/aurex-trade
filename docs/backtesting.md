@@ -24,8 +24,9 @@ just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 20
 # 2. Run a backtest with Ciby Sliding Grid (the primary strategy)
 just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param anchor_gap=15
 
-# 3. Adjust costs for realistic simulation
-just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param stop_buffer=3 --spread 0.6 --slippage 0.2
+# 3. Adjust costs for realistic simulation (XAU_USD M1: spread ~0.6, slippage ~1.66 —
+#    calibrated to the live bot; see the slippage callout under "Fill Model" below)
+just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param stop_buffer=3 --spread 0.6 --slippage 1.66
 ```
 
 ```bash
@@ -61,6 +62,23 @@ fill-realism pass, **every fill crosses the spread**:
 A grid strategy lives almost entirely on resting orders, so charging spread on them
 is the dominant correction — earlier results that filled resting orders at the exact
 price were materially optimistic.
+
+> **⚠️ Calibrate slippage to the live bot — never sweep with `--slippage 0`.**
+> A ground-truth check (2026-06-30) replayed a real 24h live run (`c2aab467`) through
+> the backtester over the *exact* same window, config, and M1 candles:
+>
+> | `--spread` | `--slippage` | Backtest P&L | Win rate | vs live (−$254, 41%) |
+> |---|---|---|---|---|
+> | 0.6 | **0** | **+$476** | 48% | wrong sign — looks profitable |
+> | 0.6 | **1.66** (live avg) | **−$256** | 41% | matches live almost exactly |
+> | 0.6 | 2.0 | −$265 | 37% | close |
+>
+> With realistic slippage the sim reproduces both live P&L *and* win rate; with zero
+> slippage the **same** losing config looks profitable. A grid pays the spread on
+> dozens of resting fills, so small per-fill slippage compounds. **Use `--slippage
+> 1.5`–`2.0` for XAU_USD M1** (the live bot averaged ~1.66, max ~4.35 — read the
+> bot's actual fills from the logs to set this for other instruments/regimes). Treat
+> any sweep run with `--slippage 0` as invalid.
 
 **Still idealized (do not treat backtest P&L as a live predictor to the dollar):**
 
@@ -98,7 +116,7 @@ If no `--param` flags are provided, strategy metadata defaults are used.
 |------|---------|-------------|
 | `--symbol` | XAU_USD | Instrument |
 | `--granularity` | M1 | Bar size |
-| `--start` / `--end` | (all data) | Date filter (YYYY-MM-DD) |
+| `--start` / `--end` | (all data) | Date filter (YYYY-MM-DD). Day-granular; `--end` is parsed as midnight UTC and is **exclusive** — to include all of day D, pass `--end <D+1>`. (Cannot target an intraday window; for an exact timestamp range, drive `BacktestRunner` directly and slice the bars.) |
 | `--capital` | 100000 | Initial capital |
 | `--position-size` | 1.0 | Units per trade |
 | `--spread` | 1.5 | Spread in price units |
@@ -137,7 +155,7 @@ Automatically tests all parameter combinations and ranks by a metric:
 # Ciby Sliding Grid sweep
 just sweep --strategy ciby_sliding_grid \
     --param grid_spacing=5,10,20 --param anchor_gap=10,15 \
-    --param stop_buffer=1,3 --spread 0.6 --slippage 0.2 --rank-by total_pnl
+    --param stop_buffer=1,3 --spread 0.6 --slippage 1.66 --rank-by total_pnl
 
 # Ciby Hedged Doubling Grid sweep
 just sweep --strategy ciby_hedged_doubling_grid \
@@ -170,7 +188,7 @@ Prevents overfitting by validating best params on unseen data:
 ```bash
 just walk-forward --strategy ciby_sliding_grid \
     --param grid_spacing=5,10 --param anchor_gap=10,15 --param stop_buffer=1,3 \
-    --train-bars 7200 --test-bars 7200 --spread 0.6
+    --train-bars 7200 --test-bars 7200 --spread 0.6 --slippage 1.66
 
 # Ciby Hedged Doubling Grid walk-forward
 just walk-forward --strategy ciby_hedged_doubling_grid \

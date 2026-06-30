@@ -166,11 +166,16 @@ ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs --tail=50 app
 ssh aurex 'docker compose -f ~/aurex-trade/docker-compose.yml logs -f --tail=10 app'
 
 # Backtesting (see docs/backtesting.md for full details)
+# IMPORTANT: always pass realistic slippage. For XAU_USD M1 use --slippage 1.5–2.0
+# (the live bot averaged ~1.66). --slippage 0 makes a losing grid config look
+# profitable — a ground-truth replay of a live run matched actual P&L + win rate only
+# with slippage ~1.66. NEVER sweep with slippage 0. Also note --end is day-granular and
+# EXCLUSIVE (parsed as midnight UTC): to include all of day D, pass --end D+1.
 just download-data --symbol XAU_USD --granularity M1 --start 2025-04-14 --end 2025-04-18
-just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param anchor_gap=15
-just backtest --strategy ciby_hedged_doubling_grid --param spacing=20 --param units=2
-just sweep --strategy ciby_sliding_grid --param grid_spacing=5,10,20 --param anchor_gap=10,15 --spread 0.6
-just walk-forward --strategy ciby_sliding_grid --param grid_spacing=5,10 --param stop_buffer=1,3
+just backtest --strategy ciby_sliding_grid --param grid_spacing=10 --param anchor_gap=15 --spread 0.6 --slippage 1.66
+just backtest --strategy ciby_hedged_doubling_grid --param spacing=20 --param units=2 --spread 0.6 --slippage 1.66
+just sweep --strategy ciby_sliding_grid --param grid_spacing=5,10,20 --param anchor_gap=10,15 --spread 0.6 --slippage 1.66
+just walk-forward --strategy ciby_sliding_grid --param grid_spacing=5,10 --param stop_buffer=1,3 --spread 0.6 --slippage 1.66
 ```
 
 ## Bot Configuration (Web UI)
